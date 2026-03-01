@@ -60,6 +60,7 @@ if 'portfolio_loaded' not in st.session_state:
         st.session_state['first_entry_date'] = None
         st.session_state['journal_text'] = ""
         
+    st.session_state['target_seed'] = 10000.0  # 타겟 시드 독립 세션 추가
     st.session_state['portfolio_loaded'] = True
 
 # --- 메인 네비게이션 사이드바 ---
@@ -402,7 +403,6 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
     with col_header1:
         st.markdown("**[ 내 포트폴리오 자산 비중 ]**")
     with col_header2:
-        # 🔥 초기화 버튼 로직 추가
         if st.button("🔄 초기화 (Reset)", type="primary", use_container_width=True):
             st.session_state['portfolio_df'] = pd.DataFrame({
                 "티커 (Ticker)": ["TQQQ", "QLD", "QQQ", "SOXL", "USD", "GLD", "CASH"],
@@ -412,6 +412,7 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
             st.session_state['portfolio_history'] = [{"Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Log": "사용자에 의해 포트폴리오가 전체 초기화되었습니다."}]
             st.session_state['first_entry_date'] = None
             st.session_state['journal_text'] = ""
+            st.session_state['target_seed'] = 10000.0
             save_portfolio_data(st.session_state['portfolio_df'], st.session_state['portfolio_history'], st.session_state['first_entry_date'], st.session_state['journal_text'])
             st.rerun()
     
@@ -502,7 +503,7 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
                 xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 100]),
                 yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
                 showlegend=False,
-                title=dict(text=f"총 평가액: <b>${total_value:,.2f}</b>", font=dict(size=16), x=0.5, xanchor='center')
+                title=dict(text=f"현재 내 총 평가액: <b>${total_value:,.2f}</b>", font=dict(size=16), x=0.5, xanchor='center')
             )
             st.plotly_chart(fig_bar, use_container_width=True)
         else:
@@ -510,14 +511,15 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
 
     st.write("")
     
-    # --- 리밸런싱 지시표 패널 (시드 목표 입력 기능 탑재) ---
+    # --- 리밸런싱 지시표 패널 ---
     st.markdown("**[ 종목별 수익률 & 리밸런싱 액션 지침 ]**")
     
     col_seed_txt, col_seed_input = st.columns([1.5, 1])
     with col_seed_txt:
         st.markdown("원하시는 **총 운용 시드(목표 자산)**를 입력하면, 현재 국면 목표 비중에 맞춰 종목별 매수/매도 수량을 정확히 계산해 드립니다.")
     with col_seed_input:
-        target_seed = st.number_input("🎯 총 운용 시드 입력 ($)", value=float(total_value) if total_value > 0 else 10000.0, step=1000.0, format="%.2f", label_visibility="collapsed")
+        target_seed = st.number_input("🎯 총 운용 시드 입력 ($)", value=st.session_state['target_seed'], step=1000.0, format="%.2f", label_visibility="collapsed")
+        st.session_state['target_seed'] = target_seed # 독립 세션으로 업데이트 유지
 
     status_data = []
     all_tickers = set([t for t in asset_values.keys()] + list(mr['target_weights'].keys()))
@@ -536,7 +538,7 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
                 except: pass
                 
         target_w_dec = mr['target_weights'].get(tkr, 0.0)
-        target_val = target_seed * target_w_dec # 🔥 입력한 목표 시드 기준으로 계산
+        target_val = target_seed * target_w_dec # 🔥 고정된 target_seed를 바탕으로 목표 금액 산출
         
         diff_val = target_val - my_val
         curr_price = mr['latest_prices'].get(tkr, 0.0) if tkr != "CASH" else 1.0
