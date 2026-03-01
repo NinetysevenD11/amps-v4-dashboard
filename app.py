@@ -60,13 +60,15 @@ if 'portfolio_loaded' not in st.session_state:
         st.session_state['first_entry_date'] = None
         st.session_state['journal_text'] = ""
         
-    st.session_state['target_seed'] = 10000.0  
-    # 🔥 비교를 위한 이전 상태 저장소
-    st.session_state['last_portfolio_df'] = st.session_state['portfolio_df'].copy()
     st.session_state['portfolio_loaded'] = True
 
+# 🔥 KeyError 방지용: 기존 캐시 때문에 누락된 세션 변수들을 강제로 독립 생성 (안전장치)
 if 'target_seed' not in st.session_state:
     st.session_state['target_seed'] = 10000.0
+
+if 'last_portfolio_df' not in st.session_state:
+    if 'portfolio_df' in st.session_state:
+        st.session_state['last_portfolio_df'] = st.session_state['portfolio_df'].copy()
 
 
 # --- 메인 네비게이션 사이드바 ---
@@ -409,7 +411,6 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
     with col_header1:
         st.markdown("**[ 내 포트폴리오 자산 비중 ]**")
     with col_header2:
-        # 🔥 완벽한 리셋 로직: 이전 상태(last_portfolio_df)까지 완벽히 덮어씌워 충돌 방지
         if st.button("🔄 초기화 (Reset)", type="primary", use_container_width=True):
             reset_df = pd.DataFrame({
                 "티커 (Ticker)": ["TQQQ", "QLD", "QQQ", "SOXL", "USD", "GLD", "CASH"],
