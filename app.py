@@ -425,6 +425,7 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
     with col_table:
         st.caption("표 안의 숫자를 더블 클릭하여 수량과 평단가를 수정하세요.")
         
+        # 🔥 step=0.01 을 적용하여 소수점 둘째자리까지 입력 가능하도록 잠금 해제
         edited_df = st.data_editor(
             st.session_state['portfolio_df'],
             num_rows="dynamic",
@@ -432,8 +433,8 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
             use_container_width=True,
             column_config={
                 "티커 (Ticker)": st.column_config.TextColumn("종목 (TICKER)"),
-                "수량 (주/달러)": st.column_config.NumberColumn("보유 수량", min_value=0.0, format="%.2f", step=1.0),
-                "평균 단가 ($)": st.column_config.NumberColumn("평균 단가 ($)", min_value=0.0, format="%.2f", step=1.0)
+                "수량 (주/달러)": st.column_config.NumberColumn("보유 수량", min_value=0.0, format="%.2f", step=0.01),
+                "평균 단가 ($)": st.column_config.NumberColumn("평균 단가 ($)", min_value=0.0, format="%.2f", step=0.01)
             }
         )
 
