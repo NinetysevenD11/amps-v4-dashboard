@@ -39,8 +39,11 @@ def load_and_calculate_data(start, end, init_cap, monthly_cont):
     df = pd.DataFrame(index=data.index)
     for t in data.columns: df[t] = data[t]
     
+    # 이동평균선 및 RSI 계산
     df['QQQ_MA50'] = df['QQQ'].rolling(window=50).mean()
     df['QQQ_MA200'] = df['QQQ'].rolling(window=200).mean()
+    df['QQQ_RSI'] = ta.rsi(df['QQQ'], length=14)  # QQQ RSI 추가
+    
     df['SMH_MA50'] = df['SMH'].rolling(window=50).mean()
     df['SMH_3M_Ret'] = df['SMH'].pct_change(periods=63)
     df['SMH_RSI'] = ta.rsi(df['SMH'], length=14)
@@ -137,13 +140,44 @@ def load_and_calculate_data(start, end, init_cap, monthly_cont):
     
     return df, logs, data.columns
 
-with st.spinner('🚀 퀀트 엔진을 가동하여 5년 치 시장 데이터를 연산 중입니다...'):
+with st.spinner('🚀 퀀트 엔진을 가동하여 시장 데이터를 연산 중입니다...'):
     df, full_logs, tickers = load_and_calculate_data(BACKTEST_START, BACKTEST_END, INITIAL_CAPITAL, MONTHLY_CONTRIBUTION)
     strategies = ['AMLS v4', 'QQQ', 'QLD', 'TQQQ', 'SPY']
 
+# --- ⭐ 신규: 오늘 시장 상태 및 핵심 지표 브리핑 ---
+today_status = df.iloc[-1]
+date_str = df.index[-1].strftime('%Y년 %m월 %d일')
+
+st.subheader(f"📡 실시간 시장 레이더 ({date_str} 종가 기준)")
+
+# 1줄: 거시적 상태 (레짐, 계좌)
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("현재 적용 국면", f"Regime {int(today_status['Signal_Regime'])}")
+m2.metric("공포 지수 (VIX)", f"{today_status['^VIX']:.2f}")
+m3.metric("누적 투입 원금", f"${df['Invested'].iloc[-1]:,.0f}")
+m4.metric("AMLS 최종 자산", f"${df['AMLS v4_Value'].iloc[-1]:,.0f}")
+
+st.markdown("##### 🔍 나스닥 (QQQ) 기술적 지표")
+# 2줄: QQQ 기술적 분석 (이격도 포함)
+q1, q2, q3, q4 = st.columns(4)
+qqq_close = today_status['QQQ']
+ma50 = today_status['QQQ_MA50']
+ma200 = today_status['QQQ_MA200']
+rsi14 = today_status['QQQ_RSI']
+
+# 이격도 계산 (주가가 이평선보다 얼마나 높은지/낮은지)
+dist_50 = (qqq_close / ma50 - 1) * 100
+dist_200 = (qqq_close / ma200 - 1) * 100
+
+q1.metric("QQQ 종가", f"${qqq_close:.2f}")
+q2.metric("50일 이평선 (추세선)", f"${ma50:.2f}", f"{dist_50:.2f}% (이격도)")
+q3.metric("200일 이평선 (생명선)", f"${ma200:.2f}", f"{dist_200:.2f}% (이격도)")
+q4.metric("RSI 14 (과매수/과매도)", f"{rsi14:.2f}", "70 이상 과열 / 30 이하 침체", delta_color="off")
+
+st.divider()
+
 # --- 0. 포트폴리오 비율 시각화 (도넛 차트) ---
 st.subheader("🍩 0. 국면별 포트폴리오 비율 (Regime Allocation)")
-st.markdown("전략이 각 국면(Regime)에 진입했을 때 세팅되는 목표 자산 비중입니다.")
 
 def get_v4_weights_for_plot(regime):
     w = {t: 0.0 for t in tickers}
@@ -213,9 +247,7 @@ fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], v
 
 line_colors = ['#8e44ad', '#3498db', '#f39c12', '#e74c3c', '#2c3e50']
 for s, c in zip(strategies, line_colors):
-    # 자산 성장 곡선
     fig.add_trace(go.Scatter(x=df.index, y=df[f'{s}_Value'], name=s, line=dict(color=c, width=3 if s=='AMLS v4' else 1.5)), row=1, col=1)
-    # Drawdown 곡선
     dd = (df[f'{s}_Value'] / df[f'{s}_Value'].cummax()) - 1
     fig.add_trace(go.Scatter(x=df.index, y=dd*100, name=f'{s} DD', line=dict(color=c, width=1.5 if s=='AMLS v4' else 1, dash='solid' if s=='AMLS v4' else 'dot')), row=2, col=1)
 
