@@ -60,9 +60,11 @@ if 'portfolio_loaded' not in st.session_state:
         st.session_state['first_entry_date'] = None
         st.session_state['journal_text'] = ""
         
+    st.session_state['target_seed'] = 10000.0  
+    # 🔥 비교를 위한 이전 상태 저장소
+    st.session_state['last_portfolio_df'] = st.session_state['portfolio_df'].copy()
     st.session_state['portfolio_loaded'] = True
 
-# 🔥 KeyError 방지용: 시드 변수가 세션에 없으면 무조건 생성하도록 독립 배치
 if 'target_seed' not in st.session_state:
     st.session_state['target_seed'] = 10000.0
 
@@ -407,13 +409,16 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
     with col_header1:
         st.markdown("**[ 내 포트폴리오 자산 비중 ]**")
     with col_header2:
+        # 🔥 완벽한 리셋 로직: 이전 상태(last_portfolio_df)까지 완벽히 덮어씌워 충돌 방지
         if st.button("🔄 초기화 (Reset)", type="primary", use_container_width=True):
-            st.session_state['portfolio_df'] = pd.DataFrame({
+            reset_df = pd.DataFrame({
                 "티커 (Ticker)": ["TQQQ", "QLD", "QQQ", "SOXL", "USD", "GLD", "CASH"],
                 "수량 (주/달러)": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
                 "평균 단가 ($)": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             })
-            st.session_state['portfolio_history'] = [{"Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Log": "사용자에 의해 포트폴리오가 전체 초기화되었습니다."}]
+            st.session_state['portfolio_df'] = reset_df
+            st.session_state['last_portfolio_df'] = reset_df.copy() # 핵심: 이전 상태도 0으로 덮어씀
+            st.session_state['portfolio_history'] = [{"Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Log": "🔄 시스템: 사용자에 의해 포트폴리오가 전체 초기화되었습니다."}]
             st.session_state['first_entry_date'] = None
             st.session_state['journal_text'] = ""
             st.session_state['target_seed'] = 10000.0
@@ -425,7 +430,6 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
     with col_table:
         st.caption("표 안의 숫자를 더블 클릭하여 수량과 평단가를 수정하세요.")
         
-        # 🔥 step=0.01 을 적용하여 소수점 둘째자리까지 입력 가능하도록 잠금 해제
         edited_df = st.data_editor(
             st.session_state['portfolio_df'],
             num_rows="dynamic",
@@ -438,7 +442,7 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
             }
         )
 
-        def get_portfolio_state(df):
+        def get_portfolio_dict(df):
             state = {}
             for _, row in df.iterrows():
                 tkr = str(row.iloc[0]).upper().strip()
@@ -450,20 +454,42 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
                     state[tkr] = {'qty': qty, 'avg_p': avg_p}
             return state
 
-        old_state = get_portfolio_state(st.session_state['portfolio_df'])
-        new_state = get_portfolio_state(edited_df)
+        # 🔥 로그 생성을 위한 정밀 비교 로직
+        old_state = get_portfolio_dict(st.session_state['last_portfolio_df'])
+        new_state = get_portfolio_dict(edited_df)
         
-        if old_state != new_state:
-            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            st.session_state['portfolio_history'].append({"Date": now_str, "Log": "포트폴리오 수량/평단가 수정됨"})
+        changes_detected = False
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if not edited_df.equals(st.session_state['last_portfolio_df']):
+            for tkr, new_val in new_state.items():
+                if tkr in old_state:
+                    old_val = old_state[tkr]
+                    if old_val['qty'] != new_val['qty']:
+                        log_msg = f"[{tkr}] 수량 변경: {old_val['qty']} ➔ {new_val['qty']}"
+                        st.session_state['portfolio_history'].append({"Date": now_str, "Log": log_msg})
+                        changes_detected = True
+                    if old_val['avg_p'] != new_val['avg_p']:
+                        log_msg = f"[{tkr}] 평단가 변경: ${old_val['avg_p']} ➔ ${new_val['avg_p']}"
+                        st.session_state['portfolio_history'].append({"Date": now_str, "Log": log_msg})
+                        changes_detected = True
+                else:
+                    log_msg = f"[{tkr}] 신규 종목 추가: {new_val['qty']}주"
+                    st.session_state['portfolio_history'].append({"Date": now_str, "Log": log_msg})
+                    changes_detected = True
+                    if st.session_state['first_entry_date'] is None and new_val['qty'] > 0:
+                        st.session_state['first_entry_date'] = datetime.now()
             
-            st.session_state['portfolio_df'] = edited_df.copy() 
-            
-            if st.session_state['first_entry_date'] is None:
-                st.session_state['first_entry_date'] = datetime.now()
-                
-            save_portfolio_data(st.session_state['portfolio_df'], st.session_state['portfolio_history'], st.session_state['first_entry_date'], st.session_state['journal_text'])
-            st.rerun()
+            for tkr in old_state.keys():
+                if tkr not in new_state:
+                    log_msg = f"[{tkr}] 종목 삭제됨"
+                    st.session_state['portfolio_history'].append({"Date": now_str, "Log": log_msg})
+                    changes_detected = True
+
+            if changes_detected:
+                st.session_state['portfolio_df'] = edited_df.copy()
+                st.session_state['last_portfolio_df'] = edited_df.copy()
+                save_portfolio_data(st.session_state['portfolio_df'], st.session_state['portfolio_history'], st.session_state['first_entry_date'], st.session_state['journal_text'])
 
     with col_chart:
         asset_values = {}
