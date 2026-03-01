@@ -12,8 +12,8 @@ import os
 
 warnings.filterwarnings('ignore')
 
-# --- 페이지 기본 설정 ---
-st.set_page_config(page_title="AMLS v4.3 퀀트 관제탑", layout="wide", initial_sidebar_state="expanded")
+# --- 페이지 기본 설정 (가장 위에 있어야 함) ---
+st.set_page_config(page_title="AMLS v4 퀀트 관제탑", layout="wide", initial_sidebar_state="expanded")
 
 # --- 💾 데이터 영구 보존 및 세션 유지 로직 ---
 DATA_FILE = "amls_portfolio_data.json"
@@ -37,6 +37,7 @@ def save_portfolio_data(df, history, first_date, journal_text):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
+# 탭 이동 시 데이터 증발 방지를 위한 글로벌 세션 초기화
 if 'portfolio_loaded' not in st.session_state:
     saved_data = load_portfolio_data()
     if saved_data and len(saved_data.get("portfolio", [])) > 0:
@@ -61,8 +62,10 @@ if 'portfolio_loaded' not in st.session_state:
         
     st.session_state['portfolio_loaded'] = True
 
+# 🔥 KeyError 방지용: 시드 변수가 세션에 없으면 무조건 생성하도록 독립 배치
 if 'target_seed' not in st.session_state:
     st.session_state['target_seed'] = 10000.0
+
 if 'last_portfolio_df' not in st.session_state:
     if 'portfolio_df' in st.session_state:
         st.session_state['last_portfolio_df'] = st.session_state['portfolio_df'].copy()
@@ -316,14 +319,22 @@ if app_mode == "[1] 백테스트 시뮬레이터 (v4 vs v4.3)":
         st.dataframe(metrics_df.style.highlight_max(subset=['CAGR', '최종 자산'], color='lightgreen').highlight_min(subset=['MDD'], color='lightcoral'), use_container_width=True)
 
     with col_year:
-        st.markdown("**[ 연도별 수익률 ]**")
+        st.markdown("**[ 연도별 성과 (수익률 / 기말 자산) ]**")
         years = df.index.year.unique()
         yearly_ret = pd.DataFrame(index=strategies, columns=[str(y) for y in years])
+        yearly_val = pd.DataFrame(index=strategies, columns=[str(y) for y in years])
+        
         for y in years:
             for s in strategies:
                 y_data = df[df.index.year == y][f'{s}_Value']
-                yearly_ret.loc[s, str(y)] = f"{(y_data.iloc[-1] / y_data.iloc[0] - 1) * 100:.1f}%"
-        st.dataframe(yearly_ret, use_container_width=True)
+                yearly_ret.loc[s, str(y)] = f"{(y_data.iloc[-1] / y_data.iloc[0] - 1) * 100:+.1f}%"
+                yearly_val.loc[s, str(y)] = f"${y_data.iloc[-1]:,.0f}"
+                
+        tab_ret, tab_val = st.tabs(["📈 수익률 (%)", "💰 기말 자산 ($)"])
+        with tab_ret:
+            st.dataframe(yearly_ret, use_container_width=True)
+        with tab_val:
+            st.dataframe(yearly_val, use_container_width=True)
 
     st.write("")
     st.markdown("**[ 자산 성장 및 계좌 낙폭 (Drawdown) ]**")
