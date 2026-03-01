@@ -342,7 +342,7 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
         use_soxl = cond1 and cond2 and cond3
         target_w = get_target_weights(regime, use_soxl)
         
-        semi_target = "SOXL (3x)" if use_soxl else "USD (2x)"
+        semi_target = "SOXL (3배)" if use_soxl else "USD (2배)"
         if regime in [3, 4]: semi_target = "미보유 (대피)"
         elif regime == 2: semi_target = "USD (2배 - 축소)"
 
@@ -398,7 +398,22 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
     st.write("")
 
     # --- 포트폴리오 기입 및 현황 패널 ---
-    st.markdown("**[ 내 포트폴리오 자산 비중 ]**")
+    col_header1, col_header2 = st.columns([5, 1])
+    with col_header1:
+        st.markdown("**[ 내 포트폴리오 자산 비중 ]**")
+    with col_header2:
+        # 🔥 초기화 버튼 로직 추가
+        if st.button("🔄 초기화 (Reset)", type="primary", use_container_width=True):
+            st.session_state['portfolio_df'] = pd.DataFrame({
+                "티커 (Ticker)": ["TQQQ", "QLD", "QQQ", "SOXL", "USD", "GLD", "CASH"],
+                "수량 (주/달러)": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                "평균 단가 ($)": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            })
+            st.session_state['portfolio_history'] = [{"일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "내용": "사용자에 의해 포트폴리오가 전체 초기화되었습니다."}]
+            st.session_state['first_entry_date'] = None
+            st.session_state['journal_text'] = ""
+            save_portfolio_data(st.session_state['portfolio_df'], st.session_state['portfolio_history'], st.session_state['first_entry_date'], st.session_state['journal_text'])
+            st.rerun()
     
     col_table, col_chart = st.columns([1, 1.2])
 
