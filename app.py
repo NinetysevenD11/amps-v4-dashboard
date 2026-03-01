@@ -357,7 +357,7 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
     with st.spinner("시장 국면을 정밀 판독 중입니다..."):
         mr = get_market_regime()
 
-    # --- 실시간 레이더 패널 (상세 지표 복구됨) ---
+    # --- 실시간 레이더 패널 ---
     with st.container(border=True):
         st.markdown(f"**[ 시장 레이더 요약 ]** &nbsp; | &nbsp; 기준일: {mr['date'].strftime('%Y-%m-%d')}")
         r_col1, r_col2, r_col3, r_col4 = st.columns(4)
@@ -409,7 +409,7 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
                 "수량 (주/달러)": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
                 "평균 단가 ($)": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             })
-            st.session_state['portfolio_history'] = [{"일시": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "내용": "사용자에 의해 포트폴리오가 전체 초기화되었습니다."}]
+            st.session_state['portfolio_history'] = [{"Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Log": "사용자에 의해 포트폴리오가 전체 초기화되었습니다."}]
             st.session_state['first_entry_date'] = None
             st.session_state['journal_text'] = ""
             save_portfolio_data(st.session_state['portfolio_df'], st.session_state['portfolio_history'], st.session_state['first_entry_date'], st.session_state['journal_text'])
@@ -449,7 +449,7 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
         
         if old_state != new_state:
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            st.session_state['portfolio_history'].append({"일시": now_str, "내용": "포트폴리오 수량/평단가 수정됨"})
+            st.session_state['portfolio_history'].append({"Date": now_str, "Log": "포트폴리오 수량/평단가 수정됨"})
             
             st.session_state['portfolio_df'] = edited_df.copy() 
             
@@ -510,8 +510,14 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
 
     st.write("")
     
-    # --- 리밸런싱 지시표 패널 ---
+    # --- 리밸런싱 지시표 패널 (시드 목표 입력 기능 탑재) ---
     st.markdown("**[ 종목별 수익률 & 리밸런싱 액션 지침 ]**")
+    
+    col_seed_txt, col_seed_input = st.columns([1.5, 1])
+    with col_seed_txt:
+        st.markdown("원하시는 **총 운용 시드(목표 자산)**를 입력하면, 현재 국면 목표 비중에 맞춰 종목별 매수/매도 수량을 정확히 계산해 드립니다.")
+    with col_seed_input:
+        target_seed = st.number_input("🎯 총 운용 시드 입력 ($)", value=float(total_value) if total_value > 0 else 10000.0, step=1000.0, format="%.2f", label_visibility="collapsed")
 
     status_data = []
     all_tickers = set([t for t in asset_values.keys()] + list(mr['target_weights'].keys()))
@@ -530,18 +536,24 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
                 except: pass
                 
         target_w_dec = mr['target_weights'].get(tkr, 0.0)
-        target_val = total_value * target_w_dec if total_value > 0 else 0.0
+        target_val = target_seed * target_w_dec # 🔥 입력한 목표 시드 기준으로 계산
         
         diff_val = target_val - my_val
+        curr_price = mr['latest_prices'].get(tkr, 0.0) if tkr != "CASH" else 1.0
+        
+        action_shares_str = ""
+        if tkr != "CASH" and curr_price > 0:
+            action_shares = abs(diff_val) / curr_price
+            action_shares_str = f" (약 {action_shares:.1f}주)"
+
         if abs(diff_val) < 50: action = "적정 (유지)"
-        elif diff_val > 0: action = f"🟢 약 ${diff_val:,.0f} 매수"
-        else: action = f"🔴 약 ${abs(diff_val):,.0f} 매도"
+        elif diff_val > 0: action = f"🟢 약 ${diff_val:,.0f} 매수{action_shares_str}"
+        else: action = f"🔴 약 ${abs(diff_val):,.0f} 매도{action_shares_str}"
 
         if shares > 0:
             if tkr == "CASH":
                 ret_pct, ret_amt = 0.0, 0.0
             else:
-                curr_price = mr['latest_prices'].get(tkr, 0.0)
                 if avg_price > 0:
                     ret_pct = ((curr_price - avg_price) / avg_price) * 100
                     ret_amt = (curr_price - avg_price) * shares
