@@ -12,8 +12,8 @@ import os
 
 warnings.filterwarnings('ignore')
 
-# --- 페이지 기본 설정 (가장 위에 있어야 함) ---
-st.set_page_config(page_title="AMLS v4 퀀트 관제탑", layout="wide", initial_sidebar_state="expanded")
+# --- 페이지 기본 설정 ---
+st.set_page_config(page_title="AMLS v4.3 퀀트 관제탑", layout="wide", initial_sidebar_state="expanded")
 
 # --- 💾 데이터 영구 보존 및 세션 유지 로직 ---
 DATA_FILE = "amls_portfolio_data.json"
@@ -37,7 +37,6 @@ def save_portfolio_data(df, history, first_date, journal_text):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-# 탭 이동 시 데이터 증발 방지를 위한 글로벌 세션 초기화
 if 'portfolio_loaded' not in st.session_state:
     saved_data = load_portfolio_data()
     if saved_data and len(saved_data.get("portfolio", [])) > 0:
@@ -62,26 +61,24 @@ if 'portfolio_loaded' not in st.session_state:
         
     st.session_state['portfolio_loaded'] = True
 
-# 🔥 KeyError 방지용: 기존 캐시 때문에 누락된 세션 변수들을 강제로 독립 생성 (안전장치)
 if 'target_seed' not in st.session_state:
     st.session_state['target_seed'] = 10000.0
-
 if 'last_portfolio_df' not in st.session_state:
     if 'portfolio_df' in st.session_state:
         st.session_state['last_portfolio_df'] = st.session_state['portfolio_df'].copy()
 
 
 # --- 메인 네비게이션 사이드바 ---
-st.sidebar.markdown("### 🦅 AMLS v4 관제탑")
-app_mode = st.sidebar.radio("모드 선택", ["[1] 백테스트 시뮬레이터", "[2] 실전 포트폴리오 관리"])
+st.sidebar.markdown("### 🦅 AMLS 관제탑")
+app_mode = st.sidebar.radio("모드 선택", ["[1] 백테스트 시뮬레이터 (v4 vs v4.3)", "[2] 실전 포트폴리오 관리 (v4.3)"])
 st.sidebar.markdown("---")
 
 # =====================================================================
 # 1. AMLS 백테스트 대시보드 모드
 # =====================================================================
-if app_mode == "[1] 백테스트 시뮬레이터":
-    st.title("AMLS v4 퀀트 백테스트 엔진")
-    st.markdown("과거 데이터를 바탕으로 AMLS v4 전략의 성과와 국면별 특징을 시뮬레이션합니다.")
+if app_mode == "[1] 백테스트 시뮬레이터 (v4 vs v4.3)":
+    st.title("AMLS 퀀트 듀얼 백테스트 엔진")
+    st.markdown("**AMLS v4 (기본형)**과 최신 알고리즘이 적용된 **AMLS v4.3 (R2/R3 개선 및 단계적 진입)**의 퍼포먼스를 비교합니다.")
 
     st.sidebar.header("⚙️ 백테스트 설정")
     BACKTEST_START = st.sidebar.date_input("시작일", datetime(2018, 1, 1))
@@ -126,23 +123,61 @@ if app_mode == "[1] 백테스트 시뮬레이터":
 
         df['Target_Regime'] = df.apply(get_target_regime, axis=1)
 
-        current_regime, pending_regime, confirm_count = 3, None, 0
-        actual_regime_list = []
+        # Signal Logic
+        actual_regime_v4 = []
+        actual_regime_v4_3 = []
+        current_v4 = 3
+        current_v4_3 = 3
+        pend_v4 = None
+        pend_v4_3 = None
+        cnt_v4 = 0
+        cnt_v4_3 = 0
 
         for i in range(len(df)):
-            new_regime = df['Target_Regime'].iloc[i]
-            if new_regime > current_regime:
-                current_regime = new_regime; pending_regime = None; confirm_count = 0
-            elif new_regime < current_regime:
-                if new_regime == pending_regime:
-                    confirm_count += 1
-                    if confirm_count >= 5: current_regime = new_regime; pending_regime = None; confirm_count = 0
-                else: pending_regime = new_regime; confirm_count = 1
-            else: pending_regime = None; confirm_count = 0
-            actual_regime_list.append(current_regime)
+            tr = df['Target_Regime'].iloc[i]
+            
+            # --- AMLS v4 Logic ---
+            if tr > current_v4:
+                current_v4 = tr; pend_v4 = None; cnt_v4 = 0
+                actual_regime_v4.append(current_v4)
+            elif tr < current_v4:
+                if tr == pend_v4:
+                    cnt_v4 += 1
+                    if cnt_v4 >= 5:
+                        current_v4 = tr; pend_v4 = None; cnt_v4 = 0
+                        actual_regime_v4.append(current_v4)
+                    else:
+                        actual_regime_v4.append(current_v4)
+                else:
+                    pend_v4 = tr; cnt_v4 = 1
+                    actual_regime_v4.append(current_v4)
+            else:
+                pend_v4 = None; cnt_v4 = 0
+                actual_regime_v4.append(current_v4)
 
-        df['Signal_Regime'] = pd.Series(actual_regime_list, index=df.index).shift(1).bfill()
+            # --- AMLS v4.3 Logic (단계적 진입) ---
+            if tr > current_v4_3: # 하향은 즉시 전환
+                current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0
+                actual_regime_v4_3.append(current_v4_3)
+            elif tr < current_v4_3: # 상향 대기 시 한 단계 위 레짐 선적용
+                if tr == pend_v4_3:
+                    cnt_v4_3 += 1
+                    if cnt_v4_3 >= 5: # 확정
+                        current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0
+                        actual_regime_v4_3.append(current_v4_3)
+                    else: # 대기중
+                        actual_regime_v4_3.append(current_v4_3 - 1)
+                else: # 대기 시작
+                    pend_v4_3 = tr; cnt_v4_3 = 1
+                    actual_regime_v4_3.append(current_v4_3 - 1)
+            else:
+                pend_v4_3 = None; cnt_v4_3 = 0
+                actual_regime_v4_3.append(current_v4_3)
 
+        df['Signal_Regime_v4'] = pd.Series(actual_regime_v4, index=df.index).shift(1).bfill()
+        df['Signal_Regime_v4_3'] = pd.Series(actual_regime_v4_3, index=df.index).shift(1).bfill()
+
+        # Weights
         def get_v4_weights(regime, use_soxl):
             w = {t: 0.0 for t in data.columns}
             semi = 'SOXL' if use_soxl else 'USD'
@@ -152,23 +187,38 @@ if app_mode == "[1] 백테스트 시뮬레이터":
             elif regime == 4: w['GLD'], w['QQQ'] = 0.50, 0.10
             return w
 
-        strategies = ['AMLS v4', 'QQQ', 'QLD', 'TQQQ', 'SPY']
+        def get_v4_3_weights(regime, use_soxl):
+            w = {t: 0.0 for t in data.columns}
+            semi = 'SOXL' if use_soxl else 'USD'
+            if regime == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'] = 0.30, 0.20, 0.20, 0.15, 0.10
+            elif regime == 2: w['QLD'], w['SSO'], w['GLD'], w['USD'], w['QQQ'] = 0.30, 0.25, 0.20, 0.10, 0.05
+            elif regime == 3: w['GLD'], w['QQQ'] = 0.50, 0.15
+            elif regime == 4: w['GLD'], w['QQQ'] = 0.50, 0.10
+            return w
+
+        strategies = ['AMLS v4.3', 'AMLS v4', 'QQQ', 'QLD', 'TQQQ', 'SPY']
         ports = {s: init_cap for s in strategies}
         hists = {s: [init_cap] for s in strategies}
         invested_hist = [init_cap]
         total_invested = init_cap
+        
         weights_v4 = {t: 0.0 for t in data.columns}
+        weights_v4_3 = {t: 0.0 for t in data.columns}
         logs = []
 
         for i in range(1, len(df)):
             today, yesterday = df.index[i], df.index[i-1]
 
             ret_v4 = sum(weights_v4[t] * daily_returns[t].iloc[i] for t in data.columns)
+            ret_v4_3 = sum(weights_v4_3[t] * daily_returns[t].iloc[i] for t in data.columns)
+            
             ports['AMLS v4'] *= (1 + ret_v4)
+            ports['AMLS v4.3'] *= (1 + ret_v4_3)
             for s in ['QQQ', 'QLD', 'TQQQ', 'SPY']: ports[s] *= (1 + daily_returns[s].iloc[i])
 
             for t in data.columns:
                 if ports['AMLS v4'] > 0: weights_v4[t] = (weights_v4[t] * (1 + daily_returns[t].iloc[i])) / (1 + ret_v4)
+                if ports['AMLS v4.3'] > 0: weights_v4_3[t] = (weights_v4_3[t] * (1 + daily_returns[t].iloc[i])) / (1 + ret_v4_3)
 
             if today.month != yesterday.month:
                 for s in strategies: ports[s] += monthly_cont
@@ -177,26 +227,31 @@ if app_mode == "[1] 백테스트 시뮬레이터":
             invested_hist.append(total_invested)
             for s in strategies: hists[s].append(ports[s])
 
-            today_reg = df['Signal_Regime'].iloc[i]
-            if today.month != yesterday.month or today_reg != df['Signal_Regime'].iloc[i-1] or i == 1:
-                use_soxl = (df['SMH'].iloc[i-1] > df['SMH_MA50'].iloc[i-1]) and (df['SMH_3M_Ret'].iloc[i-1] > 0.05) and (df['SMH_RSI'].iloc[i-1] > 50)
-                weights_v4 = get_v4_weights(today_reg, use_soxl)
+            today_reg_v4 = df['Signal_Regime_v4'].iloc[i]
+            today_reg_v4_3 = df['Signal_Regime_v4_3'].iloc[i]
+            use_soxl = (df['SMH'].iloc[i-1] > df['SMH_MA50'].iloc[i-1]) and (df['SMH_3M_Ret'].iloc[i-1] > 0.05) and (df['SMH_RSI'].iloc[i-1] > 50)
 
-                log_type = "레짐 전환" if today_reg != df['Signal_Regime'].iloc[i-1] else "월간 정기"
-                semi_target = "SOXL (3x)" if use_soxl and today_reg == 1 else ("USD (2x)" if today_reg in [1, 2] else "-")
+            if today.month != yesterday.month or today_reg_v4 != df['Signal_Regime_v4'].iloc[i-1] or i == 1:
+                weights_v4 = get_v4_weights(today_reg_v4, use_soxl)
+                
+            if today.month != yesterday.month or today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] or i == 1:
+                weights_v4_3 = get_v4_3_weights(today_reg_v4_3, use_soxl)
+
+                log_type = "레짐 전환 (v4.3)" if today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] else "월간 정기 (v4.3)"
+                semi_target = "SOXL (3x)" if use_soxl and today_reg_v4_3 == 1 else ("USD (2x)" if today_reg_v4_3 in [1, 2] else "-")
                 
                 logs.append({
-                    "날짜": today.strftime('%Y-%m-%d'), "유형": log_type, "국면": f"Regime {int(today_reg)}",
-                    "반도체 스위칭": semi_target, "평가액": ports['AMLS v4']
+                    "날짜": today.strftime('%Y-%m-%d'), "유형": log_type, "국면": f"Regime {int(today_reg_v4_3)}",
+                    "반도체 스위칭": semi_target, "평가액": ports['AMLS v4.3']
                 })
 
         for s in strategies: df[f'{s}_Value'] = hists[s]
         df['Invested'] = invested_hist
         return df, logs, data.columns
 
-    with st.spinner('퀀트 엔진을 가동하여 시장 데이터를 연산 중입니다...'):
+    with st.spinner('듀얼 퀀트 엔진을 가동하여 시장 데이터를 연산 중입니다...'):
         df, full_logs, tickers = load_and_calculate_data(BACKTEST_START, BACKTEST_END, INITIAL_CAPITAL, MONTHLY_CONTRIBUTION)
-        strategies = ['AMLS v4', 'QQQ', 'QLD', 'TQQQ', 'SPY']
+        strategies = ['AMLS v4.3', 'AMLS v4', 'QQQ', 'QLD', 'TQQQ', 'SPY']
 
     today_status = df.iloc[-1]
     date_str = df.index[-1].strftime('%Y년 %m월 %d일')
@@ -204,11 +259,12 @@ if app_mode == "[1] 백테스트 시뮬레이터":
     # --- 백테스트 레이더 ---
     with st.container(border=True):
         st.markdown(f"**[ 실시간 시장 레이더 ]** &nbsp; | &nbsp; 기준일: {date_str} 종가")
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("현재 적용 국면", f"Regime {int(today_status['Signal_Regime'])}")
-        m2.metric("공포 지수 (VIX)", f"{today_status['^VIX']:.2f}")
-        m3.metric("누적 투입 원금", f"${df['Invested'].iloc[-1]:,.0f}")
-        m4.metric("AMLS 최종 자산", f"${df['AMLS v4_Value'].iloc[-1]:,.0f}")
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("v4.3 적용 국면", f"Regime {int(today_status['Signal_Regime_v4_3'])}")
+        m2.metric("v4 (구형) 국면", f"Regime {int(today_status['Signal_Regime_v4'])}")
+        m3.metric("공포 지수 (VIX)", f"{today_status['^VIX']:.2f}")
+        m4.metric("누적 투입 원금", f"${df['Invested'].iloc[-1]:,.0f}")
+        m5.metric("v4.3 최종 자산", f"${df['AMLS v4.3_Value'].iloc[-1]:,.0f}")
         
         st.divider()
         st.markdown("**🔍 나스닥 (QQQ) 기술적 지표**")
@@ -221,12 +277,12 @@ if app_mode == "[1] 백테스트 시뮬레이터":
     st.write("")
 
     # --- 백테스트 차트 및 표 ---
-    st.markdown("**[ 국면별 포트폴리오 목표 비중 ]**")
-    def get_v4_weights_for_plot(regime):
+    st.markdown("**[ 국면별 포트폴리오 목표 비중 (AMLS v4.3 기준) ]**")
+    def get_v4_3_weights_for_plot(regime):
         w = {t: 0.0 for t in tickers}
         if regime == 1: w['TQQQ'], w['SOXL/USD'], w['QLD'], w['SSO'], w['GLD'], w['현금'] = 30, 20, 20, 15, 10, 5
-        elif regime == 2: w['QLD'], w['SSO'], w['GLD'], w['QQQ'], w['USD'], w['현금'] = 25, 20, 20, 15, 10, 10
-        elif regime == 3: w['GLD'], w['현금'], w['QQQ'], w['SPY'] = 35, 35, 20, 10
+        elif regime == 2: w['QLD'], w['SSO'], w['GLD'], w['USD'], w['QQQ'], w['현금'] = 30, 25, 20, 10, 5, 10
+        elif regime == 3: w['GLD'], w['현금'], w['QQQ'] = 50, 35, 15
         elif regime == 4: w['GLD'], w['현금'], w['QQQ'] = 50, 40, 10
         return {k: v for k, v in w.items() if v > 0}
 
@@ -235,7 +291,7 @@ if app_mode == "[1] 백테스트 시뮬레이터":
 
     for idx, col in enumerate([col1, col2, col3, col4]):
         reg = idx + 1
-        w = get_v4_weights_for_plot(reg)
+        w = get_v4_3_weights_for_plot(reg)
         fig_pie = go.Figure(data=[go.Pie(labels=list(w.keys()), values=list(w.values()), hole=.5, marker=dict(colors=[colors.get(k, '#95a5a6') for k in w.keys()]))])
         fig_pie.update_layout(title_text=f"Regime {reg}", title_x=0.5, margin=dict(t=30, b=0, l=0, r=0), height=250, showlegend=False)
         fig_pie.update_traces(textinfo='label+percent', textposition='inside')
@@ -272,12 +328,15 @@ if app_mode == "[1] 백테스트 시뮬레이터":
     st.write("")
     st.markdown("**[ 자산 성장 및 계좌 낙폭 (Drawdown) ]**")
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.05)
-    line_colors = ['#8e44ad', '#3498db', '#f39c12', '#e74c3c', '#2c3e50']
+    
+    # v4.3은 녹색 포인트, v4는 보라색 포인트
+    line_colors = ['#1abc9c', '#8e44ad', '#3498db', '#f39c12', '#e74c3c', '#2c3e50']
     
     for s, c in zip(strategies, line_colors):
-        fig.add_trace(go.Scatter(x=df.index, y=df[f'{s}_Value'], name=s, line=dict(color=c, width=3 if s == 'AMLS v4' else 1.5)), row=1, col=1)
+        lw = 3 if 'AMLS' in s else 1.5
+        fig.add_trace(go.Scatter(x=df.index, y=df[f'{s}_Value'], name=s, line=dict(color=c, width=lw)), row=1, col=1)
         dd = (df[f'{s}_Value'] / df[f'{s}_Value'].cummax()) - 1
-        fig.add_trace(go.Scatter(x=df.index, y=dd * 100, name=f'{s} DD', line=dict(color=c, width=1.5 if s == 'AMLS v4' else 1, dash='solid' if s == 'AMLS v4' else 'dot')), row=2, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=dd * 100, name=f'{s} DD', line=dict(color=c, width=1.5 if 'AMLS' in s else 1, dash='solid' if 'AMLS' in s else 'dot')), row=2, col=1)
 
     fig.add_trace(go.Scatter(x=df.index, y=df['Invested'], name='누적 투입 원금', line=dict(color='black', width=2, dash='dash')), row=1, col=1)
     fig.update_yaxes(type="log", row=1, col=1)
@@ -287,8 +346,8 @@ if app_mode == "[1] 백테스트 시뮬레이터":
 
     col_dist, col_log = st.columns([1, 2])
     with col_dist:
-        st.markdown("**[ 레짐 체류 일자 분포 ]**")
-        regime_counts = df['Signal_Regime'].value_counts().sort_index()
+        st.markdown("**[ 레짐 체류 일자 분포 (v4.3 기준) ]**")
+        regime_counts = df['Signal_Regime_v4_3'].value_counts().sort_index()
         reg_df = pd.DataFrame({
             "국면": [f"Regime {int(r)}" for r in [1, 2, 3, 4]],
             "일수": [f"{regime_counts.get(r, 0)}일" for r in [1, 2, 3, 4]],
@@ -304,25 +363,26 @@ if app_mode == "[1] 백테스트 시뮬레이터":
 
 
 # =====================================================================
-# 2. 내 실전 포트폴리오 관리 모드
+# 2. 내 실전 포트폴리오 관리 모드 (v4.3 최신 엔진 적용)
 # =====================================================================
-elif app_mode == "[2] 실전 포트폴리오 관리":
-    st.title("AMLS 실전 포트폴리오 관제탑")
-    st.markdown("현재 시장 상태를 파악하고, 내 포트폴리오의 실시간 수익률 및 리밸런싱 지침을 확인합니다.", help="입력된 데이터는 로컬 환경에 자동 보존됩니다.")
+elif app_mode == "[2] 실전 포트폴리오 관리 (v4.3)":
+    st.title("AMLS v4.3 실전 포트폴리오 관제탑")
+    st.markdown("가장 진보된 **단계적 진입 로직(v4.3)**을 바탕으로 현재 시장 상태를 파악하고 리밸런싱 지침을 확인합니다.", help="입력된 데이터는 로컬 환경에 자동 보존됩니다.")
 
     TICKERS = ['QQQ', 'TQQQ', 'SOXL', 'USD', 'QLD', 'SSO', 'SPY', 'SMH', 'GLD', '^VIX']
 
-    def get_target_weights(regime, use_soxl):
+    # v4.3 최신 배분율
+    def get_target_weights_v4_3(regime, use_soxl):
         w = {t: 0.0 for t in TICKERS}
         semi = 'SOXL' if use_soxl else 'USD'
         if regime == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'], w['CASH'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
-        elif regime == 2: w['QLD'], w['SSO'], w['GLD'], w['QQQ'], w['USD'], w['CASH'] = 0.25, 0.20, 0.20, 0.15, 0.10, 0.10
-        elif regime == 3: w['GLD'], w['CASH'], w['QQQ'], w['SPY'] = 0.35, 0.35, 0.20, 0.10
+        elif regime == 2: w['QLD'], w['SSO'], w['GLD'], w['USD'], w['QQQ'], w['CASH'] = 0.30, 0.25, 0.20, 0.10, 0.05, 0.10
+        elif regime == 3: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.35, 0.15
         elif regime == 4: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.40, 0.10
         return {k: v for k, v in w.items() if v > 0}
 
     @st.cache_data(ttl=1800)
-    def get_market_regime():
+    def get_market_regime_v4_3():
         end_date = datetime.today()
         start_date = end_date - timedelta(days=400)
         data = yf.download(TICKERS, start=start_date.strftime('%Y-%m-%d'), end=end_date.strftime('%Y-%m-%d'), progress=False)['Close'].ffill()
@@ -337,26 +397,64 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
         df['SMH_RSI'] = ta.rsi(df['SMH'], length=14)
         
         df = df.dropna()
+        
+        def get_target_regime(row):
+            vix, qqq, ma200, ma50 = row['^VIX'], row['QQQ'], row['QQQ_MA200'], row['QQQ_MA50']
+            if vix > 40: return 4
+            if qqq < ma200: return 3
+            if qqq >= ma200 and ma50 >= ma200 and vix < 25: return 1
+            return 2
+            
+        df['Target_Regime'] = df.apply(get_target_regime, axis=1)
+
+        # v4.3 단계적 진입 로직
+        current_v4_3 = 3
+        pend_v4_3 = None
+        cnt_v4_3 = 0
+        actual_regime_v4_3 = []
+        for i in range(len(df)):
+            tr = df['Target_Regime'].iloc[i]
+            if tr > current_v4_3:
+                current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0
+                actual_regime_v4_3.append(current_v4_3)
+            elif tr < current_v4_3:
+                if tr == pend_v4_3:
+                    cnt_v4_3 += 1
+                    if cnt_v4_3 >= 5:
+                        current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0
+                        actual_regime_v4_3.append(current_v4_3)
+                    else:
+                        actual_regime_v4_3.append(current_v4_3 - 1)
+                else:
+                    pend_v4_3 = tr; cnt_v4_3 = 1
+                    actual_regime_v4_3.append(current_v4_3 - 1)
+            else:
+                pend_v4_3 = None; cnt_v4_3 = 0
+                actual_regime_v4_3.append(current_v4_3)
+                
+        df['Signal_Regime_v4_3'] = pd.Series(actual_regime_v4_3, index=df.index).shift(1).bfill()
+
         today = df.iloc[-1]
+        today_target = today['Target_Regime']
+        today_signal = df['Signal_Regime_v4_3'].iloc[-1]
         
         vix, qqq, ma200, ma50 = today['^VIX'], today['QQQ'], today['QQQ_MA200'], today['QQQ_MA50']
         smh, smh_ma50, smh_3m_ret, smh_rsi = today['SMH'], today['SMH_MA50'], today['SMH_3M_Ret'], today['SMH_RSI']
 
-        if vix > 40: regime = 4
-        elif qqq < ma200: regime = 3
-        elif qqq >= ma200 and ma50 >= ma200 and vix < 25: regime = 1
-        else: regime = 2
-
         cond1, cond2, cond3 = smh > smh_ma50, smh_3m_ret > 0.05, smh_rsi > 50
         use_soxl = cond1 and cond2 and cond3
-        target_w = get_target_weights(regime, use_soxl)
+        
+        # 현재 화면에 뿌릴 적용 타겟은 Signal 기준
+        target_w = get_target_weights_v4_3(today_signal, use_soxl)
         
         semi_target = "SOXL (3배)" if use_soxl else "USD (2배)"
-        if regime in [3, 4]: semi_target = "미보유 (대피)"
-        elif regime == 2: semi_target = "USD (2배 - 축소)"
+        if today_signal in [3, 4]: semi_target = "미보유 (대피)"
 
         return {
-            'regime': regime, 'vix': vix, 'qqq': qqq, 'ma200': ma200, 'ma50': ma50,
+            'target_regime': today_target, 'applied_regime': today_signal, 
+            'is_waiting': (today_target < current_v4_3) and pend_v4_3 is not None,
+            'wait_days': cnt_v4_3,
+            'vix': vix, 'qqq': qqq, 'ma200': ma200, 'ma50': ma50,
             'smh': smh, 'smh_ma50': smh_ma50, 'smh_3m_ret': smh_3m_ret, 'smh_rsi': smh_rsi,
             'cond1': cond1, 'cond2': cond2, 'cond3': cond3,
             'semi_target': semi_target, 'date': today.name, 'target_weights': target_w,
@@ -364,15 +462,21 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
         }
 
     with st.spinner("시장 국면을 정밀 판독 중입니다..."):
-        mr = get_market_regime()
+        mr = get_market_regime_v4_3()
 
     # --- 실시간 레이더 패널 ---
     with st.container(border=True):
         st.markdown(f"**[ 시장 레이더 요약 ]** &nbsp; | &nbsp; 기준일: {mr['date'].strftime('%Y-%m-%d')}")
         r_col1, r_col2, r_col3, r_col4 = st.columns(4)
         
-        regime_color = "#e74c3c" if mr['regime'] >= 3 else "#2ecc71"
-        r_col1.markdown(f"현재 확정 국면<br><span style='font-size: 24px; font-weight: bold; color: {regime_color};'>Regime {mr['regime']}</span>", unsafe_allow_html=True)
+        regime_color = "#e74c3c" if mr['applied_regime'] >= 3 else "#2ecc71"
+        regime_display = f"Regime {int(mr['applied_regime'])}"
+        
+        # 단계적 진입 텍스트 추가
+        if mr['is_waiting']:
+            regime_display += f"<br><span style='font-size: 14px; color: #f39c12;'>상향 전환 대기중 ({mr['wait_days']}일차 임시적용)</span>"
+            
+        r_col1.markdown(f"v4.3 실시간 국면<br><span style='font-size: 24px; font-weight: bold; color: {regime_color};'>{regime_display}</span>", unsafe_allow_html=True)
         r_col2.metric("공포 지수 (VIX)", f"{mr['vix']:.2f}")
         r_col3.metric("QQQ 200일선 이격도", f"{(mr['qqq'] / mr['ma200'] - 1) * 100:+.2f}%")
         r_col4.markdown(f"반도체 스위칭 타겟<br><span style='font-size: 20px; font-weight: bold; color: #3498db;'>{mr['semi_target']}</span>", unsafe_allow_html=True)
@@ -418,7 +522,7 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
                 "평균 단가 ($)": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
             })
             st.session_state['portfolio_df'] = reset_df
-            st.session_state['last_portfolio_df'] = reset_df.copy() # 핵심: 이전 상태도 0으로 덮어씀
+            st.session_state['last_portfolio_df'] = reset_df.copy()
             st.session_state['portfolio_history'] = [{"Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Log": "🔄 시스템: 사용자에 의해 포트폴리오가 전체 초기화되었습니다."}]
             st.session_state['first_entry_date'] = None
             st.session_state['journal_text'] = ""
@@ -455,7 +559,6 @@ elif app_mode == "[2] 실전 포트폴리오 관리":
                     state[tkr] = {'qty': qty, 'avg_p': avg_p}
             return state
 
-        # 🔥 로그 생성을 위한 정밀 비교 로직
         old_state = get_portfolio_dict(st.session_state['last_portfolio_df'])
         new_state = get_portfolio_dict(edited_df)
         
