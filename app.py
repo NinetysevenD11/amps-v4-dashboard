@@ -73,7 +73,7 @@ st.sidebar.markdown("### 🦅 퀀트 통합 관제탑")
 app_mode = st.sidebar.radio("모드 선택", [
     "[1] AMLS 백테스트 (v4 vs v4.3)", 
     "[2] 실전 포트폴리오 관리 (AMLS)",
-    "[3] 세윤도깨비 시뮬레이터 (신규)"
+    "[3] 세윤도깨비 시뮬레이터"
 ])
 st.sidebar.markdown("---")
 
@@ -95,17 +95,12 @@ if app_mode == "[1] AMLS 백테스트 (v4 vs v4.3)":
         tickers = ['QQQ', 'TQQQ', 'SOXL', 'USD', 'QLD', 'SSO', 'SPY', 'SMH', 'GLD', '^VIX']
         start_str = (start - timedelta(days=400)).strftime("%Y-%m-%d")
         end_str = end.strftime("%Y-%m-%d")
-
-        try:
-            data = yf.download(tickers, start=start_str, end=end_str, progress=False, auto_adjust=True)['Close']
-        except:
-            data = yf.download(tickers, start=start_str, end=end_str, progress=False)['Close']
-
+        try: data = yf.download(tickers, start=start_str, end=end_str, progress=False, auto_adjust=True)['Close']
+        except: data = yf.download(tickers, start=start_str, end=end_str, progress=False)['Close']
         data = data.ffill().dropna(subset=['QQQ', '^VIX'])
 
         df = pd.DataFrame(index=data.index)
-        for t in data.columns:
-            df[t] = data[t]
+        for t in data.columns: df[t] = data[t]
 
         df['QQQ_MA50'] = df['QQQ'].rolling(window=50).mean()
         df['QQQ_MA200'] = df['QQQ'].rolling(window=200).mean()
@@ -126,54 +121,34 @@ if app_mode == "[1] AMLS 백테스트 (v4 vs v4.3)":
             return 2
 
         df['Target_Regime'] = df.apply(get_target_regime, axis=1)
-
-        actual_regime_v4 = []
-        actual_regime_v4_3 = []
-        current_v4 = 3
-        current_v4_3 = 3
-        pend_v4 = None
-        pend_v4_3 = None
-        cnt_v4 = 0
-        cnt_v4_3 = 0
+        actual_regime_v4 = []; actual_regime_v4_3 = []
+        current_v4 = 3; current_v4_3 = 3
+        pend_v4 = None; pend_v4_3 = None
+        cnt_v4 = 0; cnt_v4_3 = 0
 
         for i in range(len(df)):
             tr = df['Target_Regime'].iloc[i]
-            
+            # v4 Logic
             if tr > current_v4:
                 current_v4 = tr; pend_v4 = None; cnt_v4 = 0
                 actual_regime_v4.append(current_v4)
             elif tr < current_v4:
                 if tr == pend_v4:
                     cnt_v4 += 1
-                    if cnt_v4 >= 5:
-                        current_v4 = tr; pend_v4 = None; cnt_v4 = 0
-                        actual_regime_v4.append(current_v4)
-                    else:
-                        actual_regime_v4.append(current_v4)
-                else:
-                    pend_v4 = tr; cnt_v4 = 1
-                    actual_regime_v4.append(current_v4)
-            else:
-                pend_v4 = None; cnt_v4 = 0
-                actual_regime_v4.append(current_v4)
-
+                    if cnt_v4 >= 5: current_v4 = tr; pend_v4 = None; cnt_v4 = 0; actual_regime_v4.append(current_v4)
+                    else: actual_regime_v4.append(current_v4)
+                else: pend_v4 = tr; cnt_v4 = 1; actual_regime_v4.append(current_v4)
+            else: pend_v4 = None; cnt_v4 = 0; actual_regime_v4.append(current_v4)
+            # v4.3 Logic
             if tr > current_v4_3: 
-                current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0
-                actual_regime_v4_3.append(current_v4_3)
+                current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0; actual_regime_v4_3.append(current_v4_3)
             elif tr < current_v4_3: 
                 if tr == pend_v4_3:
                     cnt_v4_3 += 1
-                    if cnt_v4_3 >= 5: 
-                        current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0
-                        actual_regime_v4_3.append(current_v4_3)
-                    else: 
-                        actual_regime_v4_3.append(current_v4_3 - 1)
-                else: 
-                    pend_v4_3 = tr; cnt_v4_3 = 1
-                    actual_regime_v4_3.append(current_v4_3 - 1)
-            else:
-                pend_v4_3 = None; cnt_v4_3 = 0
-                actual_regime_v4_3.append(current_v4_3)
+                    if cnt_v4_3 >= 5: current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0; actual_regime_v4_3.append(current_v4_3)
+                    else: actual_regime_v4_3.append(current_v4_3 - 1)
+                else: pend_v4_3 = tr; cnt_v4_3 = 1; actual_regime_v4_3.append(current_v4_3 - 1)
+            else: pend_v4_3 = None; cnt_v4_3 = 0; actual_regime_v4_3.append(current_v4_3)
 
         df['Signal_Regime_v4'] = pd.Series(actual_regime_v4, index=df.index).shift(1).bfill()
         df['Signal_Regime_v4_3'] = pd.Series(actual_regime_v4_3, index=df.index).shift(1).bfill()
@@ -199,21 +174,15 @@ if app_mode == "[1] AMLS 백테스트 (v4 vs v4.3)":
         strategies = ['AMLS v4.3', 'AMLS v4', 'QQQ', 'QLD', 'TQQQ', 'SPY']
         ports = {s: init_cap for s in strategies}
         hists = {s: [init_cap] for s in strategies}
-        invested_hist = [init_cap]
-        total_invested = init_cap
-        
-        weights_v4 = {t: 0.0 for t in data.columns}
-        weights_v4_3 = {t: 0.0 for t in data.columns}
+        invested_hist = [init_cap]; total_invested = init_cap
+        weights_v4 = {t: 0.0 for t in data.columns}; weights_v4_3 = {t: 0.0 for t in data.columns}
         logs = []
 
         for i in range(1, len(df)):
             today, yesterday = df.index[i], df.index[i-1]
-
             ret_v4 = sum(weights_v4[t] * daily_returns[t].iloc[i] for t in data.columns)
             ret_v4_3 = sum(weights_v4_3[t] * daily_returns[t].iloc[i] for t in data.columns)
-            
-            ports['AMLS v4'] *= (1 + ret_v4)
-            ports['AMLS v4.3'] *= (1 + ret_v4_3)
+            ports['AMLS v4'] *= (1 + ret_v4); ports['AMLS v4.3'] *= (1 + ret_v4_3)
             for s in ['QQQ', 'QLD', 'TQQQ', 'SPY']: ports[s] *= (1 + daily_returns[s].iloc[i])
 
             for t in data.columns:
@@ -227,23 +196,16 @@ if app_mode == "[1] AMLS 백테스트 (v4 vs v4.3)":
             invested_hist.append(total_invested)
             for s in strategies: hists[s].append(ports[s])
 
-            today_reg_v4 = df['Signal_Regime_v4'].iloc[i]
-            today_reg_v4_3 = df['Signal_Regime_v4_3'].iloc[i]
+            today_reg_v4 = df['Signal_Regime_v4'].iloc[i]; today_reg_v4_3 = df['Signal_Regime_v4_3'].iloc[i]
             use_soxl = (df['SMH'].iloc[i-1] > df['SMH_MA50'].iloc[i-1]) and (df['SMH_3M_Ret'].iloc[i-1] > 0.05) and (df['SMH_RSI'].iloc[i-1] > 50)
 
             if today.month != yesterday.month or today_reg_v4 != df['Signal_Regime_v4'].iloc[i-1] or i == 1:
                 weights_v4 = get_v4_weights(today_reg_v4, use_soxl)
-                
             if today.month != yesterday.month or today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] or i == 1:
                 weights_v4_3 = get_v4_3_weights(today_reg_v4_3, use_soxl)
-
                 log_type = "레짐 전환 (v4.3)" if today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] else "월간 정기 (v4.3)"
                 semi_target = "SOXL (3x)" if use_soxl and today_reg_v4_3 == 1 else ("USD (2x)" if today_reg_v4_3 in [1, 2] else "-")
-                
-                logs.append({
-                    "날짜": today.strftime('%Y-%m-%d'), "유형": log_type, "국면": f"Regime {int(today_reg_v4_3)}",
-                    "반도체 스위칭": semi_target, "평가액": ports['AMLS v4.3']
-                })
+                logs.append({"날짜": today.strftime('%Y-%m-%d'), "유형": log_type, "국면": f"Regime {int(today_reg_v4_3)}", "반도체 스위칭": semi_target, "평가액": ports['AMLS v4.3']})
 
         for s in strategies: df[f'{s}_Value'] = hists[s]
         df['Invested'] = invested_hist
@@ -264,7 +226,6 @@ if app_mode == "[1] AMLS 백테스트 (v4 vs v4.3)":
         m3.metric("공포 지수 (VIX)", f"{today_status['^VIX']:.2f}")
         m4.metric("누적 투입 원금", f"${df['Invested'].iloc[-1]:,.0f}")
         m5.metric("v4.3 최종 자산", f"${df['AMLS v4.3_Value'].iloc[-1]:,.0f}")
-        
         st.divider()
         st.markdown("**🔍 나스닥 (QQQ) 기술적 지표**")
         q1, q2, q3, q4 = st.columns(4)
@@ -325,15 +286,12 @@ if app_mode == "[1] AMLS 백테스트 (v4 vs v4.3)":
                 yearly_val.loc[s, str(y)] = f"${y_data.iloc[-1]:,.0f}"
                 
         tab_ret, tab_val = st.tabs(["📈 수익률 (%)", "💰 기말 자산 ($)"])
-        with tab_ret:
-            st.dataframe(yearly_ret, use_container_width=True)
-        with tab_val:
-            st.dataframe(yearly_val, use_container_width=True)
+        with tab_ret: st.dataframe(yearly_ret, use_container_width=True)
+        with tab_val: st.dataframe(yearly_val, use_container_width=True)
 
     st.write("")
     st.markdown("**[ 자산 성장 및 계좌 낙폭 (Drawdown) ]**")
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.05)
-    
     line_colors = ['#1abc9c', '#8e44ad', '#3498db', '#f39c12', '#e74c3c', '#2c3e50']
     
     for s, c in zip(strategies, line_colors):
@@ -350,11 +308,11 @@ if app_mode == "[1] AMLS 백테스트 (v4 vs v4.3)":
 
 
 # =====================================================================
-# 2. 내 실전 포트폴리오 관리 모드 (AMLS v4.3)
+# 2. 내 실전 포트폴리오 관리 모드 (AMLS v4.3 완벽 복구 및 향상판)
 # =====================================================================
 elif app_mode == "[2] 실전 포트폴리오 관리 (AMLS)":
     st.title("AMLS v4.3 실전 포트폴리오 관제탑")
-    st.markdown("가장 진보된 **단계적 진입 로직(v4.3)**을 바탕으로 현재 시장 상태를 파악하고 리밸런싱 지침을 확인합니다.")
+    st.markdown("가장 진보된 **단계적 진입 로직(v4.3)**을 바탕으로 포트폴리오를 관리하고 성과를 추적합니다.")
 
     TICKERS = ['QQQ', 'TQQQ', 'SOXL', 'USD', 'QLD', 'SSO', 'SPY', 'SMH', 'GLD', '^VIX']
 
@@ -403,14 +361,9 @@ elif app_mode == "[2] 실전 포트폴리오 관리 (AMLS)":
             elif tr < current_v4_3:
                 if tr == pend_v4_3:
                     cnt_v4_3 += 1
-                    if cnt_v4_3 >= 5:
-                        current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0
-                        actual_regime_v4_3.append(current_v4_3)
-                    else:
-                        actual_regime_v4_3.append(current_v4_3 - 1)
-                else:
-                    pend_v4_3 = tr; cnt_v4_3 = 1
-                    actual_regime_v4_3.append(current_v4_3 - 1)
+                    if cnt_v4_3 >= 5: current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0; actual_regime_v4_3.append(current_v4_3)
+                    else: actual_regime_v4_3.append(current_v4_3 - 1)
+                else: pend_v4_3 = tr; cnt_v4_3 = 1; actual_regime_v4_3.append(current_v4_3 - 1)
             else:
                 pend_v4_3 = None; cnt_v4_3 = 0
                 actual_regime_v4_3.append(current_v4_3)
@@ -418,6 +371,7 @@ elif app_mode == "[2] 실전 포트폴리오 관리 (AMLS)":
         df['Signal_Regime_v4_3'] = pd.Series(actual_regime_v4_3, index=df.index).shift(1).bfill()
 
         today = df.iloc[-1]
+        yesterday = df.iloc[-2] # 전일 데이터 추가 (일일 손익 계산용)
         today_target = today['Target_Regime']
         today_signal = df['Signal_Regime_v4_3'].iloc[-1]
         
@@ -438,15 +392,48 @@ elif app_mode == "[2] 실전 포트폴리오 관리 (AMLS)":
             'smh': smh, 'smh_ma50': smh_ma50, 'smh_3m_ret': smh_3m_ret, 'smh_rsi': smh_rsi,
             'cond1': cond1, 'cond2': cond2, 'cond3': cond3,
             'semi_target': semi_target, 'date': today.name, 'target_weights': target_w,
-            'latest_prices': {t: today[t] for t in TICKERS if t != '^VIX'}
+            'latest_prices': {t: today[t] for t in TICKERS if t != '^VIX'},
+            'prev_prices': {t: yesterday[t] for t in TICKERS if t != '^VIX'} # 전일 가격
         }
 
     with st.spinner("시장 국면 판독 중..."):
         mr = get_market_regime_v4_3()
 
+    # 1. 자산 현황 산출 (오늘 vs 어제 비교 포함)
+    asset_values = {}
+    prev_asset_values = {}
+    total_invested_principal = 0.0 
+    
+    for _, row in st.session_state['portfolio_df'].iterrows():
+        tkr = str(row.iloc[0]).upper().strip()
+        try: shares = float(row.iloc[1])
+        except: shares = 0.0
+        try: avg_price = float(row.iloc[2])
+        except: avg_price = 0.0
+            
+        if shares > 0:
+            if tkr == "CASH":
+                asset_values[tkr] = asset_values.get(tkr, 0) + shares
+                prev_asset_values[tkr] = prev_asset_values.get(tkr, 0) + shares
+                total_invested_principal += shares
+            else:
+                curr_price = mr['latest_prices'].get(tkr, 0.0)
+                prev_price = mr['prev_prices'].get(tkr, 0.0)
+                if curr_price > 0: asset_values[tkr] = asset_values.get(tkr, 0) + (shares * curr_price)
+                if prev_price > 0: prev_asset_values[tkr] = prev_asset_values.get(tkr, 0) + (shares * prev_price)
+                if avg_price > 0: total_invested_principal += (shares * avg_price)
+                
+    total_value = sum(asset_values.values()) if asset_values else 0.0
+    prev_total_value = sum(prev_asset_values.values()) if prev_asset_values else 0.0
+    
+    # 일일 손익 계산
+    today_pnl_amt = total_value - prev_total_value
+    today_pnl_pct = (today_pnl_amt / prev_total_value * 100) if prev_total_value > 0 else 0.0
+
+    # --- 실시간 레이더 패널 ---
     with st.container(border=True):
         st.markdown(f"**[ 시장 레이더 요약 ]** &nbsp; | &nbsp; 기준일: {mr['date'].strftime('%Y-%m-%d')}")
-        r_col1, r_col2, r_col3, r_col4 = st.columns(4)
+        r_col1, r_col2, r_col3, r_col4, r_col5 = st.columns(5)
         
         regime_color = "#e74c3c" if mr['applied_regime'] >= 3 else "#2ecc71"
         regime_display = f"Regime {int(mr['applied_regime'])}"
@@ -456,6 +443,48 @@ elif app_mode == "[2] 실전 포트폴리오 관리 (AMLS)":
         r_col2.metric("공포 지수 (VIX)", f"{mr['vix']:.2f}")
         r_col3.metric("QQQ 200일선 이격도", f"{(mr['qqq'] / mr['ma200'] - 1) * 100:+.2f}%")
         r_col4.markdown(f"반도체 스위칭 타겟<br><span style='font-size: 20px; font-weight: bold; color: #3498db;'>{mr['semi_target']}</span>", unsafe_allow_html=True)
+        
+        # 🆕 신규: 일일 손익 (Today's P&L)
+        r_col5.metric("오늘의 계좌 변동 (P&L)", f"${today_pnl_amt:,.0f}", f"{today_pnl_pct:+.2f}%")
+
+        st.divider()
+        col_ind1, col_ind2, col_ind3 = st.columns([1, 1, 1])
+        
+        # 🆕 신규: VIX 게이지 차트
+        with col_ind1:
+            fig_vix = go.Figure(go.Indicator(
+                mode = "gauge+number", value = mr['vix'],
+                title = {'text': "시장 공포 탐욕 (VIX)", 'font': {'size': 14}},
+                gauge = {
+                    'axis': {'range': [0, 80], 'tickwidth': 1, 'tickcolor': "white"},
+                    'bar': {'color': "white", 'thickness': 0.2},
+                    'steps': [
+                        {'range': [0, 25], 'color': "#2ecc71"},   # 안전
+                        {'range': [25, 40], 'color': "#f39c12"},  # 경계
+                        {'range': [40, 80], 'color': "#e74c3c"}], # 위험
+                }
+            ))
+            fig_vix.update_layout(height=180, margin=dict(l=10, r=10, t=30, b=10))
+            st.plotly_chart(fig_vix, use_container_width=True)
+
+        with col_ind2:
+            st.markdown("##### 🎯 레짐 3대 지표")
+            if mr['vix'] > 40: st.error(f"**1. VIX:** {mr['vix']:.2f} (>40 위험)", icon="🚨")
+            elif mr['vix'] >= 25: st.warning(f"**1. VIX:** {mr['vix']:.2f} (>25 경계)", icon="⚠️")
+            else: st.success(f"**1. VIX:** {mr['vix']:.2f} (<25 안정)", icon="✅")
+            if mr['qqq'] >= mr['ma200']: st.success(f"**2. 장기추세:** 200일선 위", icon="✅")
+            else: st.error(f"**2. 장기추세:** 200일선 아래", icon="🚨")
+            if mr['ma50'] >= mr['ma200']: st.success(f"**3. 배열:** 정배열", icon="✅")
+            else: st.error(f"**3. 배열:** 역배열", icon="🚨")
+
+        with col_ind3:
+            st.markdown("##### ⚡ 반도체 진입 지표")
+            if mr['cond1']: st.success("**1. 추세:** SMH > 50일선", icon="✅")
+            else: st.error("**1. 추세:** SMH < 50일선", icon="❌")
+            if mr['cond2']: st.success(f"**2. 3M수익률:** {mr['smh_3m_ret']*100:.1f}% (>5%)", icon="✅")
+            else: st.error(f"**2. 3M수익률:** {mr['smh_3m_ret']*100:.1f}% (<5%)", icon="❌")
+            if mr['cond3']: st.success(f"**3. 모멘텀:** RSI {mr['smh_rsi']:.1f} (>50)", icon="✅")
+            else: st.error(f"**3. 모멘텀:** RSI {mr['smh_rsi']:.1f} (<50)", icon="❌")
 
     st.write("")
     col_header1, col_header2 = st.columns([5, 1])
@@ -526,27 +555,6 @@ elif app_mode == "[2] 실전 포트폴리오 관리 (AMLS)":
                 save_portfolio_data(st.session_state['portfolio_df'], st.session_state['portfolio_history'], st.session_state['first_entry_date'], st.session_state['journal_text'])
 
     with col_chart:
-        asset_values = {}
-        total_invested_principal = 0.0 
-        
-        for _, row in st.session_state['portfolio_df'].iterrows():
-            tkr = str(row.iloc[0]).upper().strip()
-            try: shares = float(row.iloc[1])
-            except: shares = 0.0
-            try: avg_price = float(row.iloc[2])
-            except: avg_price = 0.0
-                
-            if shares > 0:
-                if tkr == "CASH":
-                    asset_values[tkr] = asset_values.get(tkr, 0) + shares
-                    total_invested_principal += shares
-                else:
-                    curr_price = mr['latest_prices'].get(tkr, 0.0)
-                    if curr_price > 0: asset_values[tkr] = asset_values.get(tkr, 0) + (shares * curr_price)
-                    if avg_price > 0: total_invested_principal += (shares * avg_price)
-                    
-        total_value = sum(asset_values.values()) if asset_values else 0.0
-
         if total_value > 0:
             fig_bar = go.Figure()
             palette = ['#2c3e50', '#18bc9c', '#3498db', '#e74c3c', '#f39c12', '#9b59b6', '#34495e', '#bdc3c7']
@@ -623,6 +631,16 @@ elif app_mode == "[2] 실전 포트폴리오 관리 (AMLS)":
 
     if status_data:
         status_df = pd.DataFrame(status_data).sort_values(by="목표 비중", ascending=False)
+        
+        # 🆕 신규: 실제 비중 vs 목표 비중 시각화 차트
+        fig_comp = go.Figure(data=[
+            go.Bar(name='현재 비중 (Actual)', x=list(status_df['종목']), y=[float(str(x).replace('%','')) for x in status_df['현재 비중']], marker_color='#3498db'),
+            go.Bar(name='목표 비중 (Target)', x=list(status_df['종목']), y=[float(str(x).replace('%','')) for x in status_df['목표 비중']], marker_color='#18bc9c')
+        ])
+        fig_comp.update_layout(barmode='group', height=250, margin=dict(t=30, b=0, l=0, r=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        st.plotly_chart(fig_comp, use_container_width=True)
+
+        # 리밸런싱 테이블 출력
         def color_status(val):
             if type(val) == str:
                 if '매수' in val or ('+' in val and val != '-'): return 'color: #18bc9c; font-weight: bold;'
@@ -631,10 +649,100 @@ elif app_mode == "[2] 실전 포트폴리오 관리 (AMLS)":
             return ''
         st.dataframe(status_df.style.map(color_status, subset=['리밸런싱 액션', '수익률 (%)', '수익금 ($)']), hide_index=True, use_container_width=True)
 
+    st.write("")
+
+    # --- 🔙 완벽 복구: 성과 추적 패널 ---
+    st.markdown("**[ 자산 가치 추이 및 성과 추적 ]**")
+    if total_value > 0:
+        with st.container(border=True):
+            default_date = st.session_state.get('first_entry_date')
+            if default_date is None: default_date = datetime.today() - timedelta(days=90)
+                
+            col_date, _ = st.columns([1, 3])
+            with col_date:
+                user_start_date = st.date_input("포트폴리오 매수 시작일", value=default_date)
+                st.session_state['first_entry_date'] = datetime.combine(user_start_date, datetime.min.time())
+                save_portfolio_data(st.session_state['portfolio_df'], st.session_state['portfolio_history'], st.session_state['first_entry_date'], st.session_state['journal_text'])
+
+            pure_profit = total_value - total_invested_principal
+            profit_pct = (pure_profit / total_invested_principal * 100) if total_invested_principal > 0 else 0.0
+            
+            p_col1, p_col2, p_col3 = st.columns(3)
+            p_col1.metric("총 평가액", f"${total_value:,.2f}")
+            p_col2.metric("투입 원금 총합", f"${total_invested_principal:,.2f}")
+            p_col3.metric("누적 순수익금", f"${pure_profit:+,.2f}", f"{profit_pct:+.2f}%")
+
+            chart_start_ts = pd.Timestamp(user_start_date)
+            fetch_start = (chart_start_ts - timedelta(days=10)).strftime('%Y-%m-%d') 
+            
+            try:
+                benchmark_index = yf.download("QQQ", start=fetch_start, progress=False)['Close'].index
+                portfolio_value_series = pd.Series(0.0, index=benchmark_index)
+                principal_series = pd.Series(0.0, index=benchmark_index)
+
+                for _, row in st.session_state['portfolio_df'].iterrows():
+                    tkr = str(row.iloc[0]).upper().strip()
+                    try: shares = float(row.iloc[1])
+                    except: shares = 0.0
+                    try: avg_p = float(row.iloc[2])
+                    except: avg_p = 0.0
+                        
+                    if shares > 0:
+                        if tkr == "CASH":
+                            portfolio_value_series += shares
+                            principal_series += shares
+                        else:
+                            try:
+                                stock_data = yf.download(tkr, start=fetch_start, progress=False)
+                                if 'Close' in stock_data.columns:
+                                    stock_series = stock_data['Close']
+                                    if not stock_series.empty:
+                                        if isinstance(stock_series, pd.DataFrame): stock_series = stock_series.iloc[:, 0]
+                                        stock_series = stock_series.reindex(benchmark_index).ffill().fillna(0)
+                                        portfolio_value_series += stock_series * shares
+                                        principal_series += (shares * avg_p)
+                            except: pass
+
+                portfolio_value_series = portfolio_value_series.dropna()
+                principal_series = principal_series.dropna()
+                portfolio_value_series = portfolio_value_series[portfolio_value_series.index >= chart_start_ts]
+                principal_series = principal_series[principal_series.index >= chart_start_ts]
+
+                if len(portfolio_value_series) > 0:
+                    fig_perf = go.Figure()
+                    fig_perf.add_trace(go.Scatter(x=portfolio_value_series.index, y=portfolio_value_series.values, mode='lines', name='총 평가액', line=dict(color='#3498db', width=2), fill='tozeroy', fillcolor='rgba(52, 152, 219, 0.1)'))
+                    fig_perf.add_trace(go.Scatter(x=principal_series.index, y=principal_series.values, mode='lines', name='투입 원금', line=dict(color='#e74c3c', width=2, dash='dash')))
+                    fig_perf.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0), yaxis_title="달러 ($)", hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                    st.plotly_chart(fig_perf, use_container_width=True)
+                else:
+                    st.info("선택한 날짜 이후의 데이터가 없습니다.")
+            except Exception as e: pass
+    else:
+        st.info("수량을 기입하시면 자산 가치 추이 차트가 표시됩니다.")
+
+    st.write("")
+
+    # --- 🔙 완벽 복구: 일지 및 로그 패널 ---
+    col_jnl, col_hist = st.columns([1.5, 1])
+    with col_jnl:
+        st.markdown("**[ 나만의 매매 복기 일지 ]**")
+        def save_journal():
+            save_portfolio_data(st.session_state['portfolio_df'], st.session_state['portfolio_history'], st.session_state['first_entry_date'], st.session_state['journal_text'])
+        st.session_state['journal_text'] = st.text_area("시장 상황, 다짐, 실수 등을 기록하세요. (자동 저장)", value=st.session_state.get('journal_text', ''), height=200, on_change=save_journal, label_visibility="collapsed")
+
+    with col_hist:
+        st.markdown("**[ 시스템 변경 로그 ]**")
+        if st.session_state['portfolio_history']:
+            history_df = pd.DataFrame(st.session_state['portfolio_history'])[::-1]
+            st.dataframe(history_df, hide_index=True, use_container_width=True, height=200)
+        else:
+            st.info("로그 내역이 없습니다.")
+
+
 # =====================================================================
 # 3. 세윤도깨비 시뮬레이터 (신규 추가 탭)
 # =====================================================================
-elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
+elif app_mode == "[3] 세윤도깨비 시뮬레이터":
     st.title("👹 세윤도깨비 백테스트 시뮬레이터")
     st.markdown("단기/중기 이평선을 활용한 TQQQ 비중 조절(기어 변속) 및 **수익 익절 리밸런싱** 전략입니다.")
 
@@ -659,8 +767,6 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
     DOK_MDD_STOP = st.sidebar.number_input("전고점 대비 손절 (%)", value=20, step=5)
     DOK_RSI_EXIT = st.sidebar.number_input("RSI 익절 기준", value=70, step=5)
     DOK_RSI_W = st.sidebar.slider("RSI 익절 시 남길 비중", 0.0, 1.0, 0.5, 0.1)
-    
-    # 🔥 1단 수익 리밸런싱 설정 추가
     DOK_PROFIT_REBAL = st.sidebar.number_input("1단 수익 리밸런싱 기준 (%)", value=15, step=1)
 
     @st.cache_data(ttl=3600)
@@ -674,13 +780,8 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
         
         if 'Close' in data.columns: df = data['Close'].copy()
         else: df = data.copy()
-        
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-            
-        if len(tickers) == 1:
-            df = pd.DataFrame(df)
-            df.columns = tickers
+        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+        if len(tickers) == 1: df = pd.DataFrame(df); df.columns = tickers
 
         df = df.dropna()
         if df.empty: return None, None
@@ -689,8 +790,7 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
         df['MA_Slow'] = df[t_sig].rolling(window=ma_s).mean()
 
         delta = df[t_trade].diff()
-        u = delta.where(delta > 0, 0)
-        d = -delta.where(delta < 0, 0)
+        u = delta.where(delta > 0, 0); d = -delta.where(delta < 0, 0)
         au = u.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
         ad = d.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
         df['RSI'] = 100 - (100 / (1 + au/ad))
@@ -699,21 +799,13 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
         sim_df = df[df.index >= start_dt].copy()
         if sim_df.empty: return None, None
 
-        cash = init_c
-        shares = 0
-        total_invested = init_c
+        cash = init_c; shares = 0; total_invested = init_c
         daily_yield = 0.04 / 365
-
-        equity_curve = []
-        invested_curve = []
-        log_data = []
-        
+        equity_curve = []; invested_curve = []; log_data = []
         prev_month = -1
         
-        p0 = sim_df[t_trade].iloc[0]
-        ref0 = sim_df[t_sig].iloc[0]
-        mf0 = sim_df['MA_Fast'].iloc[0]
-        ms0 = sim_df['MA_Slow'].iloc[0]
+        p0 = sim_df[t_trade].iloc[0]; ref0 = sim_df[t_sig].iloc[0]
+        mf0 = sim_df['MA_Fast'].iloc[0]; ms0 = sim_df['MA_Slow'].iloc[0]
 
         if np.isnan(mf0): w0 = 0.5
         elif ref0 > mf0: w0 = w1
@@ -723,33 +815,25 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
         shares = (cash * w0 * 0.999) / p0
         cash -= cash * w0
         prev_target_w = w0
-        last_rebal_price = p0 # 🔥 마지막 리밸런싱 단가 저장
+        last_rebal_price = p0 
 
         equity_curve.append(cash + shares * p0)
         invested_curve.append(total_invested)
 
         for i in range(1, len(sim_df)):
-            date = sim_df.index[i]
-            price = sim_df[t_trade].iloc[i]
-            ref_price = sim_df[t_sig].iloc[i]
-            
-            rsi = sim_df['RSI'].iloc[i]
-            ma_f_val = sim_df['MA_Fast'].iloc[i]
-            ma_s_val = sim_df['MA_Slow'].iloc[i]
+            date = sim_df.index[i]; price = sim_df[t_trade].iloc[i]; ref_price = sim_df[t_sig].iloc[i]
+            rsi = sim_df['RSI'].iloc[i]; ma_f_val = sim_df['MA_Fast'].iloc[i]; ma_s_val = sim_df['MA_Slow'].iloc[i]
             high_win = sim_df['High_Win'].iloc[i]
 
             curr_m = date.month
             if prev_month != -1 and curr_m != prev_month and month_add > 0:
-                cash += month_add
-                total_invested += month_add
+                cash += month_add; total_invested += month_add
             prev_month = curr_m
 
             if cash > 0: cash *= (1 + daily_yield)
             val = (shares * price) + cash
-
             drawdown = (high_win - price) / high_win if high_win > 0 else 0
             
-            # 1차 상태 감지
             if drawdown >= mdd_stop / 100: target_w = 0.0; action = "🚨 패닉셀"
             elif not np.isnan(rsi) and rsi >= rsi_exit: target_w = rsi_w; action = "🔥 RSI 과열 익절"
             elif ref_price > ma_f_val: target_w = w1; action = "🟢 1단 (상승)"
@@ -757,52 +841,38 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
             else: target_w = w3; action = "🔴 3단 (하락)"
 
             should_rebal = False
-            
-            # 🔥 리밸런싱 판별 로직 추가 (수익 리밸런싱 포함)
-            if target_w != prev_target_w:
-                should_rebal = True
-            elif target_w == w1 and last_rebal_price > 0: # 1단 기어 유지 중일 때 수익 확인
+            if target_w != prev_target_w: should_rebal = True
+            elif target_w == w1 and last_rebal_price > 0: 
                 roi = (price - last_rebal_price) / last_rebal_price
                 if roi >= (profit_rebal / 100.0):
-                    should_rebal = True
-                    action = f"💰 1단 익절 리밸런싱 (+{roi*100:.1f}%)"
+                    should_rebal = True; action = f"💰 1단 익절 리밸런싱 (+{roi*100:.1f}%)"
 
             if should_rebal:
                 target_val = val * target_w
                 curr_stock_val = shares * price
                 diff = target_val - curr_stock_val
 
-                if diff > 0 and cash >= diff:
-                    shares += (diff * 0.999) / price
-                    cash -= diff
-                elif diff < 0:
-                    amt = abs(diff)
-                    shares -= amt / price
-                    cash += amt * 0.999
+                if diff > 0 and cash >= diff: shares += (diff * 0.999) / price; cash -= diff
+                elif diff < 0: amt = abs(diff); shares -= amt / price; cash += amt * 0.999
                 
                 prev_target_w = target_w
-                last_rebal_price = price # 🔥 리밸런싱 했으므로 단가 갱신
-                
+                last_rebal_price = price
                 log_data.append({"Date": date.strftime('%Y-%m-%d'), "Action": action, "Price": price, "Target W": target_w, "Equity": val})
 
             val = (shares * price) + cash
             equity_curve.append(val)
             invested_curve.append(total_invested)
             
-        # BnH 70% 
-        bnh_invest_cash = init_c * w1
-        bnh_reserve_cash = init_c * (1 - w1)
+        bnh_invest_cash = init_c * w1; bnh_reserve_cash = init_c * (1 - w1)
         bnh_shares = (bnh_invest_cash * 0.999) / sim_df[t_trade].iloc[0]
         bnh_curve = [(bnh_shares * sim_df[t_trade].iloc[0]) + bnh_reserve_cash]
         
         prev_m_bnh = -1
         for i in range(1, len(sim_df)):
-            d = sim_df.index[i]
-            p = sim_df[t_trade].iloc[i]
+            d = sim_df.index[i]; p = sim_df[t_trade].iloc[i]
             if bnh_reserve_cash > 0: bnh_reserve_cash *= (1 + daily_yield)
             if prev_m_bnh != -1 and d.month != prev_m_bnh and month_add > 0:
-                bnh_shares += (month_add * w1 * 0.999) / p
-                bnh_reserve_cash += month_add * (1 - w1)
+                bnh_shares += (month_add * w1 * 0.999) / p; bnh_reserve_cash += month_add * (1 - w1)
             prev_m_bnh = d.month
             bnh_curve.append((bnh_shares * p) + bnh_reserve_cash)
 
@@ -813,17 +883,12 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
         res_df, logs = run_dokkaebi_backtest(
             DOK_START, DOK_END, DOK_INIT_CASH, DOK_MONTH_ADD, DOK_TRADE_TICKER, 
             DOK_SIG_TICKER, DOK_FAST_MA, DOK_SLOW_MA, DOK_W1, DOK_W2, DOK_W3, 
-            DOK_MDD_STOP, DOK_RSI_EXIT, DOK_RSI_W, DOK_PROFIT_REBAL # 변수 추가
+            DOK_MDD_STOP, DOK_RSI_EXIT, DOK_RSI_W, DOK_PROFIT_REBAL
         )
 
     if res_df is not None:
-        final_dok = res_df['Dokkaebi'].iloc[-1]
-        final_bnh = res_df['BnH_70'].iloc[-1]
-        total_inv = res_df['Invested'].iloc[-1]
-        
-        dok_ret = (final_dok / total_inv - 1) * 100
-        bnh_ret = (final_bnh / total_inv - 1) * 100
-        
+        final_dok = res_df['Dokkaebi'].iloc[-1]; final_bnh = res_df['BnH_70'].iloc[-1]; total_inv = res_df['Invested'].iloc[-1]
+        dok_ret = (final_dok / total_inv - 1) * 100; bnh_ret = (final_bnh / total_inv - 1) * 100
         dok_mdd = (res_df['Dokkaebi'] / res_df['Dokkaebi'].cummax() - 1).min() * 100
         bnh_mdd = (res_df['BnH_70'] / res_df['BnH_70'].cummax() - 1).min() * 100
 
@@ -839,14 +904,12 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
 
         st.markdown("**[ 자산 성장 및 계좌 낙폭 (Drawdown) ]**")
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7, 0.3], vertical_spacing=0.05)
-        
         fig.add_trace(go.Scatter(x=res_df.index, y=res_df['Dokkaebi'], name='Seyun Dokkaebi', line=dict(color='#e74c3c', width=2)), row=1, col=1)
         fig.add_trace(go.Scatter(x=res_df.index, y=res_df['BnH_70'], name='BnH (70%)', line=dict(color='#3498db', width=1.5, dash='dash')), row=1, col=1)
         fig.add_trace(go.Scatter(x=res_df.index, y=res_df['Invested'], name='원금', line=dict(color='gray', width=1, dash='dot')), row=1, col=1)
 
         dd_dok = (res_df['Dokkaebi'] / res_df['Dokkaebi'].cummax()) - 1
         dd_bnh = (res_df['BnH_70'] / res_df['BnH_70'].cummax()) - 1
-        
         fig.add_trace(go.Scatter(x=res_df.index, y=dd_dok * 100, name='Dokkaebi DD', line=dict(color='#e74c3c', width=1.5)), row=2, col=1)
         fig.add_trace(go.Scatter(x=res_df.index, y=dd_bnh * 100, name='BnH DD', line=dict(color='#3498db', width=1, dash='dot')), row=2, col=1)
 
