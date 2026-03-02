@@ -859,6 +859,7 @@ def make_portfolio_page(acc_name):
             if st.button("🔄 숫자 모두 0으로 비우기", use_container_width=True):
                 st.session_state['accounts'][acc_name]["portfolio"] = [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in REQUIRED_TICKERS]
                 st.session_state['accounts'][acc_name]["history"].append({"Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Log": "🔄 시스템: 포트폴리오 전체 초기화됨"})
+                st.session_state['accounts'][acc_name]["first_entry_date"] = None
                 st.session_state[last_pf_key] = pd.DataFrame(st.session_state['accounts'][acc_name]["portfolio"])
                 save_accounts_data(st.session_state['accounts'])
                 st.rerun()
@@ -872,7 +873,6 @@ def make_portfolio_page(acc_name):
             
         display_df["수익률 (%)"] = display_df.apply(calc_yield, axis=1)
 
-        # 🔥 한국식 수익률 색상 적용 함수 (+빨강, -파랑)
         def color_yield_num(val):
             if isinstance(val, (int, float)):
                 if val > 0: return 'color: #ff4b4b; font-weight: bold;'
@@ -1021,7 +1021,6 @@ def make_portfolio_page(acc_name):
             fig_comp.update_layout(barmode='group', height=250, margin=dict(t=30, b=0, l=0, r=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
             st.plotly_chart(fig_comp, use_container_width=True)
 
-            # 🔥 한국식 색상 적용 함수 (리밸런싱 지시표용)
             def color_status(val):
                 val_str = str(val)
                 if '매수' in val_str or ('+' in val_str and val_str != '-'): 
@@ -1040,12 +1039,16 @@ def make_portfolio_page(acc_name):
         if total_value > 0:
             with st.container(border=True):
                 fed_str = curr_acc_data.get("first_entry_date")
-                default_date = datetime.strptime(fed_str, '%Y-%m-%d').date() if fed_str else (datetime.today() - timedelta(days=90)).date()
+                # 🔥 에러 픽스: ISO 포맷(T 시간 포함)이든 텍스트 포맷이든 모두 안전하게 처리하는 pd.to_datetime 적용
+                if fed_str:
+                    default_date = pd.to_datetime(fed_str).date()
+                else:
+                    default_date = (datetime.today() - timedelta(days=90)).date()
                     
                 col_date, _ = st.columns([1, 3])
                 with col_date:
                     user_start_date = st.date_input("계좌 매수 시작일", value=default_date, key=f"date_{acc_name}")
-                    if str(user_start_date) != fed_str:
+                    if str(user_start_date) != str(fed_str)[:10]:
                         st.session_state['accounts'][acc_name]["first_entry_date"] = str(user_start_date)
                         save_accounts_data(st.session_state['accounts'])
 
