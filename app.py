@@ -45,7 +45,7 @@ if 'accounts' not in st.session_state:
 
 
 # =====================================================================
-# [1] 글로벌 백엔드 함수 (AMLS 백테스트 데이터 연산)
+# [1] 글로벌 백엔드 함수 (모든 페이지에서 공유)
 # =====================================================================
 @st.cache_data(ttl=3600)
 def load_amls_backtest_data(start, end, init_cap, monthly_cont):
@@ -130,7 +130,7 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont):
     invested_hist = [init_cap]; total_invested = init_cap
     weights_v4 = {t: 0.0 for t in data.columns}; weights_v4_3 = {t: 0.0 for t in data.columns}
     
-    logs = [] # 🔙 복구: 백테스트 매매 일지 기록용 리스트
+    logs = []
 
     for i in range(1, len(df)):
         today, yesterday = df.index[i], df.index[i-1]
@@ -159,8 +159,6 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont):
             
         if today.month != yesterday.month or today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] or i == 1:
             weights_v4_3 = get_v4_3_weights(today_reg_v4_3, use_soxl)
-            
-            # 🔙 복구: 백테스트 리밸런싱 로그 기록
             log_type = "레짐 전환 (v4.3)" if today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] else "월간 정기 (v4.3)"
             semi_target = "SOXL (3x)" if use_soxl and today_reg_v4_3 == 1 else ("USD (2x)" if today_reg_v4_3 in [1, 2] else "-")
             logs.append({"날짜": today.strftime('%Y-%m-%d'), "유형": log_type, "국면": f"Regime {int(today_reg_v4_3)}", "반도체 스위칭": semi_target, "평가액": ports['AMLS v4.3']})
@@ -168,7 +166,116 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont):
 
     for s in strategies: df[f'{s}_Value'] = hists[s]
     df['Invested'] = invested_hist
-    return df, logs, data.columns # logs 반환 추가
+    return df, logs, data.columns
+
+@st.cache_data(ttl=3600)
+def run_dokkaebi_backtest(start_d, end_d, init_c, month_add, t_trade, t_sig, ma_f, ma_s, w1, w2, w3, mdd_stop, rsi_exit, rsi_w, profit_rebal):
+    start_dt = pd.to_datetime(start_d)
+    end_dt = pd.to_datetime(end_d) + pd.Timedelta(days=1)
+    warmup_dt = start_dt - pd.DateOffset(months=12)
+
+    tickers = list(set([t_trade, t_sig]))
+    data = yf.download(tickers, start=warmup_dt.strftime("%Y-%m-%d"), end=end_dt.strftime("%Y-%m-%d"), progress=False)
+    
+    if 'Close' in data.columns: df = data['Close'].copy()
+    else: df = data.copy()
+    if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
+    if len(tickers) == 1: df = pd.DataFrame(df); df.columns = tickers
+
+    df = df.dropna()
+    if df.empty: return None, None
+
+    df['MA_Fast'] = df[t_sig].rolling(window=ma_f).mean()
+    df['MA_Slow'] = df[t_sig].rolling(window=ma_s).mean()
+
+    delta = df[t_trade].diff()
+    u = delta.where(delta > 0, 0); d = -delta.where(delta < 0, 0)
+    au = u.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
+    ad = d.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
+    df['RSI'] = 100 - (100 / (1 + au/ad))
+    df['High_Win'] = df[t_trade].rolling(window=60).max()
+
+    sim_df = df[df.index >= start_dt].copy()
+    if sim_df.empty: return None, None
+
+    cash = init_c; shares = 0; total_invested = init_c
+    daily_yield = 0.04 / 365
+    equity_curve = []; invested_curve = []; log_data = []
+    prev_month = -1
+    
+    p0 = sim_df[t_trade].iloc[0]; ref0 = sim_df[t_sig].iloc[0]
+    mf0 = sim_df['MA_Fast'].iloc[0]; ms0 = sim_df['MA_Slow'].iloc[0]
+
+    if np.isnan(mf0): w0 = 0.5
+    elif ref0 > mf0: w0 = w1
+    elif ref0 > ms0: w0 = w2
+    else: w0 = w3
+
+    shares = (cash * w0 * 0.999) / p0
+    cash -= cash * w0
+    prev_target_w = w0
+    last_rebal_price = p0 
+
+    equity_curve.append(cash + shares * p0)
+    invested_curve.append(total_invested)
+
+    for i in range(1, len(sim_df)):
+        date = sim_df.index[i]; price = sim_df[t_trade].iloc[i]; ref_price = sim_df[t_sig].iloc[i]
+        rsi = sim_df['RSI'].iloc[i]; ma_f_val = sim_df['MA_Fast'].iloc[i]; ma_s_val = sim_df['MA_Slow'].iloc[i]
+        high_win = sim_df['High_Win'].iloc[i]
+
+        curr_m = date.month
+        if prev_month != -1 and curr_m != prev_month and month_add > 0:
+            cash += month_add; total_invested += month_add
+        prev_month = curr_m
+
+        if cash > 0: cash *= (1 + daily_yield)
+        val = (shares * price) + cash
+        drawdown = (high_win - price) / high_win if high_win > 0 else 0
+        
+        if drawdown >= mdd_stop / 100: target_w = 0.0; action = "🚨 패닉셀"
+        elif not np.isnan(rsi) and rsi >= rsi_exit: target_w = rsi_w; action = "🔥 RSI 과열 익절"
+        elif ref_price > ma_f_val: target_w = w1; action = "🟢 1단 (상승)"
+        elif ref_price > ma_s_val: target_w = w2; action = "🟡 2단 (조정)"
+        else: target_w = w3; action = "🔴 3단 (하락)"
+
+        should_rebal = False
+        if target_w != prev_target_w: should_rebal = True
+        elif target_w == w1 and last_rebal_price > 0: 
+            roi = (price - last_rebal_price) / last_rebal_price
+            if roi >= (profit_rebal / 100.0):
+                should_rebal = True; action = f"💰 1단 익절 리밸런싱 (+{roi*100:.1f}%)"
+
+        if should_rebal:
+            target_val = val * target_w
+            curr_stock_val = shares * price
+            diff = target_val - curr_stock_val
+
+            if diff > 0 and cash >= diff: shares += (diff * 0.999) / price; cash -= diff
+            elif diff < 0: amt = abs(diff); shares -= amt / price; cash += amt * 0.999
+            
+            prev_target_w = target_w; last_rebal_price = price
+            log_data.append({"Date": date.strftime('%Y-%m-%d'), "Action": action, "Price": price, "Target W": target_w, "Equity": val})
+
+        val = (shares * price) + cash
+        equity_curve.append(val)
+        invested_curve.append(total_invested)
+        
+    bnh_invest_cash = init_c * w1; bnh_reserve_cash = init_c * (1 - w1)
+    bnh_shares = (bnh_invest_cash * 0.999) / sim_df[t_trade].iloc[0]
+    bnh_curve = [(bnh_shares * sim_df[t_trade].iloc[0]) + bnh_reserve_cash]
+    
+    prev_m_bnh = -1
+    for i in range(1, len(sim_df)):
+        d = sim_df.index[i]; p = sim_df[t_trade].iloc[i]
+        if bnh_reserve_cash > 0: bnh_reserve_cash *= (1 + daily_yield)
+        if prev_m_bnh != -1 and d.month != prev_m_bnh and month_add > 0:
+            bnh_shares += (month_add * w1 * 0.999) / p; bnh_reserve_cash += month_add * (1 - w1)
+        prev_m_bnh = d.month
+        bnh_curve.append((bnh_shares * p) + bnh_reserve_cash)
+
+    res_df = pd.DataFrame({'Dokkaebi': equity_curve, 'BnH_70': bnh_curve, 'Invested': invested_curve}, index=sim_df.index)
+    return res_df, log_data
 
 
 # =====================================================================
@@ -193,7 +300,6 @@ def page_amls_backtest():
     today_status = df.iloc[-1]
     date_str = df.index[-1].strftime('%Y년 %m월 %d일')
 
-    # 🔙 복구: 실시간 시장 레이더 및 기술적 지표
     with st.container(border=True):
         st.markdown(f"**[ 실시간 시장 레이더 ]** &nbsp; | &nbsp; 기준일: {date_str} 종가")
         m1, m2, m3, m4, m5 = st.columns(5)
@@ -213,7 +319,6 @@ def page_amls_backtest():
 
     st.write("")
     
-    # 🔙 복구: 국면별 포트폴리오 목표 비중 파이 차트
     st.markdown("**[ 국면별 포트폴리오 목표 비중 (AMLS v4.3 기준) ]**")
     def get_v4_3_weights_for_plot(regime):
         w = {t: 0.0 for t in tickers}
@@ -281,7 +386,6 @@ def page_amls_backtest():
     fig.update_layout(height=600, margin=dict(l=0, r=0, t=10, b=0), hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     st.plotly_chart(fig, use_container_width=True)
 
-    # 🔙 복구: 체류 일자 분포 및 리밸런싱 이력
     col_dist, col_log = st.columns([1, 2])
     with col_dist:
         st.markdown("**[ 레짐 체류 일자 분포 (v4.3 기준) ]**")
@@ -327,115 +431,6 @@ def page_dokkaebi_backtest():
     DOK_RSI_W = st.sidebar.slider("RSI 익절 시 남길 비중", 0.0, 1.0, 0.5, 0.1)
     DOK_PROFIT_REBAL = st.sidebar.number_input("1단 수익 리밸런싱 기준 (%)", value=15, step=1)
 
-    @st.cache_data(ttl=3600)
-    def run_dokkaebi_backtest(start_d, end_d, init_c, month_add, t_trade, t_sig, ma_f, ma_s, w1, w2, w3, mdd_stop, rsi_exit, rsi_w, profit_rebal):
-        start_dt = pd.to_datetime(start_d)
-        end_dt = pd.to_datetime(end_d) + pd.Timedelta(days=1)
-        warmup_dt = start_dt - pd.DateOffset(months=12)
-
-        tickers = list(set([t_trade, t_sig]))
-        data = yf.download(tickers, start=warmup_dt.strftime("%Y-%m-%d"), end=end_dt.strftime("%Y-%m-%d"), progress=False)
-        
-        if 'Close' in data.columns: df = data['Close'].copy()
-        else: df = data.copy()
-        if isinstance(df.columns, pd.MultiIndex): df.columns = df.columns.get_level_values(0)
-        if len(tickers) == 1: df = pd.DataFrame(df); df.columns = tickers
-
-        df = df.dropna()
-        if df.empty: return None, None
-
-        df['MA_Fast'] = df[t_sig].rolling(window=ma_f).mean()
-        df['MA_Slow'] = df[t_sig].rolling(window=ma_s).mean()
-
-        delta = df[t_trade].diff()
-        u = delta.where(delta > 0, 0); d = -delta.where(delta < 0, 0)
-        au = u.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
-        ad = d.ewm(alpha=1/14, min_periods=14, adjust=False).mean()
-        df['RSI'] = 100 - (100 / (1 + au/ad))
-        df['High_Win'] = df[t_trade].rolling(window=60).max()
-
-        sim_df = df[df.index >= start_dt].copy()
-        if sim_df.empty: return None, None
-
-        cash = init_c; shares = 0; total_invested = init_c
-        daily_yield = 0.04 / 365
-        equity_curve = []; invested_curve = []; log_data = []
-        prev_month = -1
-        
-        p0 = sim_df[t_trade].iloc[0]; ref0 = sim_df[t_sig].iloc[0]
-        mf0 = sim_df['MA_Fast'].iloc[0]; ms0 = sim_df['MA_Slow'].iloc[0]
-
-        if np.isnan(mf0): w0 = 0.5
-        elif ref0 > mf0: w0 = w1
-        elif ref0 > ms0: w0 = w2
-        else: w0 = w3
-
-        shares = (cash * w0 * 0.999) / p0
-        cash -= cash * w0
-        prev_target_w = w0
-        last_rebal_price = p0 
-
-        equity_curve.append(cash + shares * p0)
-        invested_curve.append(total_invested)
-
-        for i in range(1, len(sim_df)):
-            date = sim_df.index[i]; price = sim_df[t_trade].iloc[i]; ref_price = sim_df[t_sig].iloc[i]
-            rsi = sim_df['RSI'].iloc[i]; ma_f_val = sim_df['MA_Fast'].iloc[i]; ma_s_val = sim_df['MA_Slow'].iloc[i]
-            high_win = sim_df['High_Win'].iloc[i]
-
-            curr_m = date.month
-            if prev_month != -1 and curr_m != prev_month and month_add > 0:
-                cash += month_add; total_invested += month_add
-            prev_month = curr_m
-
-            if cash > 0: cash *= (1 + daily_yield)
-            val = (shares * price) + cash
-            drawdown = (high_win - price) / high_win if high_win > 0 else 0
-            
-            if drawdown >= mdd_stop / 100: target_w = 0.0; action = "🚨 패닉셀"
-            elif not np.isnan(rsi) and rsi >= rsi_exit: target_w = rsi_w; action = "🔥 RSI 과열 익절"
-            elif ref_price > ma_f_val: target_w = w1; action = "🟢 1단 (상승)"
-            elif ref_price > ma_s_val: target_w = w2; action = "🟡 2단 (조정)"
-            else: target_w = w3; action = "🔴 3단 (하락)"
-
-            should_rebal = False
-            if target_w != prev_target_w: should_rebal = True
-            elif target_w == w1 and last_rebal_price > 0: 
-                roi = (price - last_rebal_price) / last_rebal_price
-                if roi >= (profit_rebal / 100.0):
-                    should_rebal = True; action = f"💰 1단 익절 리밸런싱 (+{roi*100:.1f}%)"
-
-            if should_rebal:
-                target_val = val * target_w
-                curr_stock_val = shares * price
-                diff = target_val - curr_stock_val
-
-                if diff > 0 and cash >= diff: shares += (diff * 0.999) / price; cash -= diff
-                elif diff < 0: amt = abs(diff); shares -= amt / price; cash += amt * 0.999
-                
-                prev_target_w = target_w; last_rebal_price = price
-                log_data.append({"Date": date.strftime('%Y-%m-%d'), "Action": action, "Price": price, "Target W": target_w, "Equity": val})
-
-            val = (shares * price) + cash
-            equity_curve.append(val)
-            invested_curve.append(total_invested)
-            
-        bnh_invest_cash = init_c * w1; bnh_reserve_cash = init_c * (1 - w1)
-        bnh_shares = (bnh_invest_cash * 0.999) / sim_df[t_trade].iloc[0]
-        bnh_curve = [(bnh_shares * sim_df[t_trade].iloc[0]) + bnh_reserve_cash]
-        
-        prev_m_bnh = -1
-        for i in range(1, len(sim_df)):
-            d = sim_df.index[i]; p = sim_df[t_trade].iloc[i]
-            if bnh_reserve_cash > 0: bnh_reserve_cash *= (1 + daily_yield)
-            if prev_m_bnh != -1 and d.month != prev_m_bnh and month_add > 0:
-                bnh_shares += (month_add * w1 * 0.999) / p; bnh_reserve_cash += month_add * (1 - w1)
-            prev_m_bnh = d.month
-            bnh_curve.append((bnh_shares * p) + bnh_reserve_cash)
-
-        res_df = pd.DataFrame({'Dokkaebi': equity_curve, 'BnH_70': bnh_curve, 'Invested': invested_curve}, index=sim_df.index)
-        return res_df, log_data
-
     with st.spinner("도깨비 엔진 구동 중..."):
         res_df, logs = run_dokkaebi_backtest(
             DOK_START, DOK_END, DOK_INIT_CASH, DOK_MONTH_ADD, DOK_TRADE_TICKER, 
@@ -479,10 +474,13 @@ def page_dokkaebi_backtest():
             log_df = pd.DataFrame(logs)[::-1]
             st.dataframe(log_df, hide_index=True, use_container_width=True)
 
-# --- 페이지 3: 계좌 추가 기능 ---
-def page_add_account():
-    st.title("➕ 새 포트폴리오 계좌 만들기")
-    st.markdown("운용 목적이 다른 여러 개의 계좌를 만들어 각각 독립적으로 관리할 수 있습니다.")
+# --- 🔥 신규: 계좌 관리 전용 메뉴 (생성 및 삭제) ---
+def page_manage_accounts():
+    st.title("⚙️ 포트폴리오 계좌 관리")
+    st.markdown("새로운 계좌를 생성하거나 기존 계좌를 삭제할 수 있습니다.")
+    
+    st.divider()
+    st.subheader("➕ 새 계좌 만들기")
     new_acc_name = st.text_input("새 계좌 이름", placeholder="예: 연금저축펀드, 도깨비 테스트용, 자녀 계좌 등")
     
     if st.button("🚀 계좌 생성하기", type="primary"):
@@ -497,19 +495,27 @@ def page_add_account():
             st.rerun()
         elif new_acc_name in st.session_state['accounts']:
             st.error("이미 같은 이름의 계좌가 존재합니다. 다른 이름을 입력해주세요.")
+            
+    st.divider()
+    st.subheader("🗑️ 기존 계좌 삭제하기")
+    st.warning("계좌를 삭제하면 모든 매매 내역과 일지가 날아갑니다. (앱 보호를 위해 최소 1개의 계좌는 유지해야 합니다.)")
+    
+    for acc in list(st.session_state['accounts'].keys()):
+        col1, col2 = st.columns([4, 1])
+        col1.markdown(f"💼 **{acc}**")
+        
+        # 계좌가 1개 이하일 때는 삭제 버튼 비활성화
+        disable_del = len(st.session_state['accounts']) <= 1
+        
+        if col2.button("삭제", key=f"del_mgr_{acc}", disabled=disable_del, use_container_width=True):
+            del st.session_state['accounts'][acc]
+            save_accounts_data(st.session_state['accounts'])
+            st.rerun()
 
 # --- 페이지 4: 개별 포트폴리오 관리 (함수 팩토리) ---
 def make_portfolio_page(acc_name):
     def page_func():
-        st.title(f"🏦 {acc_name} 관리 대시보드")
-        
-        col_title, col_del = st.columns([5, 1])
-        with col_del:
-            if len(st.session_state['accounts']) > 1:
-                if st.button("🗑️ 계좌 삭제", use_container_width=True):
-                    del st.session_state['accounts'][acc_name]
-                    save_accounts_data(st.session_state['accounts'])
-                    st.rerun()
+        st.title(f"🏦 {acc_name} 대시보드")
 
         curr_acc_data = st.session_state['accounts'][acc_name]
         pf_df = pd.DataFrame(curr_acc_data["portfolio"])
@@ -909,7 +915,9 @@ pages_dict = {
 pf_pages = []
 for acc_name in st.session_state['accounts'].keys():
     pf_pages.append(st.Page(make_portfolio_page(acc_name), title=acc_name, icon="💼"))
-pf_pages.append(st.Page(page_add_account, title="➕ 새 계좌 추가하기", icon="⚙️"))
+
+# ⚙️ 핵심 추가: 계좌 관리 전용 메뉴 라우팅
+pf_pages.append(st.Page(page_manage_accounts, title="⚙️ 계좌 관리 (추가/삭제)", icon="⚙️"))
 
 pages_dict["🏦 내 포트폴리오"] = pf_pages
 
