@@ -305,7 +305,6 @@ def page_market_dashboard():
     st.title("🌐 글로벌 매크로 & 마켓 대시보드")
     st.markdown("현재 시장을 주도하는 메가 트렌드와 유동성 지표를 한눈에 파악하는 기관급 대시보드입니다.")
     
-    # 1. Ticker Tape
     st.markdown("#### 실시간 시세 (Ticker Tape)")
     components.html("""
     <div class="tradingview-widget-container">
@@ -331,7 +330,6 @@ def page_market_dashboard():
     </div>
     """, height=70)
 
-    # 2. 시장 현황판 & 환율
     st.markdown("#### 핵심 지표 및 환율")
     @st.cache_data(ttl=1800)
     def get_market_indices():
@@ -344,9 +342,7 @@ def page_market_dashboard():
     indices_df = get_market_indices()
     if not indices_df.empty:
         c1, c2, c3, c4 = st.columns(4)
-        latest = indices_df.iloc[-1]
-        prev = indices_df.iloc[-2]
-        
+        latest = indices_df.iloc[-1]; prev = indices_df.iloc[-2]
         c1.metric("S&P 500", f"{latest.get('^GSPC', 0):,.2f}", f"{(latest.get('^GSPC',0)/prev.get('^GSPC',1)-1)*100:+.2f}%")
         c2.metric("NASDAQ", f"{latest.get('^IXIC', 0):,.2f}", f"{(latest.get('^IXIC',0)/prev.get('^IXIC',1)-1)*100:+.2f}%")
         c3.metric("VIX (공포지수)", f"{latest.get('^VIX', 0):,.2f}", f"{(latest.get('^VIX',0)/prev.get('^VIX',1)-1)*100:+.2f}%", delta_color="inverse")
@@ -360,7 +356,6 @@ def page_market_dashboard():
 
     st.divider()
 
-    # 3. Finviz Style Market Heatmap
     st.markdown("#### S&P 500 섹터 맵 (Market Heatmap)")
     components.html("""
     <div class="tradingview-widget-container">
@@ -388,7 +383,6 @@ def page_market_dashboard():
 
     st.divider()
 
-    # 4. 연준 유동성 지표 (FRED)
     st.markdown("#### 💸 매크로 유동성 분석 (연준 대차대조표 & M2 통화량)")
     st.caption("※ 데이터 출처: 미국 세인트루이스 연방준비은행 (FRED)")
 
@@ -399,7 +393,6 @@ def page_market_dashboard():
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept': 'text/csv'
             }
-            
             def get_series(series_id):
                 url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
                 response = requests.get(url, headers=headers, timeout=10)
@@ -774,7 +767,21 @@ def make_portfolio_page(acc_name):
         with st.spinner("시장 국면 판독 중..."):
             mr = get_market_regime_v4_3()
 
-        TICKERS = ['QQQ', 'TQQQ', 'SOXL', 'USD', 'QLD', 'SSO', 'SPY', 'SMH', 'GLD', '^VIX']
+        # 🔥 실시간 주가 다운로드 로직 (사용자가 추가한 커스텀 티커까지 전부 지원)
+        live_prices = mr['latest_prices'].copy()
+        live_prices['CASH'] = 1.0
+        
+        custom_tickers = [str(t).upper().strip() for t in pf_df["티커 (Ticker)"] if str(t).upper().strip() not in live_prices and str(t).upper().strip() != '']
+        if custom_tickers:
+            try:
+                custom_data = yf.download(custom_tickers, period="5d", progress=False)['Close']
+                custom_data = custom_data.ffill()
+                for t in custom_tickers:
+                    if t in custom_data.columns: live_prices[t] = custom_data[t].iloc[-1]
+                    elif isinstance(custom_data, pd.Series): live_prices[t] = custom_data.iloc[-1]
+            except: pass
+
+        # 자산 연산
         asset_values = {}; prev_asset_values = {}; total_invested_principal = 0.0 
         for _, row in pf_df.iterrows():
             tkr = str(row.iloc[0]).upper().strip()
@@ -787,7 +794,8 @@ def make_portfolio_page(acc_name):
                     prev_asset_values[tkr] = prev_asset_values.get(tkr, 0) + shares
                     total_invested_principal += shares
                 else:
-                    curr_price = mr['latest_prices'].get(tkr, 0.0); prev_price = mr['prev_prices'].get(tkr, 0.0)
+                    curr_price = live_prices.get(tkr, 0.0)
+                    prev_price = mr['prev_prices'].get(tkr, curr_price) # Custom Ticker의 경우 어제 가격을 현재가로 퉁침 (간소화)
                     if curr_price > 0: asset_values[tkr] = asset_values.get(tkr, 0) + (shares * curr_price)
                     if prev_price > 0: prev_asset_values[tkr] = prev_asset_values.get(tkr, 0) + (shares * prev_price)
                     if avg_price > 0: total_invested_principal += (shares * avg_price)
@@ -797,13 +805,13 @@ def make_portfolio_page(acc_name):
         today_pnl_amt = total_value - prev_total_value
         today_pnl_pct = (today_pnl_amt / prev_total_value * 100) if prev_total_value > 0 else 0.0
 
+        # --- 실시간 레이더 패널 ---
         with st.container(border=True):
             st.markdown(f"**[ 시장 레이더 요약 ]** &nbsp; | &nbsp; 기준일: {mr['date'].strftime('%Y-%m-%d')}")
             r_col1, r_col2, r_col3, r_col4, r_col5 = st.columns(5)
             
             regime_color = "#e74c3c" if mr['applied_regime'] >= 3 else "#2ecc71"
             regime_display = f"Regime {int(mr['applied_regime'])}"
-            if mr['is_waiting']: regime_display += f"<br><span style='font-size: 14px; color: #f39c12;'>상향 전환 대기중 ({mr['wait_days']}일차)</span>"
                 
             r_col1.markdown(f"현재 국면<br><span style='font-size: 24px; font-weight: bold; color: {regime_color};'>{regime_display}</span>", unsafe_allow_html=True)
             r_col2.metric("공포 지수 (VIX)", f"{mr['vix']:.2f}")
@@ -845,9 +853,29 @@ def make_portfolio_page(acc_name):
                 if mr['cond3']: st.success(f"**3. 모멘텀:** RSI {mr['smh_rsi']:.1f} (>50)", icon="✅")
                 else: st.error(f"**3. 모멘텀:** RSI {mr['smh_rsi']:.1f} (<50)", icon="❌")
 
+            # 🔥 신규: AI 레짐 판단 논리 서술 (Rationale)
+            st.divider()
+            st.markdown("##### 🧠 AMLS 레짐 판단 알고리즘 해석")
+            target_reg = mr['target_regime']
+            app_reg = mr['applied_regime']
+
+            reason = ""
+            if target_reg == 4: reason = "시장 공포지수(VIX)가 40을 초과하여 **[극심한 공포 및 폭락장 - Regime 4]** 조건이 발동되었습니다. 즉각적인 대피(GLD 및 현금 100%)가 필요합니다."
+            elif target_reg == 3: reason = "나스닥(QQQ)이 생명선인 200일 장기 이평선을 하향 이탈하여 **[대세 하락장 - Regime 3]**으로 판단되었습니다."
+            elif target_reg == 1: reason = "VIX가 25 미만으로 안정적이며, 나스닥이 장기(200일) 및 단기(50일) 이평선 위에서 완벽한 정배열을 유지하는 **[안정적 상승장 - Regime 1]**입니다."
+            else: reason = "나스닥이 200일선 위에는 있지만, VIX가 25 이상으로 튀었거나 단기 이평선(50일선)이 꺾인 **[불안정한 조정장 - Regime 2]**입니다."
+
+            if mr['is_waiting']:
+                st.info(f"{reason} \n\n⏳ **단계적 진입 대기 중:** 현재 시장은 상향 돌파(R{target_reg}) 조건을 충족했으나, 속임수(휩쏘)를 피하기 위해 5일간의 확인 기간을 거치고 있습니다. (현재 {mr['wait_days']}일차 대기 중이며, 임시로 한 단계 아래인 R{app_reg} 비중을 적용합니다.)")
+            elif target_reg != app_reg:
+                 st.info(f"{reason} \n\n✅ **적용 상태:** 현재 R{app_reg} 비중 모델이 적용 중입니다.")
+            else:
+                st.info(f"{reason} 현재 포트폴리오에 **R{app_reg} 배분율**이 완벽히 적용되고 있습니다.")
+
+
         st.write("")
         col_header1, col_header2 = st.columns([5, 1])
-        with col_header1: st.markdown(f"**[ 자산 기입표 ]**")
+        with col_header1: st.markdown(f"**[ 자산 기입표 및 실시간 수익률 ]**")
         with col_header2:
             if st.button("🔄 숫자 모두 0으로 비우기", use_container_width=True):
                 st.session_state['accounts'][acc_name]["portfolio"] = [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in REQUIRED_TICKERS]
@@ -857,34 +885,48 @@ def make_portfolio_page(acc_name):
                 save_accounts_data(st.session_state['accounts'])
                 st.rerun()
 
-        col_table, col_chart = st.columns([1, 1.2])
+        # 🔥 신규: 현재가 및 수익률이 포함된 Display DF 생성
+        display_df = pf_df.copy()
+        display_df["현재가 ($)"] = display_df["티커 (Ticker)"].apply(lambda x: live_prices.get(str(x).upper().strip(), 0.0))
+        
+        def calc_yield(row):
+            if row["수량 (주/달러)"] == 0 or row["평균 단가 ($)"] == 0 or str(row["티커 (Ticker)"]).upper().strip() == "CASH": return 0.0
+            return (row["현재가 ($)"] - row["평균 단가 ($)"]) / row["평균 단가 ($)"] * 100
+            
+        display_df["수익률 (%)"] = display_df.apply(calc_yield, axis=1)
+
+        col_table, col_chart = st.columns([1.2, 1])
         with col_table:
-            st.caption("💡 표 안의 셀을 더블 클릭하여 수량과 평단가를 입력하세요.")
-            edited_df = st.data_editor(
-                pf_df, num_rows="dynamic", key=f"editor_{acc_name}", use_container_width=True,
+            st.caption("💡 표 안의 [보유 수량]과 [평균 단가] 셀을 더블 클릭하여 입력하세요. (현재가 및 수익률은 자동 계산됩니다.)")
+            edited_display_df = st.data_editor(
+                display_df, num_rows="dynamic", key=f"editor_{acc_name}", use_container_width=True, height=350,
                 column_config={
                     "티커 (Ticker)": st.column_config.TextColumn("종목 (TICKER)"),
                     "수량 (주/달러)": st.column_config.NumberColumn("보유 수량", min_value=0.0, format="%.2f", step=0.01),
-                    "평균 단가 ($)": st.column_config.NumberColumn("평균 단가 ($)", min_value=0.0, format="%.2f", step=0.01)
+                    "평균 단가 ($)": st.column_config.NumberColumn("평균 단가 ($)", min_value=0.0, format="%.2f", step=0.01),
+                    "현재가 ($)": st.column_config.NumberColumn("현재 시장가", disabled=True, format="$ %.2f"),
+                    "수익률 (%)": st.column_config.NumberColumn("수익률", disabled=True, format="%.2f %%")
                 }
             )
+
+            base_edited_df = edited_display_df[["티커 (Ticker)", "수량 (주/달러)", "평균 단가 ($)"]]
 
             def get_portfolio_dict(df):
                 state = {}
                 for _, row in df.iterrows():
-                    tkr = str(row.iloc[0]).upper().strip()
+                    tkr = str(row["티커 (Ticker)"]).upper().strip()
                     if tkr and tkr.lower() not in ['nan', 'none', '']:
-                        try: qty = float(row.iloc[1]); avg_p = float(row.iloc[2])
+                        try: qty = float(row["수량 (주/달러)"]); avg_p = float(row["평균 단가 ($)"])
                         except: qty = 0.0; avg_p = 0.0
                         state[tkr] = {'qty': qty, 'avg_p': avg_p}
                 return state
 
             old_state = get_portfolio_dict(st.session_state[last_pf_key])
-            new_state = get_portfolio_dict(edited_df)
+            new_state = get_portfolio_dict(base_edited_df)
             changes_detected = False
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            if not edited_df.equals(st.session_state[last_pf_key]):
+            if not base_edited_df.equals(st.session_state[last_pf_key]):
                 for tkr, new_val in new_state.items():
                     if tkr in old_state:
                         old_val = old_state[tkr]
@@ -906,13 +948,14 @@ def make_portfolio_page(acc_name):
                         changes_detected = True
 
                 if changes_detected:
-                    st.session_state['accounts'][acc_name]["portfolio"] = edited_df.to_dict(orient="records")
-                    st.session_state[last_pf_key] = edited_df.copy()
+                    st.session_state['accounts'][acc_name]["portfolio"] = base_edited_df.to_dict(orient="records")
+                    st.session_state[last_pf_key] = base_edited_df.copy()
                     save_accounts_data(st.session_state['accounts'])
                     st.rerun()
 
-        # 🔥 변경된 부분: 원형 도넛 차트 (가운데 총액 표시)
+        # 🔥 신규: 원형 도넛 차트 및 높이 밸런스 조정
         with col_chart:
+            st.markdown("<br>", unsafe_allow_html=True) # 차트를 살짝 내려 표와 밸런스를 맞춤
             if total_value > 0:
                 fig_donut = go.Figure()
                 palette = ['#18bc9c', '#3498db', '#9b59b6', '#e74c3c', '#f39c12', '#f1c40f', '#34495e', '#95a5a6']
@@ -929,8 +972,8 @@ def make_portfolio_page(acc_name):
                 ))
                 
                 fig_donut.update_layout(
-                    height=280, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
-                    annotations=[dict(text=f"총 평가액<br><b><span style='font-size:22px'>${total_value:,.0f}</span></b>", x=0.5, y=0.5, font_size=15, showarrow=False)]
+                    height=300, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
+                    annotations=[dict(text=f"총 평가액<br><b><span style='font-size:24px; color:#3498db;'>${total_value:,.0f}</span></b>", x=0.5, y=0.5, font_size=14, showarrow=False)]
                 )
                 st.plotly_chart(fig_donut, use_container_width=True)
 
@@ -962,7 +1005,7 @@ def make_portfolio_page(acc_name):
             target_val = target_seed * target_w_dec 
             
             diff_val = target_val - my_val
-            curr_price = mr['latest_prices'].get(tkr, 0.0) if tkr != "CASH" else 1.0
+            curr_price = live_prices.get(tkr, 0.0) if tkr != "CASH" else 1.0
             action_shares_str = f" (약 {abs(diff_val) / curr_price:.1f}주)" if tkr != "CASH" and curr_price > 0 else ""
 
             if abs(diff_val) < 50: action = "적정 (유지)"
@@ -980,8 +1023,7 @@ def make_portfolio_page(acc_name):
                 status_data.append({
                     "종목": tkr, "목표 비중": f"{target_w_dec*100:.1f}%", "현재 비중": f"{my_weight:.1f}%", 
                     "목표 금액": f"${target_val:,.0f}", "현재 금액": f"${my_val:,.0f}", 
-                    "수익률 (%)": f"{ret_pct:+.2f}%" if shares > 0 and tkr != "CASH" else "-",
-                    "수익금 ($)": f"${ret_amt:+,.0f}" if shares > 0 and tkr != "CASH" else "-", "리밸런싱 액션": action
+                    "리밸런싱 액션": action
                 })
 
         if status_data:
@@ -999,7 +1041,7 @@ def make_portfolio_page(acc_name):
                     elif '매도' in val or ('-' in val and val != '-'): return 'color: #e74c3c; font-weight: bold;'
                     elif '유지' in val: return 'color: #95a5a6;'
                 return ''
-            st.dataframe(status_df.style.map(color_status, subset=['리밸런싱 액션', '수익률 (%)', '수익금 ($)']), hide_index=True, use_container_width=True)
+            st.dataframe(status_df.style.map(color_status, subset=['리밸런싱 액션']), hide_index=True, use_container_width=True)
 
         st.write("")
         st.markdown("**[ 자산 가치 추이 및 성과 추적 ]**")
