@@ -300,7 +300,7 @@ def run_dokkaebi_backtest(start_d, end_d, init_c, month_add, t_trade, t_sig, ma_
 # [2] 페이지 렌더링 함수 정의
 # =====================================================================
 
-# --- 🌐 신규: 글로벌 마켓 대시보드 ---
+# --- 🌐 글로벌 마켓 대시보드 ---
 def page_market_dashboard():
     st.title("🌐 글로벌 매크로 & 마켓 대시보드")
     st.markdown("현재 시장을 주도하는 메가 트렌드와 유동성 지표를 한눈에 파악하는 기관급 대시보드입니다.")
@@ -388,14 +388,13 @@ def page_market_dashboard():
 
     st.divider()
 
-    # 4. 연준 유동성 지표 (FRED) - 🔥 무결점 로직 적용
+    # 4. 연준 유동성 지표 (FRED)
     st.markdown("#### 💸 매크로 유동성 분석 (연준 대차대조표 & M2 통화량)")
     st.caption("※ 데이터 출처: 미국 세인트루이스 연방준비은행 (FRED)")
 
     @st.cache_data(ttl=86400)
     def fetch_fred_data_with_bypass():
         try:
-            # 1. 봇 우회를 위한 브라우저 위장 헤더
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                 'Accept': 'text/csv'
@@ -403,16 +402,10 @@ def page_market_dashboard():
             
             def get_series(series_id):
                 url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-                
-                # 1차 시도: 다이렉트 요청
                 response = requests.get(url, headers=headers, timeout=10)
-                
-                # 만약 HTML(Cloudflare 보안창)을 반환했다면 프록시 서버를 통해 우회
                 if "<html" in response.text[:100].lower():
                     proxy_url = f"https://api.allorigins.win/raw?url={url}"
                     response = requests.get(proxy_url, headers=headers, timeout=15)
-                    
-                    # 프록시마저 뚫지 못했다면 강제 예외 발생시켜서 Iframe으로 넘김
                     if "<html" in response.text[:100].lower():
                         raise ValueError("Cloudflare blocked")
 
@@ -421,18 +414,15 @@ def page_market_dashboard():
 
             m2_df = get_series('M2SL')
             fed_df = get_series('WALCL')
-            
             cutoff = datetime.today() - timedelta(days=365 * 5)
             return m2_df[m2_df.index >= cutoff], fed_df[fed_df.index >= cutoff]
             
         except Exception as e:
             return None, None
 
-    # 데이터 로딩 시도
     m2_data, fed_data = fetch_fred_data_with_bypass()
     
     if m2_data is not None and fed_data is not None:
-        # 데이터 수집 성공 -> Plotly 차트 + AI 코멘트 렌더링
         c_m2, c_fed = st.columns(2)
         with c_m2:
             st.markdown("**M2 통화량 추이 (시중 유동성)**")
@@ -458,9 +448,7 @@ def page_market_dashboard():
             if fed_now > fed_3m_ago: st.success("🟢 **분석:** 연준의 대차대조표가 **확대(QE, 양적완화)**되고 있습니다. 중앙은행이 자산을 사들이며 시장에 직접 돈을 꽂아 넣는 중으로, 주식 폭등의 전조 현상입니다.")
             else: st.warning("⚠️ **분석:** 연준의 대차대조표가 **축소(QT, 양적긴축)**되고 있습니다. 시장에서 달러를 흡수하고 있으므로, VIX가 튀거나 거시 충격이 올 때 낙폭이 커질 수 있습니다.")
     else:
-        # 🔥 데이터 수집 실패 시 무적의 Iframe 공식 차트 로드
-        st.warning("⚠️ 클라우드 서버 IP가 FRED 보안망에 차단되어 AI 자동 분석이 일시 제한되었습니다. 대신 **연준 공식 인터랙티브 차트**를 화면에 직접 띄워드립니다.")
-        
+        st.warning("⚠️ 클라우드 서버 IP가 FRED 보안망에 차단되어 AI 자동 분석이 일시 제한되었습니다. 대신 **연준 공식 인터랙티브 차트**를 직접 띄워드립니다.")
         c_m2, c_fed = st.columns(2)
         with c_m2:
             st.markdown("**M2 통화량 추이 (시중 유동성)**")
@@ -634,7 +622,7 @@ def page_dokkaebi_backtest():
 
         st.subheader("📊 도깨비 백테스트 결과 요약")
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("총 투 투입 원금", f"${total_inv:,.0f}")
+        c1.metric("총 투입 원금", f"${total_inv:,.0f}")
         c2.metric("도깨비 최종 자산", f"${final_dok:,.0f}", f"{dok_ret:+.1f}%")
         c3.metric("BnH(70%) 최종 자산", f"${final_bnh:,.0f}", f"{bnh_ret:+.1f}%")
         c4.metric("도깨비 계좌 MDD", f"{dok_mdd:.1f}%", f"BnH MDD: {bnh_mdd:.1f}%", delta_color="inverse")
@@ -923,21 +911,28 @@ def make_portfolio_page(acc_name):
                     save_accounts_data(st.session_state['accounts'])
                     st.rerun()
 
+        # 🔥 변경된 부분: 원형 도넛 차트 (가운데 총액 표시)
         with col_chart:
             if total_value > 0:
-                fig_bar = go.Figure()
-                palette = ['#2c3e50', '#18bc9c', '#3498db', '#e74c3c', '#f39c12', '#9b59b6', '#34495e', '#bdc3c7']
+                fig_donut = go.Figure()
+                palette = ['#18bc9c', '#3498db', '#9b59b6', '#e74c3c', '#f39c12', '#f1c40f', '#34495e', '#95a5a6']
                 sorted_assets = sorted(asset_values.items(), key=lambda x: x[1], reverse=True)
-                for idx, (tkr, val) in enumerate(sorted_assets):
-                    weight = (val / total_value) * 100
-                    fig_bar.add_trace(go.Bar(
-                        y=['내 비중'], x=[weight], name=tkr, orientation='h',
-                        text=f"<b>{tkr}</b><br>{weight:.1f}%", textposition='inside', insidetextanchor='middle',
-                        marker=dict(color=palette[idx % len(palette)], line=dict(color='white', width=1.0)),
-                        hoverinfo='text', hovertext=f"{tkr}: ${val:,.0f} ({weight:.1f}%)"
-                    ))
-                fig_bar.update_layout(barmode='stack', height=180, margin=dict(l=0, r=0, t=30, b=0), xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[0, 100]), yaxis=dict(showgrid=False, zeroline=False, showticklabels=False), showlegend=False, title=dict(text=f"현재 총 평가액: <b>${total_value:,.2f}</b>", font=dict(size=16), x=0.5, xanchor='center'))
-                st.plotly_chart(fig_bar, use_container_width=True)
+                
+                labels = [tkr for tkr, val in sorted_assets]
+                values = [val for tkr, val in sorted_assets]
+                
+                fig_donut.add_trace(go.Pie(
+                    labels=labels, values=values, hole=0.6,
+                    textinfo='label+percent', textposition='inside',
+                    marker=dict(colors=palette, line=dict(color='#0e1117', width=2)),
+                    hovertemplate="<b>%{label}</b><br>$%{value:,.0f} (%{percent})<extra></extra>"
+                ))
+                
+                fig_donut.update_layout(
+                    height=280, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
+                    annotations=[dict(text=f"총 평가액<br><b><span style='font-size:22px'>${total_value:,.0f}</span></b>", x=0.5, y=0.5, font_size=15, showarrow=False)]
+                )
+                st.plotly_chart(fig_donut, use_container_width=True)
 
         st.write("")
         st.markdown("**[ 종목별 수익률 & 리밸런싱 액션 지침 ]**")
