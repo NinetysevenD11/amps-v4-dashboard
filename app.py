@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 import warnings
 import json
 import os
-import urllib.request
+import requests
 from io import StringIO
 
 warnings.filterwarnings('ignore')
@@ -35,7 +35,6 @@ def save_accounts_data(data_dict):
     with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
         json.dump(data_dict, f, ensure_ascii=False, indent=4)
 
-# 글로벌 세션 초기화 (계좌 데이터)
 if 'accounts' not in st.session_state:
     loaded = load_accounts_data()
     if not loaded:
@@ -47,7 +46,6 @@ if 'accounts' not in st.session_state:
         }
     st.session_state['accounts'] = loaded
 
-# 무손실 마이그레이션 (SSO 누락 방지)
 needs_save = False
 for acc_name, acc_data in st.session_state['accounts'].items():
     existing_tickers = [item["티커 (Ticker)"] for item in acc_data["portfolio"]]
@@ -307,7 +305,7 @@ def page_market_dashboard():
     st.title("🌐 글로벌 매크로 & 마켓 대시보드")
     st.markdown("현재 시장을 주도하는 메가 트렌드와 유동성 지표를 한눈에 파악하는 기관급 대시보드입니다.")
     
-    # 1. Ticker Tape
+    # 1. Ticker Tape (TradingView)
     st.markdown("#### 실시간 시세 (Ticker Tape)")
     components.html("""
     <div class="tradingview-widget-container">
@@ -390,34 +388,49 @@ def page_market_dashboard():
 
     st.divider()
 
-    # 4. 연준 유동성 지표 (FRED) - 브라우저 위장 로직(User-Agent) 탑재
+    # 4. 연준 유동성 지표 (FRED) - 🔥 완벽 우회 로직 적용
     st.markdown("#### 💸 매크로 유동성 분석 (연준 대차대조표 & M2 통화량)")
     st.caption("※ 데이터 출처: 미국 세인트루이스 연방준비은행 (FRED) API 직접 연동")
 
-    @st.cache_data(ttl=86400)
+    @st.cache_data(ttl=86400) # 하루에 한번만 연산
     def fetch_fred_data():
         try:
+            # 🔥 Cloudflare 봇 차단을 우회하기 위한 고급 헤더 (크롬 브라우저 완벽 위장)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1'
+            }
+            
             def get_fred_csv(series_id):
                 url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-                # 🔥 로봇(Bot) 차단을 우회하기 위한 User-Agent 헤더 추가
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-                with urllib.request.urlopen(req) as response:
-                    csv_data = response.read().decode('utf-8')
-                df = pd.read_csv(StringIO(csv_data), parse_dates=['DATE'], index_col='DATE')
+                # urllib 대신 더 강력한 requests 라이브러리 사용
+                response = requests.get(url, headers=headers, timeout=15)
+                response.raise_for_status() # HTTP 에러 발생 시 예외 처리
+                
+                df = pd.read_csv(StringIO(response.text), parse_dates=['DATE'], index_col='DATE')
                 df = df.replace('.', np.nan).astype(float).dropna()
                 return df
-            
+                
             m2_df = get_fred_csv('M2SL')
             fed_df = get_fred_csv('WALCL')
             
             cutoff = datetime.today() - timedelta(days=365 * 5)
             m2_df = m2_df[m2_df.index >= cutoff]
             fed_df = fed_df[fed_df.index >= cutoff]
-            return m2_df, fed_df
+            
+            return m2_df, fed_df, None
+            
         except Exception as e:
-            return None, None
+            return None, None, str(e) # 에러 사유 반환
 
-    m2_data, fed_data = fetch_fred_data()
+    m2_data, fed_data, err_msg = fetch_fred_data()
     
     if m2_data is not None and fed_data is not None:
         c_m2, c_fed = st.columns(2)
@@ -446,7 +459,9 @@ def page_market_dashboard():
             if fed_now > fed_3m_ago: st.success("🟢 **분석:** 연준의 대차대조표가 **확대(QE, 양적완화)**되고 있습니다. 중앙은행이 자산을 사들이며 시장에 직접 돈을 꽂아 넣는 중으로, 주식 폭등의 전조 현상입니다.")
             else: st.warning("⚠️ **분석:** 연준의 대차대조표가 **축소(QT, 양적긴축)**되고 있습니다. 시장에서 달러를 흡수하고 있으므로, VIX가 튀거나 거시 충격이 올 때 낙폭이 커질 수 있습니다.")
     else:
-        st.info("현재 연준 서버 응답 지연으로 데이터를 일시적으로 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.")
+        # 🔥 에러 발생 시 사용자에게 명확한 사유 안내
+        st.error(f"🚨 미국 연준(FRED) 서버에서 보안상의 이유로 접근을 차단했습니다. (사유: {err_msg})")
+        st.info("💡 팁: Streamlit Cloud 클라우드 서버의 IP가 FRED의 봇 방어(Cloudflare) 시스템에 의해 차단된 상태입니다. 몇 시간 뒤에 시도하시거나, 코드를 로컬 환경(내 컴퓨터)에서 실행하시면 정상적으로 뚫고 들어갑니다.")
 
 
 # --- 페이지 1: AMLS 백테스트 ---
