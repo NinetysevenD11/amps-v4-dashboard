@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 import warnings
 import json
 import os
+import urllib.request
+from io import StringIO
 
 warnings.filterwarnings('ignore')
 
@@ -305,7 +307,7 @@ def page_market_dashboard():
     st.title("🌐 글로벌 매크로 & 마켓 대시보드")
     st.markdown("현재 시장을 주도하는 메가 트렌드와 유동성 지표를 한눈에 파악하는 기관급 대시보드입니다.")
     
-    # 1. Ticker Tape (TradingView)
+    # 1. Ticker Tape
     st.markdown("#### 실시간 시세 (Ticker Tape)")
     components.html("""
     <div class="tradingview-widget-container">
@@ -331,7 +333,7 @@ def page_market_dashboard():
     </div>
     """, height=70)
 
-    # 2. 시장 현황판 & 환율 (yfinance)
+    # 2. 시장 현황판 & 환율
     st.markdown("#### 핵심 지표 및 환율")
     @st.cache_data(ttl=1800)
     def get_market_indices():
@@ -352,7 +354,6 @@ def page_market_dashboard():
         c3.metric("VIX (공포지수)", f"{latest.get('^VIX', 0):,.2f}", f"{(latest.get('^VIX',0)/prev.get('^VIX',1)-1)*100:+.2f}%", delta_color="inverse")
         c4.metric("USD/KRW 환율", f"₩{latest.get('USDKRW=X', 0):,.2f}", f"{(latest.get('USDKRW=X',0)/prev.get('USDKRW=X',1)-1)*100:+.2f}%", delta_color="inverse")
 
-        # 인덱스 미니 차트
         fig_idx = go.Figure()
         fig_idx.add_trace(go.Scatter(x=indices_df.index, y=indices_df['^GSPC']/indices_df['^GSPC'].iloc[0]*100, name="S&P 500", line=dict(color='#3498db')))
         fig_idx.add_trace(go.Scatter(x=indices_df.index, y=indices_df['^IXIC']/indices_df['^IXIC'].iloc[0]*100, name="NASDAQ", line=dict(color='#18bc9c')))
@@ -361,7 +362,7 @@ def page_market_dashboard():
 
     st.divider()
 
-    # 3. Finviz Style Market Heatmap (TradingView)
+    # 3. Finviz Style Market Heatmap
     st.markdown("#### S&P 500 섹터 맵 (Market Heatmap)")
     components.html("""
     <div class="tradingview-widget-container">
@@ -389,21 +390,26 @@ def page_market_dashboard():
 
     st.divider()
 
-    # 4. 연준 유동성 지표 (FRED)
+    # 4. 연준 유동성 지표 (FRED) - 브라우저 위장 로직(User-Agent) 탑재
     st.markdown("#### 💸 매크로 유동성 분석 (연준 대차대조표 & M2 통화량)")
     st.caption("※ 데이터 출처: 미국 세인트루이스 연방준비은행 (FRED) API 직접 연동")
 
-    @st.cache_data(ttl=86400) # 하루에 한번만 로드
+    @st.cache_data(ttl=86400)
     def fetch_fred_data():
         try:
-            # FRED의 Public CSV 다운로드 링크를 이용하여 별도 라이브러리 없이 데이터 추출
-            m2_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=M2SL"
-            fed_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=WALCL"
+            def get_fred_csv(series_id):
+                url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+                # 🔥 로봇(Bot) 차단을 우회하기 위한 User-Agent 헤더 추가
+                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+                with urllib.request.urlopen(req) as response:
+                    csv_data = response.read().decode('utf-8')
+                df = pd.read_csv(StringIO(csv_data), parse_dates=['DATE'], index_col='DATE')
+                df = df.replace('.', np.nan).astype(float).dropna()
+                return df
             
-            m2_df = pd.read_csv(m2_url, parse_dates=['DATE'], index_col='DATE').replace('.', np.nan).astype(float).dropna()
-            fed_df = pd.read_csv(fed_url, parse_dates=['DATE'], index_col='DATE').replace('.', np.nan).astype(float).dropna()
+            m2_df = get_fred_csv('M2SL')
+            fed_df = get_fred_csv('WALCL')
             
-            # 최근 5년치 데이터만 필터링
             cutoff = datetime.today() - timedelta(days=365 * 5)
             m2_df = m2_df[m2_df.index >= cutoff]
             fed_df = fed_df[fed_df.index >= cutoff]
@@ -423,13 +429,10 @@ def page_market_dashboard():
             fig_m2.update_layout(height=250, margin=dict(l=0, r=0, t=10, b=0), template="plotly_dark")
             st.plotly_chart(fig_m2, use_container_width=True)
             
-            # M2 해석 로직
             m2_6m_ago = m2_data['M2SL'].iloc[-7] if len(m2_data) > 6 else m2_data['M2SL'].iloc[0]
             m2_now = m2_data['M2SL'].iloc[-1]
-            if m2_now > m2_6m_ago:
-                st.success("🟢 **분석:** 최근 6개월간 시중 통화량(M2)이 **증가**하고 있습니다. 이는 주식/코인 등 자산 시장에 돈이 풀리고 있음을 의미하는 강력한 상승 동력입니다.")
-            else:
-                st.error("🔴 **분석:** 최근 6개월간 시중 통화량(M2)이 **감소**하고 있습니다. 유동성이 메말라 자산 시장이 압박을 받을 수 있는 리스크 오프(Risk-Off) 환경입니다.")
+            if m2_now > m2_6m_ago: st.success("🟢 **분석:** 최근 6개월간 시중 통화량(M2)이 **증가**하고 있습니다. 이는 주식/코인 등 자산 시장에 돈이 풀리고 있음을 의미하는 강력한 상승 동력입니다.")
+            else: st.error("🔴 **분석:** 최근 6개월간 시중 통화량(M2)이 **감소**하고 있습니다. 유동성이 메말라 자산 시장이 압박을 받을 수 있는 리스크 오프(Risk-Off) 환경입니다.")
 
         with c_fed:
             st.markdown("**연준 총 자산 추이 (QE vs QT)**")
@@ -438,15 +441,12 @@ def page_market_dashboard():
             fig_fed.update_layout(height=250, margin=dict(l=0, r=0, t=10, b=0), template="plotly_dark")
             st.plotly_chart(fig_fed, use_container_width=True)
             
-            # 연준 대차대조표 해석 로직
             fed_3m_ago = fed_data['WALCL'].iloc[-13] if len(fed_data) > 13 else fed_data['WALCL'].iloc[0]
             fed_now = fed_data['WALCL'].iloc[-1]
-            if fed_now > fed_3m_ago:
-                st.success("🟢 **분석:** 연준의 대차대조표가 **확대(QE, 양적완화)**되고 있습니다. 중앙은행이 자산을 사들이며 시장에 직접 돈을 꽂아 넣는 중으로, 주식 폭등의 전조 현상입니다.")
-            else:
-                st.warning("⚠️ **분석:** 연준의 대차대조표가 **축소(QT, 양적긴축)**되고 있습니다. 시장에서 달러를 흡수하고 있으므로, VIX가 튀거나 거시 충격이 올 때 낙폭이 커질 수 있습니다.")
+            if fed_now > fed_3m_ago: st.success("🟢 **분석:** 연준의 대차대조표가 **확대(QE, 양적완화)**되고 있습니다. 중앙은행이 자산을 사들이며 시장에 직접 돈을 꽂아 넣는 중으로, 주식 폭등의 전조 현상입니다.")
+            else: st.warning("⚠️ **분석:** 연준의 대차대조표가 **축소(QT, 양적긴축)**되고 있습니다. 시장에서 달러를 흡수하고 있으므로, VIX가 튀거나 거시 충격이 올 때 낙폭이 커질 수 있습니다.")
     else:
-        st.info("FRED 데이터를 불러오는 데 실패했습니다. 네트워크 상태를 확인하세요.")
+        st.info("현재 연준 서버 응답 지연으로 데이터를 일시적으로 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.")
 
 
 # --- 페이지 1: AMLS 백테스트 ---
@@ -802,6 +802,40 @@ def make_portfolio_page(acc_name):
             r_col4.markdown(f"반도체 타겟<br><span style='font-size: 20px; font-weight: bold; color: #3498db;'>{mr['semi_target']}</span>", unsafe_allow_html=True)
             r_col5.metric(f"오늘의 계좌 손익", f"${today_pnl_amt:,.0f}", f"{today_pnl_pct:+.2f}%")
 
+            st.divider()
+            col_ind1, col_ind2, col_ind3 = st.columns([1, 1, 1])
+            with col_ind1:
+                fig_vix = go.Figure(go.Indicator(
+                    mode = "gauge+number", value = mr['vix'],
+                    title = {'text': "시장 공포 탐욕 (VIX)", 'font': {'size': 14}},
+                    gauge = {
+                        'axis': {'range': [0, 80], 'tickwidth': 1, 'tickcolor': "white"},
+                        'bar': {'color': "white", 'thickness': 0.2},
+                        'steps': [{'range': [0, 25], 'color': "#2ecc71"}, {'range': [25, 40], 'color': "#f39c12"}, {'range': [40, 80], 'color': "#e74c3c"}],
+                    }
+                ))
+                fig_vix.update_layout(height=180, margin=dict(l=10, r=10, t=30, b=10))
+                st.plotly_chart(fig_vix, use_container_width=True)
+
+            with col_ind2:
+                st.markdown("##### 🎯 레짐 3대 지표")
+                if mr['vix'] > 40: st.error(f"**1. VIX:** {mr['vix']:.2f} (>40 위험)", icon="🚨")
+                elif mr['vix'] >= 25: st.warning(f"**1. VIX:** {mr['vix']:.2f} (>25 경계)", icon="⚠️")
+                else: st.success(f"**1. VIX:** {mr['vix']:.2f} (<25 안정)", icon="✅")
+                if mr['qqq'] >= mr['ma200']: st.success(f"**2. 장기추세:** 200일선 위", icon="✅")
+                else: st.error(f"**2. 장기추세:** 200일선 아래", icon="🚨")
+                if mr['ma50'] >= mr['ma200']: st.success(f"**3. 배열:** 정배열", icon="✅")
+                else: st.error(f"**3. 배열:** 역배열", icon="🚨")
+
+            with col_ind3:
+                st.markdown("##### ⚡ 반도체 진입 지표")
+                if mr['cond1']: st.success("**1. 추세:** SMH > 50일선", icon="✅")
+                else: st.error("**1. 추세:** SMH < 50일선", icon="❌")
+                if mr['cond2']: st.success(f"**2. 3M수익률:** {mr['smh_3m_ret']*100:.1f}% (>5%)", icon="✅")
+                else: st.error(f"**2. 3M수익률:** {mr['smh_3m_ret']*100:.1f}% (<5%)", icon="❌")
+                if mr['cond3']: st.success(f"**3. 모멘텀:** RSI {mr['smh_rsi']:.1f} (>50)", icon="✅")
+                else: st.error(f"**3. 모멘텀:** RSI {mr['smh_rsi']:.1f} (<50)", icon="❌")
+
         st.write("")
         col_header1, col_header2 = st.columns([5, 1])
         with col_header1: st.markdown(f"**[ 자산 기입표 ]**")
@@ -1035,20 +1069,17 @@ def make_portfolio_page(acc_name):
 # =====================================================================
 # [3] 네비게이션 라우팅 (블로그형 카테고리 구성)
 # =====================================================================
-# 카테고리 1: 글로벌 마켓 대시보드
 pages_dict = {
     "🌐 글로벌 마켓 대시보드": [
         st.Page(page_market_dashboard, title="매크로 & 시장 지표", icon="🗺️")
     ]
 }
 
-# 카테고리 2: 백테스팅 시뮬레이터
 pages_dict["📊 백테스팅 시뮬레이터"] = [
     st.Page(page_amls_backtest, title="AMLS 듀얼 엔진", icon="🦅"),
     st.Page(page_dokkaebi_backtest, title="세윤도깨비 시뮬레이터", icon="👹")
 ]
 
-# 카테고리 3: 내 포트폴리오
 pf_pages = []
 for acc_name in st.session_state['accounts'].keys():
     pf_pages.append(st.Page(make_portfolio_page(acc_name), title=acc_name, icon="💼"))
