@@ -636,7 +636,7 @@ elif app_mode == "[2] 실전 포트폴리오 관리 (AMLS)":
 # =====================================================================
 elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
     st.title("👹 세윤도깨비 백테스트 시뮬레이터")
-    st.markdown("단기/중기 이평선을 활용한 TQQQ 비중 조절(기어 변속) 전략입니다.")
+    st.markdown("단기/중기 이평선을 활용한 TQQQ 비중 조절(기어 변속) 및 **수익 익절 리밸런싱** 전략입니다.")
 
     st.sidebar.header("⚙️ 도깨비 기본 설정")
     DOK_START = st.sidebar.date_input("시작일", datetime(2018, 1, 1), key="d_start")
@@ -659,9 +659,12 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
     DOK_MDD_STOP = st.sidebar.number_input("전고점 대비 손절 (%)", value=20, step=5)
     DOK_RSI_EXIT = st.sidebar.number_input("RSI 익절 기준", value=70, step=5)
     DOK_RSI_W = st.sidebar.slider("RSI 익절 시 남길 비중", 0.0, 1.0, 0.5, 0.1)
+    
+    # 🔥 1단 수익 리밸런싱 설정 추가
+    DOK_PROFIT_REBAL = st.sidebar.number_input("1단 수익 리밸런싱 기준 (%)", value=15, step=1)
 
     @st.cache_data(ttl=3600)
-    def run_dokkaebi_backtest(start_d, end_d, init_c, month_add, t_trade, t_sig, ma_f, ma_s, w1, w2, w3, mdd_stop, rsi_exit, rsi_w):
+    def run_dokkaebi_backtest(start_d, end_d, init_c, month_add, t_trade, t_sig, ma_f, ma_s, w1, w2, w3, mdd_stop, rsi_exit, rsi_w, profit_rebal):
         start_dt = pd.to_datetime(start_d)
         end_dt = pd.to_datetime(end_d) + pd.Timedelta(days=1)
         warmup_dt = start_dt - pd.DateOffset(months=12)
@@ -720,6 +723,7 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
         shares = (cash * w0 * 0.999) / p0
         cash -= cash * w0
         prev_target_w = w0
+        last_rebal_price = p0 # 🔥 마지막 리밸런싱 단가 저장
 
         equity_curve.append(cash + shares * p0)
         invested_curve.append(total_invested)
@@ -745,13 +749,25 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
 
             drawdown = (high_win - price) / high_win if high_win > 0 else 0
             
+            # 1차 상태 감지
             if drawdown >= mdd_stop / 100: target_w = 0.0; action = "🚨 패닉셀"
             elif not np.isnan(rsi) and rsi >= rsi_exit: target_w = rsi_w; action = "🔥 RSI 과열 익절"
             elif ref_price > ma_f_val: target_w = w1; action = "🟢 1단 (상승)"
             elif ref_price > ma_s_val: target_w = w2; action = "🟡 2단 (조정)"
             else: target_w = w3; action = "🔴 3단 (하락)"
 
+            should_rebal = False
+            
+            # 🔥 리밸런싱 판별 로직 추가 (수익 리밸런싱 포함)
             if target_w != prev_target_w:
+                should_rebal = True
+            elif target_w == w1 and last_rebal_price > 0: # 1단 기어 유지 중일 때 수익 확인
+                roi = (price - last_rebal_price) / last_rebal_price
+                if roi >= (profit_rebal / 100.0):
+                    should_rebal = True
+                    action = f"💰 1단 익절 리밸런싱 (+{roi*100:.1f}%)"
+
+            if should_rebal:
                 target_val = val * target_w
                 curr_stock_val = shares * price
                 diff = target_val - curr_stock_val
@@ -763,7 +779,9 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
                     amt = abs(diff)
                     shares -= amt / price
                     cash += amt * 0.999
+                
                 prev_target_w = target_w
+                last_rebal_price = price # 🔥 리밸런싱 했으므로 단가 갱신
                 
                 log_data.append({"Date": date.strftime('%Y-%m-%d'), "Action": action, "Price": price, "Target W": target_w, "Equity": val})
 
@@ -792,7 +810,11 @@ elif app_mode == "[3] 세윤도깨비 시뮬레이터 (신규)":
         return res_df, log_data
 
     with st.spinner("도깨비 엔진 구동 중..."):
-        res_df, logs = run_dokkaebi_backtest(DOK_START, DOK_END, DOK_INIT_CASH, DOK_MONTH_ADD, DOK_TRADE_TICKER, DOK_SIG_TICKER, DOK_FAST_MA, DOK_SLOW_MA, DOK_W1, DOK_W2, DOK_W3, DOK_MDD_STOP, DOK_RSI_EXIT, DOK_RSI_W)
+        res_df, logs = run_dokkaebi_backtest(
+            DOK_START, DOK_END, DOK_INIT_CASH, DOK_MONTH_ADD, DOK_TRADE_TICKER, 
+            DOK_SIG_TICKER, DOK_FAST_MA, DOK_SLOW_MA, DOK_W1, DOK_W2, DOK_W3, 
+            DOK_MDD_STOP, DOK_RSI_EXIT, DOK_RSI_W, DOK_PROFIT_REBAL # 변수 추가
+        )
 
     if res_df is not None:
         final_dok = res_df['Dokkaebi'].iloc[-1]
