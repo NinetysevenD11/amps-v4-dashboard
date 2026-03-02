@@ -18,6 +18,8 @@ warnings.filterwarnings('ignore')
 st.set_page_config(page_title="AMLS 퀀트 관제탑", layout="wide", initial_sidebar_state="expanded")
 
 ACCOUNTS_FILE = "amls_multi_accounts.json"
+# 🔥 모든 계좌에 반드시 존재해야 하는 기본 티커 목록 (SSO 추가됨)
+REQUIRED_TICKERS = ["TQQQ", "QLD", "QQQ", "SOXL", "USD", "SSO", "GLD", "CASH"]
 
 def load_accounts_data():
     if os.path.exists(ACCOUNTS_FILE):
@@ -37,11 +39,42 @@ if 'accounts' not in st.session_state:
     if not loaded:
         loaded = {
             "기본 계좌 (AMLS)": {
-                "portfolio": [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in ["TQQQ", "QLD", "QQQ", "SOXL", "USD", "GLD", "CASH"]],
+                "portfolio": [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in REQUIRED_TICKERS],
                 "history": [], "first_entry_date": None, "journal_text": "", "target_seed": 10000.0
             }
         }
     st.session_state['accounts'] = loaded
+
+# 🔥 [무손실 마이그레이션 모듈] 기존 데이터에 SSO가 없으면 기존 값을 유지하며 SSO만 0으로 끼워넣음
+needs_save = False
+for acc_name, acc_data in st.session_state['accounts'].items():
+    existing_tickers = [item["티커 (Ticker)"] for item in acc_data["portfolio"]]
+    
+    # SSO 등 필수 티커가 빠져있는지 검사
+    missing_tickers = [t for t in REQUIRED_TICKERS if t not in existing_tickers]
+    
+    if missing_tickers:
+        # 기존 데이터를 딕셔너리로 변환하여 안전하게 보존
+        port_dict = {item["티커 (Ticker)"]: item for item in acc_data["portfolio"]}
+        
+        # REQUIRED_TICKERS 순서대로 재조립 (빠진 건 0으로 채움)
+        new_port = []
+        for req_t in REQUIRED_TICKERS:
+            if req_t in port_dict:
+                new_port.append(port_dict[req_t])
+            else:
+                new_port.append({"티커 (Ticker)": req_t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0})
+                
+        # 혹시 사용자가 수동으로 추가했던 다른 티커가 있다면 뒤에 이어서 붙여줌
+        for item in acc_data["portfolio"]:
+            if item["티커 (Ticker)"] not in REQUIRED_TICKERS:
+                new_port.append(item)
+                
+        acc_data["portfolio"] = new_port
+        needs_save = True
+
+if needs_save:
+    save_accounts_data(st.session_state['accounts'])
 
 
 # =====================================================================
@@ -162,7 +195,6 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont):
             log_type = "레짐 전환 (v4.3)" if today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] else "월간 정기 (v4.3)"
             semi_target = "SOXL (3x)" if use_soxl and today_reg_v4_3 == 1 else ("USD (2x)" if today_reg_v4_3 in [1, 2] else "-")
             logs.append({"날짜": today.strftime('%Y-%m-%d'), "유형": log_type, "국면": f"Regime {int(today_reg_v4_3)}", "반도체 스위칭": semi_target, "평가액": ports['AMLS v4.3']})
-
 
     for s in strategies: df[f'{s}_Value'] = hists[s]
     df['Invested'] = invested_hist
@@ -474,7 +506,7 @@ def page_dokkaebi_backtest():
             log_df = pd.DataFrame(logs)[::-1]
             st.dataframe(log_df, hide_index=True, use_container_width=True)
 
-# --- 🔥 신규: 계좌 관리 전용 메뉴 (생성 및 삭제) ---
+# --- 페이지 3: 계좌 관리 (추가/삭제) ---
 def page_manage_accounts():
     st.title("⚙️ 포트폴리오 계좌 관리")
     st.markdown("새로운 계좌를 생성하거나 기존 계좌를 삭제할 수 있습니다.")
@@ -486,7 +518,7 @@ def page_manage_accounts():
     if st.button("🚀 계좌 생성하기", type="primary"):
         if new_acc_name and new_acc_name not in st.session_state['accounts']:
             st.session_state['accounts'][new_acc_name] = {
-                "portfolio": [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in ["TQQQ", "QLD", "QQQ", "SOXL", "USD", "GLD", "CASH"]],
+                "portfolio": [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in REQUIRED_TICKERS],
                 "history": [{"Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Log": "✨ 신규 계좌가 개설되었습니다."}], 
                 "first_entry_date": None, "journal_text": "", "target_seed": 10000.0
             }
@@ -504,7 +536,6 @@ def page_manage_accounts():
         col1, col2 = st.columns([4, 1])
         col1.markdown(f"💼 **{acc}**")
         
-        # 계좌가 1개 이하일 때는 삭제 버튼 비활성화
         disable_del = len(st.session_state['accounts']) <= 1
         
         if col2.button("삭제", key=f"del_mgr_{acc}", disabled=disable_del, use_container_width=True):
@@ -677,7 +708,7 @@ def make_portfolio_page(acc_name):
         with col_header1: st.markdown(f"**[ 자산 기입표 ]**")
         with col_header2:
             if st.button("🔄 숫자 모두 0으로 비우기", use_container_width=True):
-                st.session_state['accounts'][acc_name]["portfolio"] = [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in ["TQQQ", "QLD", "QQQ", "SOXL", "USD", "GLD", "CASH"]]
+                st.session_state['accounts'][acc_name]["portfolio"] = [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in REQUIRED_TICKERS]
                 st.session_state['accounts'][acc_name]["history"] = [{"Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Log": "🔄 시스템: 포트폴리오 전체 초기화됨"}]
                 st.session_state['accounts'][acc_name]["first_entry_date"] = None
                 st.session_state[last_pf_key] = pd.DataFrame(st.session_state['accounts'][acc_name]["portfolio"])
@@ -916,7 +947,7 @@ pf_pages = []
 for acc_name in st.session_state['accounts'].keys():
     pf_pages.append(st.Page(make_portfolio_page(acc_name), title=acc_name, icon="💼"))
 
-# ⚙️ 핵심 추가: 계좌 관리 전용 메뉴 라우팅
+# ⚙️ 계좌 관리 전용 메뉴 라우팅
 pf_pages.append(st.Page(page_manage_accounts, title="⚙️ 계좌 관리 (추가/삭제)", icon="⚙️"))
 
 pages_dict["🏦 내 포트폴리오"] = pf_pages
