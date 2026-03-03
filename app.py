@@ -66,10 +66,10 @@ if needs_save: save_accounts_data(st.session_state['accounts'])
 
 
 # =====================================================================
-# [1] 글로벌 백엔드 함수
+# [1] 글로벌 백엔드 함수 (리밸런싱 주기 기능 추가)
 # =====================================================================
 @st.cache_data(ttl=3600)
-def load_amls_backtest_data(start, end, init_cap, monthly_cont):
+def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq):
     tickers = ['QQQ', 'TQQQ', 'SOXL', 'USD', 'QLD', 'SSO', 'SPY', 'SMH', 'GLD', '^VIX']
     start_str = (start - timedelta(days=400)).strftime("%Y-%m-%d")
     end_str = end.strftime("%Y-%m-%d")
@@ -151,9 +151,16 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont):
     weights_v4 = {t: 0.0 for t in data.columns}; weights_v4_3 = {t: 0.0 for t in data.columns}
     
     logs = []
+    days_since_rebal_v4 = 0
+    days_since_rebal_v4_3 = 0
 
     for i in range(1, len(df)):
         today, yesterday = df.index[i], df.index[i-1]
+        
+        # 거래일 카운트 증가
+        days_since_rebal_v4 += 1
+        days_since_rebal_v4_3 += 1
+        
         ret_v4 = sum(weights_v4[t] * daily_returns[t].iloc[i] for t in data.columns)
         ret_v4_3 = sum(weights_v4_3[t] * daily_returns[t].iloc[i] for t in data.columns)
         
@@ -164,6 +171,7 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont):
             if ports['AMLS v4'] > 0: weights_v4[t] = (weights_v4[t] * (1 + daily_returns[t].iloc[i])) / (1 + ret_v4)
             if ports['AMLS v4.3'] > 0: weights_v4_3[t] = (weights_v4_3[t] * (1 + daily_returns[t].iloc[i])) / (1 + ret_v4_3)
 
+        # 추가 적립금 투입 (주기 옵션에 상관없이 매월 1회 고정)
         if today.month != yesterday.month:
             for s in strategies: ports[s] += monthly_cont
             total_invested += monthly_cont
@@ -171,17 +179,49 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont):
         invested_hist.append(total_invested)
         for s in strategies: hists[s].append(ports[s])
 
-        today_reg_v4 = df['Signal_Regime_v4'].iloc[i]; today_reg_v4_3 = df['Signal_Regime_v4_3'].iloc[i]
+        today_reg_v4 = df['Signal_Regime_v4'].iloc[i]
+        today_reg_v4_3 = df['Signal_Regime_v4_3'].iloc[i]
         use_soxl = (df['SMH'].iloc[i-1] > df['SMH_MA50'].iloc[i-1]) and (df['SMH_3M_Ret'].iloc[i-1] > 0.05) and (df['SMH_RSI'].iloc[i-1] > 50)
 
-        if today.month != yesterday.month or today_reg_v4 != df['Signal_Regime_v4'].iloc[i-1] or i == 1:
+        # 리밸런싱 트리거 조건 판별
+        rebal_v4 = False
+        rebal_v4_3 = False
+
+        if today_reg_v4 != df['Signal_Regime_v4'].iloc[i-1] or i == 1:
+            rebal_v4 = True
+        else:
+            if rebal_freq == "월 1회":
+                if today.month != yesterday.month: rebal_v4 = True
+            elif rebal_freq == "주 1회 (5거래일)":
+                if days_since_rebal_v4 >= 5: rebal_v4 = True
+            elif rebal_freq == "2주 1회 (10거래일)":
+                if days_since_rebal_v4 >= 10: rebal_v4 = True
+            elif rebal_freq == "3주 1회 (15거래일)":
+                if days_since_rebal_v4 >= 15: rebal_v4 = True
+
+        if today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] or i == 1:
+            rebal_v4_3 = True
+        else:
+            if rebal_freq == "월 1회":
+                if today.month != yesterday.month: rebal_v4_3 = True
+            elif rebal_freq == "주 1회 (5거래일)":
+                if days_since_rebal_v4_3 >= 5: rebal_v4_3 = True
+            elif rebal_freq == "2주 1회 (10거래일)":
+                if days_since_rebal_v4_3 >= 10: rebal_v4_3 = True
+            elif rebal_freq == "3주 1회 (15거래일)":
+                if days_since_rebal_v4_3 >= 15: rebal_v4_3 = True
+
+        # 리밸런싱 실행 및 로그 기록
+        if rebal_v4:
             weights_v4 = get_v4_weights(today_reg_v4, use_soxl)
+            days_since_rebal_v4 = 0
             
-        if today.month != yesterday.month or today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] or i == 1:
+        if rebal_v4_3:
             weights_v4_3 = get_v4_3_weights(today_reg_v4_3, use_soxl)
-            log_type = "레짐 전환 (v4.3)" if today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] else "월간 정기 (v4.3)"
+            log_type = "🚨 레짐 전환" if today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] else f"🔄 정기 ({rebal_freq.split(' ')[0]})"
             semi_target = "SOXL (3x)" if use_soxl and today_reg_v4_3 == 1 else ("USD (2x)" if today_reg_v4_3 in [1, 2] else "-")
             logs.append({"날짜": today.strftime('%Y-%m-%d'), "유형": log_type, "국면": f"Regime {int(today_reg_v4_3)}", "반도체 스위칭": semi_target, "평가액": ports['AMLS v4.3']})
+            days_since_rebal_v4_3 = 0
 
     for s in strategies: df[f'{s}_Value'] = hists[s]
     df['Invested'] = invested_hist
@@ -436,7 +476,7 @@ def page_market_dashboard():
             with c_fed: components.html('<iframe src="https://fred.stlouisfed.org/graph/graph-landing.php?id=WALCL&width=100%&height=280" width="100%" height="280" frameborder="0" scrolling="no"></iframe>', height=280)
 
 
-# --- 페이지 1: AMLS 백테스트 ---
+# --- 페이지 1: AMLS 백테스트 (주기 선택 기능 추가) ---
 def page_amls_backtest():
     st.title("🦅 AMLS 퀀트 듀얼 백테스트 엔진")
     st.markdown("**AMLS v4 (기본형)**과 최신 알고리즘이 적용된 **AMLS v4.3 (R2/R3 개선 및 단계적 진입)**의 퍼포먼스를 비교합니다.")
@@ -446,9 +486,17 @@ def page_amls_backtest():
     BACKTEST_END = st.sidebar.date_input("종료일", datetime.today())
     INITIAL_CAPITAL = st.sidebar.number_input("초기 자본금 ($)", value=10000, step=1000)
     MONTHLY_CONTRIBUTION = st.sidebar.number_input("매월 추가 적립금 ($)", value=2000, step=500)
+    
+    # 🔥 신규: 리밸런싱 주기 선택 옵션
+    REBAL_FREQ = st.sidebar.selectbox(
+        "🔄 정기 리밸런싱 주기 (v4.3 적용)",
+        ["월 1회", "주 1회 (5거래일)", "2주 1회 (10거래일)", "3주 1회 (15거래일)"],
+        index=0,
+        help="시장 국면(Regime)이 변하지 않을 때, 며칠마다 비중을 원래 목표대로 맞출지 선택합니다. (급락/급등 시 수시 리밸런싱은 항상 즉각 작동합니다)"
+    )
 
     with st.spinner('듀얼 퀀트 엔진을 가동하여 시장 데이터를 연산 중입니다...'):
-        df, full_logs, tickers = load_amls_backtest_data(BACKTEST_START, BACKTEST_END, INITIAL_CAPITAL, MONTHLY_CONTRIBUTION)
+        df, full_logs, tickers = load_amls_backtest_data(BACKTEST_START, BACKTEST_END, INITIAL_CAPITAL, MONTHLY_CONTRIBUTION, REBAL_FREQ)
         strategies = ['AMLS v4.3', 'AMLS v4', 'QQQ', 'QLD', 'TQQQ']
 
     today_status = df.iloc[-1]
@@ -552,10 +600,11 @@ def page_amls_backtest():
         st.dataframe(reg_df, hide_index=True, use_container_width=True)
         
     with col_log:
-        st.markdown("**[ 전체 리밸런싱 매매 이력 (최근순) ]**")
+        st.markdown(f"**[ 전체 리밸런싱 매매 이력 ({REBAL_FREQ}) ]**")
         logs_df = pd.DataFrame(full_logs)[::-1]
-        logs_df['평가액'] = logs_df['평가액'].apply(lambda x: f"${x:,.0f}")
-        st.dataframe(logs_df, hide_index=True, use_container_width=True, height=200)
+        if not logs_df.empty:
+            logs_df['평가액'] = logs_df['평가액'].apply(lambda x: f"${x:,.0f}")
+            st.dataframe(logs_df, hide_index=True, use_container_width=True, height=200)
 
 # --- 페이지 2: 도깨비 백테스트 ---
 def page_dokkaebi_backtest():
@@ -859,7 +908,6 @@ def make_portfolio_page(acc_name):
             if st.button("🔄 숫자 모두 0으로 비우기", use_container_width=True):
                 st.session_state['accounts'][acc_name]["portfolio"] = [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in REQUIRED_TICKERS]
                 st.session_state['accounts'][acc_name]["history"].append({"Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Log": "🔄 시스템: 포트폴리오 전체 초기화됨"})
-                st.session_state['accounts'][acc_name]["first_entry_date"] = None
                 st.session_state[last_pf_key] = pd.DataFrame(st.session_state['accounts'][acc_name]["portfolio"])
                 save_accounts_data(st.session_state['accounts'])
                 st.rerun()
@@ -1039,7 +1087,6 @@ def make_portfolio_page(acc_name):
         if total_value > 0:
             with st.container(border=True):
                 fed_str = curr_acc_data.get("first_entry_date")
-                # 🔥 에러 픽스: ISO 포맷(T 시간 포함)이든 텍스트 포맷이든 모두 안전하게 처리하는 pd.to_datetime 적용
                 if fed_str:
                     default_date = pd.to_datetime(fed_str).date()
                 else:
