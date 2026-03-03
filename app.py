@@ -13,6 +13,7 @@ import os
 import requests
 from io import StringIO
 import copy
+import time
 
 warnings.filterwarnings('ignore')
 
@@ -66,10 +67,10 @@ if needs_save: save_accounts_data(st.session_state['accounts'])
 
 
 # =====================================================================
-# [1] 글로벌 백엔드 함수 (리밸런싱 주기 기능 추가)
+# [1] 글로벌 백엔드 함수
 # =====================================================================
 @st.cache_data(ttl=3600)
-def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq):
+def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq="월 1회"):
     tickers = ['QQQ', 'TQQQ', 'SOXL', 'USD', 'QLD', 'SSO', 'SPY', 'SMH', 'GLD', '^VIX']
     start_str = (start - timedelta(days=400)).strftime("%Y-%m-%d")
     end_str = end.strftime("%Y-%m-%d")
@@ -157,7 +158,6 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq):
     for i in range(1, len(df)):
         today, yesterday = df.index[i], df.index[i-1]
         
-        # 거래일 카운트 증가
         days_since_rebal_v4 += 1
         days_since_rebal_v4_3 += 1
         
@@ -171,7 +171,6 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq):
             if ports['AMLS v4'] > 0: weights_v4[t] = (weights_v4[t] * (1 + daily_returns[t].iloc[i])) / (1 + ret_v4)
             if ports['AMLS v4.3'] > 0: weights_v4_3[t] = (weights_v4_3[t] * (1 + daily_returns[t].iloc[i])) / (1 + ret_v4_3)
 
-        # 추가 적립금 투입 (주기 옵션에 상관없이 매월 1회 고정)
         if today.month != yesterday.month:
             for s in strategies: ports[s] += monthly_cont
             total_invested += monthly_cont
@@ -179,16 +178,12 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq):
         invested_hist.append(total_invested)
         for s in strategies: hists[s].append(ports[s])
 
-        today_reg_v4 = df['Signal_Regime_v4'].iloc[i]
-        today_reg_v4_3 = df['Signal_Regime_v4_3'].iloc[i]
+        today_reg_v4 = df['Signal_Regime_v4'].iloc[i]; today_reg_v4_3 = df['Signal_Regime_v4_3'].iloc[i]
         use_soxl = (df['SMH'].iloc[i-1] > df['SMH_MA50'].iloc[i-1]) and (df['SMH_3M_Ret'].iloc[i-1] > 0.05) and (df['SMH_RSI'].iloc[i-1] > 50)
 
-        # 리밸런싱 트리거 조건 판별
-        rebal_v4 = False
-        rebal_v4_3 = False
+        rebal_v4 = False; rebal_v4_3 = False
 
-        if today_reg_v4 != df['Signal_Regime_v4'].iloc[i-1] or i == 1:
-            rebal_v4 = True
+        if today_reg_v4 != df['Signal_Regime_v4'].iloc[i-1] or i == 1: rebal_v4 = True
         else:
             if rebal_freq == "월 1회":
                 if today.month != yesterday.month: rebal_v4 = True
@@ -199,8 +194,7 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq):
             elif rebal_freq == "3주 1회 (15거래일)":
                 if days_since_rebal_v4 >= 15: rebal_v4 = True
 
-        if today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] or i == 1:
-            rebal_v4_3 = True
+        if today_reg_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] or i == 1: rebal_v4_3 = True
         else:
             if rebal_freq == "월 1회":
                 if today.month != yesterday.month: rebal_v4_3 = True
@@ -211,7 +205,6 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq):
             elif rebal_freq == "3주 1회 (15거래일)":
                 if days_since_rebal_v4_3 >= 15: rebal_v4_3 = True
 
-        # 리밸런싱 실행 및 로그 기록
         if rebal_v4:
             weights_v4 = get_v4_weights(today_reg_v4, use_soxl)
             days_since_rebal_v4 = 0
@@ -476,7 +469,7 @@ def page_market_dashboard():
             with c_fed: components.html('<iframe src="https://fred.stlouisfed.org/graph/graph-landing.php?id=WALCL&width=100%&height=280" width="100%" height="280" frameborder="0" scrolling="no"></iframe>', height=280)
 
 
-# --- 페이지 1: AMLS 백테스트 (주기 선택 기능 추가) ---
+# --- 페이지 1: AMLS 백테스트 ---
 def page_amls_backtest():
     st.title("🦅 AMLS 퀀트 듀얼 백테스트 엔진")
     st.markdown("**AMLS v4 (기본형)**과 최신 알고리즘이 적용된 **AMLS v4.3 (R2/R3 개선 및 단계적 진입)**의 퍼포먼스를 비교합니다.")
@@ -487,7 +480,6 @@ def page_amls_backtest():
     INITIAL_CAPITAL = st.sidebar.number_input("초기 자본금 ($)", value=10000, step=1000)
     MONTHLY_CONTRIBUTION = st.sidebar.number_input("매월 추가 적립금 ($)", value=2000, step=500)
     
-    # 🔥 신규: 리밸런싱 주기 선택 옵션
     REBAL_FREQ = st.sidebar.selectbox(
         "🔄 정기 리밸런싱 주기 (v4.3 적용)",
         ["월 1회", "주 1회 (5거래일)", "2주 1회 (10거래일)", "3주 1회 (15거래일)"],
@@ -908,6 +900,7 @@ def make_portfolio_page(acc_name):
             if st.button("🔄 숫자 모두 0으로 비우기", use_container_width=True):
                 st.session_state['accounts'][acc_name]["portfolio"] = [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in REQUIRED_TICKERS]
                 st.session_state['accounts'][acc_name]["history"].append({"Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Log": "🔄 시스템: 포트폴리오 전체 초기화됨"})
+                st.session_state['accounts'][acc_name]["first_entry_date"] = None
                 st.session_state[last_pf_key] = pd.DataFrame(st.session_state['accounts'][acc_name]["portfolio"])
                 save_accounts_data(st.session_state['accounts'])
                 st.rerun()
@@ -1229,8 +1222,41 @@ def make_portfolio_page(acc_name):
 
 
 # =====================================================================
-# [3] 네비게이션 라우팅 (블로그형 카테고리 구성)
+# [3] 네비게이션 라우팅 및 사이드바 백업 기능
 # =====================================================================
+
+# 🔥 신규: 사이드바 데이터 백업 및 복구 기능
+st.sidebar.divider()
+with st.sidebar.expander("💾 데이터 안심 백업 및 복구", expanded=False):
+    st.caption("클라우드 서버 초기화(Sleep)로 인한 데이터 증발을 막기 위해 퇴근 전 반드시 백업하세요.")
+    
+    # 1. 백업 (다운로드)
+    json_data = json.dumps(st.session_state['accounts'], ensure_ascii=False, indent=4)
+    st.download_button(
+        label="📥 현재 상태 백업 (다운로드)",
+        data=json_data,
+        file_name=f"amls_backup_{datetime.now().strftime('%Y%m%d_%H%M')}.json",
+        mime="application/json",
+        use_container_width=True
+    )
+    
+    st.divider()
+    
+    # 2. 복구 (업로드)
+    uploaded_file = st.file_uploader("📤 백업 파일 복구", type=['json'], label_visibility="collapsed")
+    if uploaded_file is not None:
+        if st.button("⚠️ 복구 실행 (기존 데이터 덮어쓰기)", type="primary", use_container_width=True):
+            try:
+                restored_data = json.load(uploaded_file)
+                st.session_state['accounts'] = restored_data
+                save_accounts_data(restored_data)
+                st.success("✅ 복구 완료! 화면을 새로고침합니다.")
+                time.sleep(1.5)
+                st.rerun()
+            except Exception as e:
+                st.error("❌ 복구 실패: 올바른 백업 파일이 아닙니다.")
+
+
 pages_dict = {
     "🌐 글로벌 마켓 대시보드": [
         st.Page(page_market_dashboard, title="매크로 & 시장 지표", icon="🗺️")
