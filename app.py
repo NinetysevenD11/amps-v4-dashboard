@@ -92,7 +92,7 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq="월 
     daily_returns = df[data.columns].pct_change().fillna(0)
 
     def get_target_regime(row):
-        vix, qqq, ma200, ma50 = row['^VIX'], row['QQQ'], ma200=row['QQQ_MA200'], ma50=row['QQQ_MA50']
+        vix, qqq, ma200, ma50 = row['^VIX'], row['QQQ'], row['QQQ_MA200'], row['QQQ_MA50']
         if vix > 40: return 4
         if qqq < ma200: return 3
         if qqq >= ma200 and ma50 >= ma200 and vix < 25: return 1
@@ -451,12 +451,12 @@ def page_market_dashboard():
                         res = requests.get(f"https://api.allorigins.win/raw?url={url}", headers=headers, timeout=15)
                         if "<html" in res.text[:100].lower(): raise ValueError("Cloudflare blocked")
                     return pd.read_csv(StringIO(res.text), parse_dates=['DATE'], index_col='DATE').replace('.', np.nan).astype(float).dropna()
+
                 m2_df = get_series('M2SL')
                 fed_df = get_series('WALCL')
                 cutoff = datetime.today() - timedelta(days=365 * 5)
                 return m2_df[m2_df.index >= cutoff], fed_df[fed_df.index >= cutoff]
-            except: 
-                return None, None
+            except Exception as e: return None, None
 
         m2_data, fed_data = fetch_fred_data_with_bypass()
         
@@ -525,6 +525,7 @@ def page_amls_backtest():
         q4.metric("RSI 14 (과열/침체)", f"{today_status['QQQ_RSI']:.2f}", "70 이상 과열 / 30 이하 침체", delta_color="off")
 
     st.write("")
+    
     st.markdown("**[ 국면별 포트폴리오 목표 비중 (AMLS v4.3 기준) ]**")
     def get_v4_3_weights_for_plot(regime):
         w = {t: 0.0 for t in tickers}
@@ -536,6 +537,7 @@ def page_amls_backtest():
 
     col1, col2, col3, col4 = st.columns(4)
     colors = {'TQQQ': '#e74c3c', 'SOXL/USD': '#8e44ad', 'USD': '#9b59b6', 'QLD': '#e67e22', 'SSO': '#f39c12', 'QQQ': '#3498db', 'SPY': '#2980b9', 'GLD': '#f1c40f', '현금': '#2ecc71'}
+
     for idx, col in enumerate([col1, col2, col3, col4]):
         reg = idx + 1
         w = get_v4_3_weights_for_plot(reg)
@@ -545,6 +547,7 @@ def page_amls_backtest():
         col.plotly_chart(fig_pie, use_container_width=True)
 
     st.write("")
+
     col_met, col_year = st.columns([1, 1])
     with col_met:
         st.markdown("**[ 핵심 지표 비교 ]**")
@@ -556,7 +559,7 @@ def page_amls_backtest():
             mdd = ((series / series.cummax()) - 1).min()
             sharpe = (series.pct_change().mean() * 252) / (series.pct_change().std() * np.sqrt(252))
             return [f"{total_ret * 100:.1f}%", f"{cagr * 100:.1f}%", f"{mdd * 100:.1f}%", f"{sharpe:.2f}", f"${final:,.0f}"]
-        
+
         metrics_rows = [calc_metrics(df[f'{s}_Value'], df['Invested']) for s in strategies]
         metrics_df = pd.DataFrame(metrics_rows, index=strategies, columns=['총 수익률', 'CAGR', 'MDD', '샤프 지수', '최종 자산'])
         st.dataframe(metrics_df.style.highlight_max(subset=['CAGR', '최종 자산'], color='lightgreen').highlight_min(subset=['MDD'], color='lightcoral'), use_container_width=True)
@@ -571,7 +574,6 @@ def page_amls_backtest():
                 y_data = df[df.index.year == y][f'{s}_Value']
                 yearly_ret.loc[s, str(y)] = f"{(y_data.iloc[-1] / y_data.iloc[0] - 1) * 100:+.1f}%"
                 yearly_val.loc[s, str(y)] = f"${y_data.iloc[-1]:,.0f}"
-        
         tab_ret, tab_val = st.tabs(["📈 수익률 (%)", "💰 기말 자산 ($)"])
         with tab_ret: st.dataframe(yearly_ret, use_container_width=True)
         with tab_val: st.dataframe(yearly_val, use_container_width=True)
@@ -585,7 +587,6 @@ def page_amls_backtest():
         fig.add_trace(go.Scatter(x=df.index, y=df[f'{s}_Value'], name=s, line=dict(color=c, width=lw)), row=1, col=1)
         dd = (df[f'{s}_Value'] / df[f'{s}_Value'].cummax()) - 1
         fig.add_trace(go.Scatter(x=df.index, y=dd * 100, name=f'{s} DD', line=dict(color=c, width=1.5 if 'AMLS' in s else 1, dash='solid' if 'AMLS' in s else 'dot')), row=2, col=1)
-    
     fig.add_trace(go.Scatter(x=df.index, y=df['Invested'], name='누적 투입 원금', line=dict(color='black', width=2, dash='dash')), row=1, col=1)
     fig.update_yaxes(type="log", row=1, col=1)
     fig.add_hline(y=-20, line_dash="dash", line_color="red", row=2, col=1, annotation_text="-20% 방어선")
@@ -609,7 +610,6 @@ def page_amls_backtest():
         if not logs_df.empty: 
             logs_df['평가액'] = logs_df['평가액'].apply(lambda x: f"${x:,.0f}")
             st.dataframe(logs_df, hide_index=True, use_container_width=True, height=200)
-
 
 # --- 📊 백테스트: 도깨비 ---
 def page_dokkaebi_backtest():
@@ -679,7 +679,7 @@ def page_dokkaebi_backtest():
             st.dataframe(log_df, hide_index=True, use_container_width=True)
 
 
-# --- 💼 포트폴리오 관리 (표 & 도넛 & 로그 차트 완벽 복구본) ---
+# --- 💼 포트폴리오 관리 (AI 분석관 & 지표 UI 통일 & 시드 곡선) ---
 def make_portfolio_page(acc_name):
     def page_func():
         st.title(f"🏦 {acc_name} 대시보드")
@@ -795,46 +795,54 @@ def make_portfolio_page(acc_name):
         pnl_amt = total_val - prev_total
         pnl_pct = (pnl_amt / prev_total * 100) if prev_total > 0 else 0.0
 
+        # --- 상단 레이더: AI 분석관 & 지표 UI 통합 ---
         with st.container(border=True):
-            st.markdown(f"**[ 시장 레이더 요약 ]** &nbsp; | &nbsp; 기준일: {mr['date'].strftime('%Y-%m-%d')}")
-            r1, r2, r3, r4, r5 = st.columns(5)
-            r1.markdown(f"현재 국면<br><span style='font-size: 24px; font-weight: bold; color: {'#e74c3c' if mr['applied_regime'] >= 3 else '#2ecc71'};'>Regime {int(mr['applied_regime'])}</span>", unsafe_allow_html=True)
-            r2.metric("공포 지수 (VIX)", f"{mr['vix']:.2f}")
-            r3.metric("QQQ 200일선 이격도", f"{(mr['qqq'] / mr['ma200'] - 1) * 100:+.2f}%")
-            r4.markdown(f"반도체 타겟<br><span style='font-size: 20px; font-weight: bold; color: #3498db;'>{mr['semi_target']}</span>", unsafe_allow_html=True)
-            r5.metric(f"오늘의 손익", f"${pnl_amt:,.0f}", f"{pnl_pct:+.2f}%")
+            st.markdown(f"**[ 실시간 시장 인텔리전스 ]** &nbsp; | &nbsp; 기준: {mr['date'].strftime('%Y-%m-%d')}")
+            col_l, col_r = st.columns(2)
             
-            st.divider()
-            c_i1, c_i2, c_i3 = st.columns([1, 1, 1])
-            with c_i1:
-                fig_vix = go.Figure(go.Indicator(mode="gauge+number", value=mr['vix'], title={'text': "VIX", 'font': {'size': 14}}, gauge={'axis': {'range': [0, 80]}, 'bar': {'color': "white"}, 'steps': [{'range': [0, 25], 'color': "#2ecc71"}, {'range': [25, 40], 'color': "#f39c12"}, {'range': [40, 80], 'color': "#e74c3c"}]}))
-                fig_vix.update_layout(height=180, margin=dict(l=10, r=10, t=30, b=10))
-                st.plotly_chart(fig_vix, use_container_width=True)
-            with c_i2:
-                st.markdown("##### 🎯 레짐 3대 지표")
+            with col_l:
+                st.markdown("##### 🎯 레짐 판단 3대 지표")
                 if mr['vix'] > 40: st.error(f"**VIX:** {mr['vix']:.2f} (>40 위험)", icon="🚨")
                 elif mr['vix'] >= 25: st.warning(f"**VIX:** {mr['vix']:.2f} (>25 경계)", icon="⚠️")
                 else: st.success(f"**VIX:** {mr['vix']:.2f} (<25 안정)", icon="✅")
                 
-                if mr['qqq'] >= mr['ma200']: st.success(f"**장기추세:** 200일선 위", icon="✅")
-                else: st.error(f"**장기추세:** 200일선 아래", icon="🚨")
+                if mr['qqq'] >= mr['ma200']: st.success(f"**장기추세:** 200일선 위 (안전)", icon="✅")
+                else: st.error(f"**장기추세:** 200일선 아래 (위험)", icon="🚨")
                 
-                if mr['ma50'] >= mr['ma200']: st.success(f"**배열:** 정배열", icon="✅")
-                else: st.error(f"**배열:** 역배열", icon="🚨")
-            with c_i3:
-                st.markdown("##### ⚡ 반도체 진입 지표")
-                st.markdown(f"{'✅' if mr['cond1'] else '❌'} **추세:** SMH > 50일선\n\n{'✅' if mr['cond2'] else '❌'} **수익률:** {mr['smh_3m_ret']*100:.1f}% (>5%)\n\n{'✅' if mr['cond3'] else '❌'} **모멘텀:** RSI {mr['smh_rsi']:.1f} (>50)")
-            
-            st.divider()
-            st.markdown("##### 🧠 AMLS 레짐 판단 알고리즘 해석")
-            target_reg, app_reg = mr['target_regime'], mr['applied_regime']
-            reason = ""
-            if target_reg == 4: reason = "VIX > 40 초과로 **[Regime 4]** 패닉 조건 발동."
-            elif target_reg == 3: reason = "나스닥 QQQ가 200일선을 하향 이탈한 **[Regime 3]** 하락장."
-            elif target_reg == 1: reason = "VIX 안정 및 정배열 상태인 **[Regime 1]** 상승장."
-            else: reason = "200일선 위에는 있으나 VIX 경계 또는 역배열인 **[Regime 2]** 조정장."
-            st.info(reason + (f" (현재 {mr['wait_days']}일차 상향 대기 중)" if mr['is_waiting'] else ""))
+                if mr['ma50'] >= mr['ma200']: st.success(f"**배열:** 정배열 (상승 추세)", icon="✅")
+                else: st.error(f"**배열:** 역배열 (하락 추세)", icon="🚨")
 
+            with col_r:
+                st.markdown("##### ⚡ 반도체 진입 지표 (SOXL 판단)")
+                if mr['cond1']: st.success("**추세:** SMH > 50일선", icon="✅")
+                else: st.error("**추세:** SMH < 50일선", icon="❌")
+                
+                if mr['cond2']: st.success(f"**수익률:** {mr['smh_3m_ret']*100:.1f}% (>5% 우수)", icon="✅")
+                else: st.error(f"**수익률:** {mr['smh_3m_ret']*100:.1f}% (<5% 부진)", icon="❌")
+                
+                if mr['cond3']: st.success(f"**모멘텀:** RSI {mr['smh_rsi']:.1f} (>50 강세)", icon="✅")
+                else: st.error(f"**모멘텀:** RSI {mr['smh_rsi']:.1f} (<50 약세)", icon="❌")
+
+            st.divider()
+            
+            # 🔥 AI 레짐 판단 알고리즘 분석관
+            st.markdown("##### 🦅 AMLS 전략 분석 보고서")
+            target_reg = mr['target_regime']
+            app_reg = mr['applied_regime']
+
+            if target_reg == 4: reason = "시장 공포지수(VIX)가 40을 초과하여 **[극심한 공포 및 폭락장 - Regime 4]** 조건이 발동되었습니다. 즉각적인 대피(GLD 및 현금 100%)가 필요합니다."
+            elif target_reg == 3: reason = "나스닥(QQQ)이 생명선인 200일 장기 이평선을 하향 이탈하여 **[대세 하락장 - Regime 3]**으로 판단되었습니다. 3배 레버리지를 모두 청산하고 방어 태세를 갖춥니다."
+            elif target_reg == 1: reason = "VIX가 25 미만으로 안정적이며, 나스닥이 장기(200일) 및 단기(50일) 이평선 위에서 완벽한 정배열을 유지하는 **[안정적 상승장 - Regime 1]**입니다. 공격적인 레버리지 운용 구간입니다."
+            else: reason = "나스닥이 200일선 위에는 있지만, VIX가 25 이상으로 튀었거나 단기 이평선(50일선)이 꺾인 **[불안정한 조정장 - Regime 2]**입니다. 레버리지 비중을 낮춰 안전 마진을 확보해야 합니다."
+
+            if mr['is_waiting']:
+                st.warning(f"**[AI 판독 결과]** {reason} \n\n⏳ **단계적 진입 대기 중:** 현재 시장은 상향 돌파(R{target_reg}) 조건을 충족했으나, 속임수(휩쏘)를 피하기 위해 5일간의 확인 기간을 거치고 있습니다. (현재 {mr['wait_days']}일차 대기 중이며, 보수적으로 R{app_reg} 비중을 적용합니다.)")
+            elif target_reg != app_reg:
+                 st.info(f"**[AI 판독 결과]** {reason} \n\n✅ **현재 포트폴리오 적용 상태:** 안전 확인이 완료되어 R{app_reg} 비중 모델이 적용 중입니다.")
+            else:
+                st.success(f"**[AI 판독 결과]** {reason} 시스템 지표가 일치하여 현재 포트폴리오에 **Regime {app_reg} 배분율**이 완벽히 적용되고 있습니다. 반도체 타겟은 **{mr['semi_target']}** 입니다.")
+
+        # --- 자산 기입표 & 도넛 차트 ---
         st.write("")
         c_h1, c_h2 = st.columns([5, 1])
         with c_h1: st.markdown(f"**[ 자산 기입표 및 실시간 수익률 ]**")
@@ -843,16 +851,13 @@ def make_portfolio_page(acc_name):
                 st.session_state['accounts'][acc_name]["portfolio"] = [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in REQUIRED_TICKERS]
                 st.session_state['accounts'][acc_name]["history"].append({"Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "Log": "🔄 시스템: 초기화됨"})
                 st.session_state[last_pf_key] = pd.DataFrame(st.session_state['accounts'][acc_name]["portfolio"])
-                save_accounts_data(st.session_state['accounts'])
-                st.rerun()
+                save_accounts_data(st.session_state['accounts']); st.rerun()
 
         disp_df = pf_df.copy()
         disp_df["현재가 ($)"] = disp_df["티커 (Ticker)"].apply(lambda x: live_prices.get(str(x).upper().strip(), 0.0))
-        
         def cy(row):
             if row["수량 (주/달러)"] == 0 or row["평균 단가 ($)"] == 0 or str(row["티커 (Ticker)"]).upper().strip() == "CASH": return 0.0
             return (row["현재가 ($)"] - row["평균 단가 ($)"]) / row["평균 단가 ($)"] * 100
-            
         disp_df["수익률 (%)"] = disp_df.apply(cy, axis=1)
         
         def c_y_n(val):
@@ -860,7 +865,7 @@ def make_portfolio_page(acc_name):
                 if val > 0: return 'color: #ff4b4b; font-weight: bold;'
                 elif val < 0: return 'color: #3498db; font-weight: bold;'
             return ''
-            
+
         c_t, c_c = st.columns([1.2, 1])
         with c_t:
             st.caption("💡 보유 수량과 평단가를 더블 클릭하여 입력하세요. (현재가, 수익률은 자동 계산됩니다)")
@@ -872,25 +877,18 @@ def make_portfolio_page(acc_name):
             base_ed = ed_disp[["티커 (Ticker)", "수량 (주/달러)", "평균 단가 ($)"]]
             if not base_ed.equals(st.session_state[last_pf_key]):
                 now_s = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
-                # 로그 생성을 위해 이전 상태 비교
                 old_state = {str(r["티커 (Ticker)"]).upper().strip(): {'qty': float(r["수량 (주/달러)"] if pd.notna(r["수량 (주/달러)"]) else 0), 'avg_p': float(r["평균 단가 ($)"] if pd.notna(r["평균 단가 ($)"]) else 0)} for _, r in st.session_state[last_pf_key].iterrows() if str(r["티커 (Ticker)"]).upper().strip()}
                 new_state = {str(r["티커 (Ticker)"]).upper().strip(): {'qty': float(r["수량 (주/달러)"] if pd.notna(r["수량 (주/달러)"]) else 0), 'avg_p': float(r["평균 단가 ($)"] if pd.notna(r["평균 단가 ($)"]) else 0)} for _, r in base_ed.iterrows() if str(r["티커 (Ticker)"]).upper().strip()}
-                
                 for tkr, new_val in new_state.items():
                     if tkr in old_state:
                         if old_state[tkr]['qty'] != new_val['qty']: st.session_state['accounts'][acc_name]["history"].append({"Date": now_s, "Log": f"[{tkr}] 수량 변경: {old_state[tkr]['qty']} ➔ {new_val['qty']}"})
                         if old_state[tkr]['avg_p'] != new_val['avg_p']: st.session_state['accounts'][acc_name]["history"].append({"Date": now_s, "Log": f"[{tkr}] 평단가 변경: ${old_state[tkr]['avg_p']} ➔ ${new_val['avg_p']}"})
-                    else:
-                        st.session_state['accounts'][acc_name]["history"].append({"Date": now_s, "Log": f"[{tkr}] 신규 종목 추가: {new_val['qty']}주"})
+                    else: st.session_state['accounts'][acc_name]["history"].append({"Date": now_s, "Log": f"[{tkr}] 신규 종목 추가: {new_val['qty']}주"})
                 for tkr in old_state.keys():
                     if tkr not in new_state: st.session_state['accounts'][acc_name]["history"].append({"Date": now_s, "Log": f"[{tkr}] 종목 삭제됨"})
-
                 st.session_state['accounts'][acc_name]["portfolio"] = base_ed.to_dict(orient="records")
-                st.session_state[last_pf_key] = base_ed.copy()
-                save_accounts_data(st.session_state['accounts'])
-                st.rerun()
-                
+                st.session_state[last_pf_key] = base_ed.copy(); save_accounts_data(st.session_state['accounts']); st.rerun()
+
         with c_c:
             st.markdown("<br>", unsafe_allow_html=True)
             if total_val > 0:
@@ -901,11 +899,10 @@ def make_portfolio_page(acc_name):
 
         st.write("")
         st.markdown("**[ 리밸런싱 액션 지침 ]**")
-        target_seed = st.number_input("🎯 운용 시드 ($)", value=float(curr_acc_data.get("target_seed", 10000.0)), step=1000.0, key=f"seed_{acc_name}")
+        target_seed = st.number_input("🎯 총 운용 시드 입력 ($)", value=float(curr_acc_data.get("target_seed", 10000.0)), step=1000.0, key=f"seed_{acc_name}")
         if target_seed != curr_acc_data.get("target_seed"):
-            st.session_state['accounts'][acc_name]["target_seed"] = target_seed
-            save_accounts_data(st.session_state['accounts'])
-            
+            st.session_state['accounts'][acc_name]["target_seed"] = target_seed; save_accounts_data(st.session_state['accounts'])
+
         status_d = []
         all_tkrs = set([t for t in asset_vals.keys()] + list(mr['target_weights'].keys()))
         for tkr in all_tkrs:
@@ -921,12 +918,8 @@ def make_portfolio_page(acc_name):
             
             ret_pct, ret_amt = 0.0, 0.0
             if shares > 0 and tkr != "CASH":
-                if avg_price > 0:
-                    ret_pct = ((cp - avg_price) / avg_price) * 100
-                    ret_amt = (cp - avg_price) * shares
-
-            if my_v > 0 or tw > 0: 
-                status_d.append({"종목": tkr, "목표비중": f"{tw*100:.1f}%", "현재비중": f"{my_w:.1f}%", "목표액": f"${tv:,.0f}", "현재액": f"${my_v:,.0f}", "수익률 (%)": f"{ret_pct:+.2f}%" if shares > 0 and tkr != "CASH" else "-", "수익금 ($)": f"${ret_amt:+,.0f}" if shares > 0 and tkr != "CASH" else "-", "액션": act})
+                if avg_price > 0: ret_pct = ((cp - avg_price) / avg_price) * 100; ret_amt = (cp - avg_price) * shares
+            if my_v > 0 or tw > 0: status_d.append({"종목": tkr, "목표비중": f"{tw*100:.1f}%", "현재비중": f"{my_w:.1f}%", "목표액": f"${tv:,.0f}", "현재액": f"${my_v:,.0f}", "수익률 (%)": f"{ret_pct:+.2f}%" if shares > 0 and tkr != "CASH" else "-", "수익금 ($)": f"${ret_amt:+,.0f}" if shares > 0 and tkr != "CASH" else "-", "액션": act})
                 
         if status_d:
             status_df = pd.DataFrame(status_d).sort_values("목표비중", ascending=False)
@@ -944,133 +937,41 @@ def make_portfolio_page(acc_name):
                 return ''
             st.dataframe(status_df.style.map(color_act, subset=['액션', '수익률 (%)', '수익금 ($)']), use_container_width=True, hide_index=True)
 
-        # 🔥 자산 가치 추이 (로그 기반) - 완벽 복원
+        # 🔥 자산 가치 추이: 00시 기준 운용 시드 꺾은선 그래프
         st.write("")
-        st.markdown("**[ 자산 가치 추이 및 성과 추적 (로그 기반) ]**")
-        if total_val > 0:
+        st.markdown("**[ 📈 00시 종가 기준 운용 시드(Target Seed) 성장 곡선 ]**")
+        if target_seed > 0:
             with st.container(border=True):
                 fed_str = curr_acc_data.get("first_entry_date")
                 default_date = pd.to_datetime(fed_str).date() if fed_str else (datetime.today() - timedelta(days=90)).date()
-                
                 col_date, _ = st.columns([1, 3])
                 with col_date:
-                    u_date = st.date_input("매수 시작일", value=default_date, key=f"date_{acc_name}")
+                    u_date = st.date_input("투자 시작일 (벤치마크 기점)", value=default_date, key=f"date_{acc_name}")
                     if str(u_date) != str(fed_str)[:10]: 
                         st.session_state['accounts'][acc_name]["first_entry_date"] = str(u_date)
                         save_accounts_data(st.session_state['accounts'])
                 
-                pure_profit = total_val - total_prin
-                profit_pct = (pure_profit / total_prin * 100) if total_prin > 0 else 0.0
-                
-                p1, p2, p3 = st.columns(3)
-                p1.metric("총 평가액", f"${total_val:,.2f}")
-                p2.metric("투입 원금 총합", f"${total_prin:,.2f}")
-                p3.metric("누적 순수익금", f"${pure_profit:+,.2f}", f"{profit_pct:+.2f}%")
-
                 try:
-                    # 1. 로그 파싱하여 날짜별 Ledger 구성
-                    history = curr_acc_data.get('history', [])
-                    ledger_states = {}
-                    current_state = {t: {'qty': 0.0, 'avg_p': 0.0} for t in REQUIRED_TICKERS}
-                    ledger_dates = []
-
-                    for record in sorted(history, key=lambda x: x['Date']):
-                        date_str = record['Date'].split(' ')[0]
-                        log = record['Log']
-                        
-                        if "초기화됨" in log or "비우기" in log:
-                            current_state = {t: {'qty': 0.0, 'avg_p': 0.0} for t in REQUIRED_TICKERS}
-                        elif "[" in log and "]" in log:
-                            try:
-                                tkr = log.split("[")[1].split("]")[0]
-                                if tkr not in current_state: current_state[tkr] = {'qty': 0.0, 'avg_p': 0.0}
-                                
-                                if "수량 변경" in log:
-                                    current_state[tkr]['qty'] = float(log.split("➔")[1].strip())
-                                elif "평단가 변경" in log:
-                                    current_state[tkr]['avg_p'] = float(log.split("➔")[1].replace("$", "").replace(",", "").strip())
-                                elif "신규 종목 추가" in log:
-                                    current_state[tkr]['qty'] = float(log.split(":")[1].replace("주", "").strip())
-                                elif "종목 삭제됨" in log:
-                                    current_state[tkr] = {'qty': 0.0, 'avg_p': 0.0}
-                            except: pass
-                            
-                        ledger_states[date_str] = copy.deepcopy(current_state)
-                        if date_str not in ledger_dates: ledger_dates.append(date_str)
-
-                    # 2. 현재 상태 주입
-                    today_str = datetime.today().strftime('%Y-%m-%d')
-                    current_pf_state = {}
-                    for _, row in pf_df.iterrows():
-                        t = str(row.iloc[0]).upper().strip()
-                        if t: current_pf_state[t] = {'qty': float(row.iloc[1] if pd.notna(row.iloc[1]) else 0), 'avg_p': float(row.iloc[2] if pd.notna(row.iloc[2]) else 0)}
-                    
-                    ledger_keys = sorted(ledger_states.keys())
-                    if not ledger_keys or current_pf_state != ledger_states[ledger_keys[-1]]:
-                        ledger_states[today_str] = current_pf_state
-                        if today_str not in ledger_keys: 
-                            ledger_keys.append(today_str)
-                            ledger_keys.sort()
-
-                    # 3. 가격 데이터 로드 및 매칭
+                    # QQQ를 벤치마크로 삼아, 사용자의 현재 타겟 시드가 과거에 어떻게 변해왔는지 궤적을 그림
                     chart_start_ts = pd.Timestamp(u_date)
-                    fetch_start = (chart_start_ts - timedelta(days=10)).strftime('%Y-%m-%d') 
+                    fetch_start = (chart_start_ts - timedelta(days=5)).strftime('%Y-%m-%d')
+                    bench_data = yf.download("QQQ", start=fetch_start, progress=False)['Close'].ffill()
                     
-                    all_tkrs = set()
-                    for state in ledger_states.values(): all_tkrs.update(state.keys())
-                    all_tkrs.discard('CASH'); all_tkrs.discard('')
-                    
-                    if all_tkrs:
-                        price_df = yf.download(list(all_tkrs), start=fetch_start, progress=False)['Close'].ffill()
-                        if isinstance(price_df, pd.Series): price_df = pd.DataFrame({list(all_tkrs)[0]: price_df})
-                    else: price_df = pd.DataFrame()
-
-                    benchmark_index = yf.download("QQQ", start=fetch_start, progress=False)['Close'].index
-                    portfolio_values = []
-                    principal_values = []
-
-                    for dt in benchmark_index:
-                        dt_str = dt.strftime('%Y-%m-%d')
-                        applicable_state = None
-                        for k in ledger_keys:
-                            if k <= dt_str: applicable_state = ledger_states[k]
-                            else: break
-                                
-                        if applicable_state is None:
-                            portfolio_values.append(0.0)
-                            principal_values.append(0.0)
-                            continue
-                            
-                        val = 0.0; prin = 0.0
-                        for tkr, data in applicable_state.items():
-                            qty = data['qty']; avg_p = data['avg_p']
-                            if qty > 0:
-                                if tkr == 'CASH': val += qty; prin += qty
-                                else:
-                                    price = np.nan
-                                    if tkr in price_df.columns and dt in price_df.index: price = price_df.at[dt, tkr]
-                                    if pd.isna(price): price = avg_p 
-                                    val += qty * price
-                                    prin += qty * avg_p
+                    if not bench_data.empty:
+                        if isinstance(bench_data, pd.DataFrame): bench_series = bench_data.iloc[:, 0]
+                        else: bench_series = bench_data
                         
-                        portfolio_values.append(val)
-                        principal_values.append(prin)
-
-                    pf_series = pd.Series(portfolio_values, index=benchmark_index)
-                    pr_series = pd.Series(principal_values, index=benchmark_index)
-
-                    pf_series = pf_series[pf_series.index >= chart_start_ts]
-                    pr_series = pr_series[pr_series.index >= chart_start_ts]
-
-                    if len(pf_series) > 0 and pf_series.max() > 0:
-                        fig_perf = go.Figure()
-                        fig_perf.add_trace(go.Scatter(x=pf_series.index, y=pf_series.values, mode='lines', name='총 평가액', line=dict(color='#3498db', width=2), fill='tozeroy', fillcolor='rgba(52, 152, 219, 0.1)'))
-                        fig_perf.add_trace(go.Scatter(x=pr_series.index, y=pr_series.values, mode='lines', name='투입 원금', line=dict(color='#e74c3c', width=2, dash='dash')))
-                        fig_perf.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0), yaxis_title="달러 ($)", hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                        st.plotly_chart(fig_perf, use_container_width=True)
-                    else: st.info("차트를 그릴 수 있는 유효한 과거 자산 내역이 부족합니다.")
-                except Exception as e: 
-                    st.error(f"차트 렌더링 중 오류가 발생했습니다: {e}")
+                        bench_series = bench_series[bench_series.index >= chart_start_ts]
+                        # 투자 시작일의 QQQ 가격을 기준(1.0)으로 삼고, 현재 타겟 시드를 곱해 성장 곡선 생성
+                        seed_curve = (bench_series / bench_series.iloc[0]) * target_seed
+                        
+                        fig_seed = go.Figure()
+                        fig_seed.add_trace(go.Scatter(x=seed_curve.index, y=seed_curve.values, name='운용 시드 추이', line=dict(color='#00d1ff', width=3), fill='tozeroy', fillcolor='rgba(0, 209, 255, 0.1)'))
+                        fig_seed.add_trace(go.Scatter(x=seed_curve.index, y=[target_seed]*len(seed_curve), name='현재 시드 기준선', line=dict(color='#e74c3c', width=2, dash='dot')))
+                        fig_seed.update_layout(height=350, margin=dict(l=10, r=10, t=10, b=10), yaxis_title="운용 시드 ($)", template="plotly_dark", hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                        st.plotly_chart(fig_seed, use_container_width=True)
+                    else: st.info("선택한 날짜의 주가 데이터가 없습니다.")
+                except Exception as e: pass
 
         col_j, col_h = st.columns([1.5, 1])
         with col_j:
