@@ -399,7 +399,7 @@ def page_amls_backtest():
 
 
 # =====================================================================
-# [4] 페이지 구성: 내 포트폴리오 관리 (UI/UX 2.0 완벽 복구본)
+# [4] 페이지 구성: 내 포트폴리오 관리 (UI 최적화 및 액션 지침 복구)
 # =====================================================================
 def make_portfolio_page(acc_name):
     def page_func():
@@ -434,15 +434,13 @@ def make_portfolio_page(acc_name):
         with st.spinner("시장 데이터 동기화 및 AI 분석 중..."): 
             ms = get_market_status()
 
-        # 🔥 실시간 시장 인텔리전스 (Plotly Gauge 시각화 도입 & 텍스트 잘림 해결)
+        # 🔥 실시간 시장 인텔리전스
         st.markdown("### 📡 실시간 시장 인텔리전스 (Market Intelligence)")
         with st.container(border=True):
             st.markdown(f"**기준일:** {ms['date'].strftime('%Y-%m-%d')} 종가")
             
-            # --- 1열: 게이지 차트 3종 세트 ---
             col1, col2, col3 = st.columns(3)
             
-            # VIX Gauge
             with col1:
                 vix_val = ms['vix']
                 fig_vix = go.Figure(go.Indicator(
@@ -453,11 +451,9 @@ def make_portfolio_page(acc_name):
                         'steps': [{'range': [0, 25], 'color': "#2ecc71"}, {'range': [25, 40], 'color': "#f39c12"}, {'range': [40, 80], 'color': "#e74c3c"}],
                         'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': 40}
                     }))
-                # 여백(margin)을 늘려 글씨가 잘리는 현상 방지
                 fig_vix.update_layout(height=240, margin=dict(l=30, r=30, t=50, b=20), template="plotly_dark")
                 st.plotly_chart(fig_vix, use_container_width=True)
 
-            # QQQ Distance Gauge
             with col2:
                 q_dist = (ms['qqq'] / ms['ma200'] - 1) * 100
                 fig_qqq = go.Figure(go.Indicator(
@@ -472,7 +468,6 @@ def make_portfolio_page(acc_name):
                 fig_qqq.update_layout(height=240, margin=dict(l=30, r=30, t=50, b=20), template="plotly_dark")
                 st.plotly_chart(fig_qqq, use_container_width=True)
 
-            # SMH RSI Gauge
             with col3:
                 rsi_val = ms['smh_rsi']
                 fig_rsi = go.Figure(go.Indicator(
@@ -488,7 +483,6 @@ def make_portfolio_page(acc_name):
 
             st.divider()
 
-            # --- 2열: 반도체 3대 모멘텀 지표 (복구본) ---
             st.markdown("#### ⚡ 반도체 3배(SOXL) 진입 판독기")
             col_s1, col_s2, col_s3 = st.columns(3)
             with col_s1:
@@ -504,7 +498,6 @@ def make_portfolio_page(acc_name):
 
             st.divider()
 
-            # --- 3열: AI 분석관 브리핑 ---
             st.markdown("##### 🤖 AMLS AI 전략 분석관 Report")
             app_reg = ms['regime']
             
@@ -572,7 +565,7 @@ def make_portfolio_page(acc_name):
                 fig.update_layout(height=320, margin=dict(l=0,r=0,t=0,b=0), showlegend=False, annotations=[dict(text=f"총 평가액<br><b>${total_val:,.0f}</b>", x=0.5, y=0.5, font_size=16, showarrow=False)])
                 st.plotly_chart(fig, use_container_width=True)
 
-        # 🔥 리밸런싱 액션 지침 복구본
+        # 🔥 리밸런싱 액션 지침 복구 (주식 수 계산 추가)
         st.write("")
         st.markdown("**[ 🎯 리밸런싱 액션 지침 ]**")
         target_seed = st.number_input("운용 시드 입력 ($)", value=float(curr_acc_data.get("target_seed", 10000.0)), step=1000.0, key=f"seed_{acc_name}")
@@ -603,10 +596,20 @@ def make_portfolio_page(acc_name):
             tv = target_seed * tw
             diff = tv - my_v
             cp = live_prices.get(tkr, 0.0)
-            act = "적정" if abs(diff) < 50 else (f"🟢 ${diff:,.0f} 매수" if diff > 0 else f"🔴 ${abs(diff):,.0f} 매도")
+            
+            # 🔥 신규: 매수/매도해야 할 예상 주식 수(Shares) 계산 로직 추가
+            if tkr != "CASH" and cp > 0:
+                shares_to_trade = abs(diff) / cp
+                action_suffix = f" (약 {shares_to_trade:.1f}주)"
+            else:
+                action_suffix = ""
+
+            if abs(diff) < 50: action = "적정 (유지)"
+            elif diff > 0: action = f"🟢 ${diff:,.0f} 매수{action_suffix}"
+            else: action = f"🔴 ${abs(diff):,.0f} 매도{action_suffix}"
             
             if my_v > 0 or tw > 0: 
-                status_d.append({"종목": tkr, "목표비중": f"{tw*100:.1f}%", "현재비중": f"{my_w:.1f}%", "목표액": f"${tv:,.0f}", "현재액": f"${my_v:,.0f}", "액션": act})
+                status_d.append({"종목": tkr, "목표비중": f"{tw*100:.1f}%", "현재비중": f"{my_w:.1f}%", "목표액": f"${tv:,.0f}", "현재액": f"${my_v:,.0f}", "액션": action})
                 
         if status_d:
             status_df = pd.DataFrame(status_d).sort_values("목표비중", ascending=False)
