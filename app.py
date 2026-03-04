@@ -97,18 +97,44 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq="월 
         return 2
 
     df['Target_Regime'] = df.apply(get_target_regime, axis=1)
-    cv, pv, cnt, act = 3, None, 0, []
+    
+    # 🔥 복구됨: v4 및 v4.3 국면 계산 로직 독립 분리
+    actual_regime_v4 = []
+    actual_regime_v4_3 = []
+    current_v4 = 3
+    current_v4_3 = 3
+    pend_v4 = None
+    pend_v4_3 = None
+    cnt_v4 = 0
+    cnt_v4_3 = 0
+
     for i in range(len(df)):
         tr = df['Target_Regime'].iloc[i]
-        if tr > cv: cv, pv, cnt = tr, None, 0; act.append(cv)
-        elif tr < cv:
-            if tr == pv:
-                cnt += 1
-                if cnt >= 5: cv, pv, cnt = tr, None, 0; act.append(cv)
-                else: act.append(cv)
-            else: pv, cnt = tr, 1; act.append(cv)
-        else: pv, cnt = None, 0; act.append(cv)
-    df['Signal_Regime_v4_3'] = pd.Series(act, index=df.index).shift(1).bfill()
+        
+        # AMLS v4 로직 (Legacy)
+        if tr > current_v4: 
+            current_v4 = tr; pend_v4 = None; cnt_v4 = 0; actual_regime_v4.append(current_v4)
+        elif tr < current_v4:
+            if tr == pend_v4:
+                cnt_v4 += 1
+                if cnt_v4 >= 5: current_v4 = tr; pend_v4 = None; cnt_v4 = 0; actual_regime_v4.append(current_v4)
+                else: actual_regime_v4.append(current_v4)
+            else: pend_v4 = tr; cnt_v4 = 1; actual_regime_v4.append(current_v4)
+        else: pend_v4 = None; cnt_v4 = 0; actual_regime_v4.append(current_v4)
+        
+        # AMLS v4.3 로직 (단계적 진입)
+        if tr > current_v4_3: 
+            current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0; actual_regime_v4_3.append(current_v4_3)
+        elif tr < current_v4_3: 
+            if tr == pend_v4_3:
+                cnt_v4_3 += 1
+                if cnt_v4_3 >= 5: current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0; actual_regime_v4_3.append(current_v4_3)
+                else: actual_regime_v4_3.append(current_v4_3 - 1)
+            else: pend_v4_3 = tr; cnt_v4_3 = 1; actual_regime_v4_3.append(current_v4_3 - 1)
+        else: pend_v4_3 = None; cnt_v4_3 = 0; actual_regime_v4_3.append(current_v4_3)
+
+    df['Signal_Regime_v4'] = pd.Series(actual_regime_v4, index=df.index).shift(1).bfill()
+    df['Signal_Regime_v4_3'] = pd.Series(actual_regime_v4_3, index=df.index).shift(1).bfill()
 
     def get_v4_weights(regime, use_soxl):
         w = {t: 0.0 for t in data.columns}
@@ -156,9 +182,10 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq="월 
             
         for s in ports: hists[s].append(ports[s])
         
-        tr, sig_r_v4 = df['Target_Regime'].iloc[i], df['Signal_Regime_v4'].iloc[i]
         use_soxl = (df['SMH'].iloc[i-1] > df['SMH_MA50'].iloc[i-1]) and (df['SMH_3M_Ret'].iloc[i-1] > 0.05) and (df['SMH_RSI'].iloc[i-1] > 50)
         
+        # AMLS v4 리밸런싱
+        sig_r_v4 = df['Signal_Regime_v4'].iloc[i]
         rebal_v4 = False
         if sig_r_v4 != df['Signal_Regime_v4'].iloc[i-1] or i == 1: rebal_v4 = True
         elif rebal_freq == "월 1회" and today.month != yesterday.month: rebal_v4 = True
@@ -170,6 +197,7 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq="월 
             weights_v4 = get_v4_weights(sig_r_v4, use_soxl)
             days_since_v4 = 0
 
+        # AMLS v4.3 리밸런싱
         sig_r_v4_3 = df['Signal_Regime_v4_3'].iloc[i]
         rebal_v4_3 = False
         if sig_r_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] or i == 1: rebal_v4_3 = True
@@ -377,7 +405,7 @@ def page_amls_backtest():
 
 
 # =====================================================================
-# [4] 페이지 구성: 내 포트폴리오 관리
+# [4] 페이지 구성: 내 포트폴리오 관리 (시장 인텔리전스 고급 시각화)
 # =====================================================================
 def make_portfolio_page(acc_name):
     def page_func():
@@ -419,6 +447,7 @@ def make_portfolio_page(acc_name):
             
             col1, col2, col3 = st.columns(3)
             
+            # 1. VIX Gauge
             with col1:
                 vix_val = ms['vix']
                 fig_vix = go.Figure(go.Indicator(
@@ -433,6 +462,7 @@ def make_portfolio_page(acc_name):
                 st.plotly_chart(fig_vix, use_container_width=True)
                 st.caption("✅ 25 미만: 안정 | ⚠️ 40 미만: 경계 | 🚨 40 이상: 패닉(R4)")
 
+            # 2. QQQ Distance Gauge
             with col2:
                 q_dist = (ms['qqq'] / ms['ma200'] - 1) * 100
                 fig_qqq = go.Figure(go.Indicator(
@@ -448,6 +478,7 @@ def make_portfolio_page(acc_name):
                 st.plotly_chart(fig_qqq, use_container_width=True)
                 st.caption("✅ 0% 이상: 장기 상승 추세 | 🚨 0% 미만: 하락장(R3)")
 
+            # 3. SMH RSI Gauge
             with col3:
                 rsi_val = ms['smh_rsi']
                 fig_rsi = go.Figure(go.Indicator(
@@ -479,9 +510,9 @@ def make_portfolio_page(acc_name):
                 elif app_reg == 1:
                     st.success("🔥 **[강세] 완벽한 골디락스 상승장.** VIX가 안정적이고 이평선이 정배열을 이뤘습니다. 적극적인 **3배 레버리지(TQQQ, SOXL) 베팅**을 통해 자산을 폭발적으로 증식시킬 최적의 구간입니다.")
                 else:
-                    st.info("🛡️ **[조정] 안전 마진 확보 구간.** 상승 추세는 살아있으나 변동성이 확대되거나 단기 모멘텀이 꺾였습니다. 과도한 레버리지를 축소하고 QLD/SSO 등 2배수로 속도를 조절하세요.")
+                    st.info("🛡️ **[조정] 안전 마진 확보 구간.** 상승 추세는 살아있으나 변동성이 감지되는 조정 국면입니다. 3배 레버리지 비중을 줄이고 안전 마진을 일정 수준 확보하세요.")
 
-        # --- 자산 기입표 & 도넛 차트 ---
+        # --- 💼 자산 기입표 & 도넛 차트 ---
         st.write("")
         c_h1, c_h2 = st.columns([5, 1])
         with c_h1: st.markdown(f"**[ 💼 포트폴리오 기입표 및 실시간 수익률 ]**")
@@ -531,63 +562,10 @@ def make_portfolio_page(acc_name):
                 fig.update_layout(height=320, margin=dict(l=0,r=0,t=0,b=0), showlegend=False, annotations=[dict(text=f"총 평가액<br><b>${total_val:,.0f}</b>", x=0.5, y=0.5, font_size=16, showarrow=False)])
                 st.plotly_chart(fig, use_container_width=True)
 
-        st.write("")
-        st.markdown("**[ 🎯 리밸런싱 액션 지침 ]**")
-        target_seed = st.number_input("운용 시드 입력 ($)", value=float(curr_acc_data.get("target_seed", 10000.0)), step=1000.0, key=f"seed_{acc_name}")
-        if target_seed != curr_acc_data.get("target_seed"):
-            st.session_state['accounts'][acc_name]["target_seed"] = target_seed
-            save_accounts_data(st.session_state['accounts'])
-
-        status_d = []
-        tw_dict = get_market_status()['target_weights'] if 'target_weights' in get_market_status() else {t:0.0 for t in REQUIRED_TICKERS} 
-        # Fallback if target_weights wasn't in dict (It's not in ms directly now, let's recalculate)
-        
-        smh_cond = (ms['smh'] > ms['smh_ma50']) and (ms['smh_3m_ret'] > 0.05) and (ms['smh_rsi'] > 50)
-        def get_w_local(reg, usx):
-            w = {t: 0.0 for t in REQUIRED_TICKERS}
-            semi = 'SOXL' if usx else 'USD'
-            if reg == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'], w['CASH'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
-            elif reg == 2: w['QLD'], w['SSO'], w['GLD'], w['USD'], w['QQQ'], w['CASH'] = 0.30, 0.25, 0.20, 0.10, 0.05, 0.10
-            elif reg == 3: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.35, 0.15
-            elif reg == 4: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.40, 0.10
-            return {k: v for k, v in w.items() if v > 0}
-            
-        target_w_dict = get_w_local(ms['regime'], smh_cond)
-
-        all_tkrs = set([t for t in asset_vals.keys()] + list(target_w_dict.keys()))
-        for tkr in all_tkrs:
-            tkr = tkr.upper()
-            my_v = asset_vals.get(tkr, 0.0)
-            my_w = (my_v / total_val * 100) if total_val > 0 else 0.0
-            tw = target_w_dict.get(tkr, 0.0)
-            tv = target_seed * tw
-            diff = tv - my_v
-            cp = live_prices.get(tkr, 0.0)
-            act = "적정" if abs(diff) < 50 else (f"🟢 ${diff:,.0f} 매수" if diff > 0 else f"🔴 ${abs(diff):,.0f} 매도")
-            
-            if my_v > 0 or tw > 0: 
-                status_d.append({"종목": tkr, "목표비중": f"{tw*100:.1f}%", "현재비중": f"{my_w:.1f}%", "목표액": f"${tv:,.0f}", "현재액": f"${my_v:,.0f}", "액션": act})
-                
-        if status_d:
-            status_df = pd.DataFrame(status_d).sort_values("목표비중", ascending=False)
-            fig_comp = go.Figure(data=[
-                go.Bar(name='현재 비중 (Actual)', x=list(status_df['종목']), y=[float(str(x).replace('%','')) for x in status_df['현재비중']], marker_color='#3498db'),
-                go.Bar(name='목표 비중 (Target)', x=list(status_df['종목']), y=[float(str(x).replace('%','')) for x in status_df['목표비중']], marker_color='#18bc9c')
-            ])
-            fig_comp.update_layout(barmode='group', height=250, margin=dict(t=30, b=0, l=0, r=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-            st.plotly_chart(fig_comp, use_container_width=True)
-
-            def color_act(val):
-                val_s = str(val)
-                if '매수' in val_s: return 'color: #ff4b4b; font-weight: bold;'
-                elif '매도' in val_s: return 'color: #3498db; font-weight: bold;'
-                return ''
-            st.dataframe(status_df.style.map(color_act, subset=['액션']), use_container_width=True, hide_index=True)
-
-
         # --- 📈 자산 가치 추이: 운용 시드 곡선 ---
         st.write("")
         st.markdown("**[ 📈 00시 종가 기준 운용 시드(Target Seed) 성장 곡선 ]**")
+        target_seed = curr_acc_data.get('target_seed', 10000.0)
         
         if target_seed > 0:
             with st.container(border=True):
