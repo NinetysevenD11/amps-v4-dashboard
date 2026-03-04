@@ -98,7 +98,6 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq="월 
 
     df['Target_Regime'] = df.apply(get_target_regime, axis=1)
     
-    # 🔥 복구됨: v4 및 v4.3 국면 계산 로직 독립 분리
     actual_regime_v4 = []
     actual_regime_v4_3 = []
     current_v4 = 3
@@ -111,7 +110,6 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq="월 
     for i in range(len(df)):
         tr = df['Target_Regime'].iloc[i]
         
-        # AMLS v4 로직 (Legacy)
         if tr > current_v4: 
             current_v4 = tr; pend_v4 = None; cnt_v4 = 0; actual_regime_v4.append(current_v4)
         elif tr < current_v4:
@@ -122,7 +120,6 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq="월 
             else: pend_v4 = tr; cnt_v4 = 1; actual_regime_v4.append(current_v4)
         else: pend_v4 = None; cnt_v4 = 0; actual_regime_v4.append(current_v4)
         
-        # AMLS v4.3 로직 (단계적 진입)
         if tr > current_v4_3: 
             current_v4_3 = tr; pend_v4_3 = None; cnt_v4_3 = 0; actual_regime_v4_3.append(current_v4_3)
         elif tr < current_v4_3: 
@@ -184,7 +181,6 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq="월 
         
         use_soxl = (df['SMH'].iloc[i-1] > df['SMH_MA50'].iloc[i-1]) and (df['SMH_3M_Ret'].iloc[i-1] > 0.05) and (df['SMH_RSI'].iloc[i-1] > 50)
         
-        # AMLS v4 리밸런싱
         sig_r_v4 = df['Signal_Regime_v4'].iloc[i]
         rebal_v4 = False
         if sig_r_v4 != df['Signal_Regime_v4'].iloc[i-1] or i == 1: rebal_v4 = True
@@ -197,7 +193,6 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq="월 
             weights_v4 = get_v4_weights(sig_r_v4, use_soxl)
             days_since_v4 = 0
 
-        # AMLS v4.3 리밸런싱
         sig_r_v4_3 = df['Signal_Regime_v4_3'].iloc[i]
         rebal_v4_3 = False
         if sig_r_v4_3 != df['Signal_Regime_v4_3'].iloc[i-1] or i == 1: rebal_v4_3 = True
@@ -215,7 +210,6 @@ def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq="월 
 
     for s in ports: df[f'{s}_Value'] = hists[s]
     
-    # 실제 월별 투입금액 보정
     inv_arr = [init_cap]
     curr_inv = init_cap
     for i in range(1, len(df)):
@@ -405,7 +399,7 @@ def page_amls_backtest():
 
 
 # =====================================================================
-# [4] 페이지 구성: 내 포트폴리오 관리 (시장 인텔리전스 고급 시각화)
+# [4] 페이지 구성: 내 포트폴리오 관리 (UI/UX 2.0 완벽 복구본)
 # =====================================================================
 def make_portfolio_page(acc_name):
     def page_func():
@@ -440,68 +434,84 @@ def make_portfolio_page(acc_name):
         with st.spinner("시장 데이터 동기화 및 AI 분석 중..."): 
             ms = get_market_status()
 
-        # 🔥 실시간 시장 인텔리전스 (Plotly Gauge 시각화 도입)
+        # 🔥 실시간 시장 인텔리전스 (Plotly Gauge 시각화 도입 & 텍스트 잘림 해결)
         st.markdown("### 📡 실시간 시장 인텔리전스 (Market Intelligence)")
         with st.container(border=True):
             st.markdown(f"**기준일:** {ms['date'].strftime('%Y-%m-%d')} 종가")
             
+            # --- 1열: 게이지 차트 3종 세트 ---
             col1, col2, col3 = st.columns(3)
             
-            # 1. VIX Gauge
+            # VIX Gauge
             with col1:
                 vix_val = ms['vix']
                 fig_vix = go.Figure(go.Indicator(
-                    mode = "gauge+number", value = vix_val, title = {'text': "시장 공포탐욕 지수 (VIX)", 'font': {'size': 16}},
+                    mode = "gauge+number", value = vix_val, title = {'text': "시장 공포탐욕 지수 (VIX)", 'font': {'size': 14}},
                     gauge = {
                         'axis': {'range': [0, 80], 'tickwidth': 1, 'tickcolor': "white"},
                         'bar': {'color': "white", 'thickness': 0.2},
                         'steps': [{'range': [0, 25], 'color': "#2ecc71"}, {'range': [25, 40], 'color': "#f39c12"}, {'range': [40, 80], 'color': "#e74c3c"}],
                         'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': 40}
                     }))
-                fig_vix.update_layout(height=220, margin=dict(l=10, r=10, t=40, b=10), template="plotly_dark")
+                # 여백(margin)을 늘려 글씨가 잘리는 현상 방지
+                fig_vix.update_layout(height=240, margin=dict(l=30, r=30, t=50, b=20), template="plotly_dark")
                 st.plotly_chart(fig_vix, use_container_width=True)
-                st.caption("✅ 25 미만: 안정 | ⚠️ 40 미만: 경계 | 🚨 40 이상: 패닉(R4)")
 
-            # 2. QQQ Distance Gauge
+            # QQQ Distance Gauge
             with col2:
                 q_dist = (ms['qqq'] / ms['ma200'] - 1) * 100
                 fig_qqq = go.Figure(go.Indicator(
                     mode = "gauge+number", value = q_dist, number={'suffix': "%", 'valueformat': "+.1f"},
-                    title = {'text': "QQQ 200일선 이격도", 'font': {'size': 16}},
+                    title = {'text': "QQQ 200일선 이격도", 'font': {'size': 14}},
                     gauge = {
                         'axis': {'range': [-30, 30], 'tickwidth': 1, 'tickcolor': "white"},
                         'bar': {'color': "white", 'thickness': 0.2},
                         'steps': [{'range': [-30, 0], 'color': "#e74c3c"}, {'range': [0, 30], 'color': "#2ecc71"}],
                         'threshold': {'line': {'color': "yellow", 'width': 4}, 'thickness': 0.75, 'value': 0}
                     }))
-                fig_qqq.update_layout(height=220, margin=dict(l=10, r=10, t=40, b=10), template="plotly_dark")
+                fig_qqq.update_layout(height=240, margin=dict(l=30, r=30, t=50, b=20), template="plotly_dark")
                 st.plotly_chart(fig_qqq, use_container_width=True)
-                st.caption("✅ 0% 이상: 장기 상승 추세 | 🚨 0% 미만: 하락장(R3)")
 
-            # 3. SMH RSI Gauge
+            # SMH RSI Gauge
             with col3:
                 rsi_val = ms['smh_rsi']
                 fig_rsi = go.Figure(go.Indicator(
-                    mode = "gauge+number", value = rsi_val, title = {'text': "반도체(SMH) RSI 모멘텀", 'font': {'size': 16}},
+                    mode = "gauge+number", value = rsi_val, title = {'text': "반도체(SMH) RSI 모멘텀", 'font': {'size': 14}},
                     gauge = {
                         'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "white"},
                         'bar': {'color': "white", 'thickness': 0.2},
                         'steps': [{'range': [0, 30], 'color': "#e74c3c"}, {'range': [30, 50], 'color': "#f39c12"}, {'range': [50, 100], 'color': "#3498db"}],
                         'threshold': {'line': {'color': "green", 'width': 4}, 'thickness': 0.75, 'value': 50}
                     }))
-                fig_rsi.update_layout(height=220, margin=dict(l=10, r=10, t=40, b=10), template="plotly_dark")
+                fig_rsi.update_layout(height=240, margin=dict(l=30, r=30, t=50, b=20), template="plotly_dark")
                 st.plotly_chart(fig_rsi, use_container_width=True)
-                st.caption("✅ 50 이상: 반도체 3배(SOXL) 진입 조건 충족")
 
             st.divider()
-            
-            # 🔥 AI 레짐 판단 브리핑
+
+            # --- 2열: 반도체 3대 모멘텀 지표 (복구본) ---
+            st.markdown("#### ⚡ 반도체 3배(SOXL) 진입 판독기")
+            col_s1, col_s2, col_s3 = st.columns(3)
+            with col_s1:
+                s_icon = "✅" if ms['smh'] > ms['smh_ma50'] else "❌"
+                st.info(f"**{s_icon} 단기 추세 (50일선)**\n\n`{'돌파 (강세)' if ms['smh'] > ms['smh_ma50'] else '붕괴 (약세)'}`")
+            with col_s2:
+                ret_val = ms['smh_3m_ret'] * 100
+                r_icon = "✅" if ret_val > 5.0 else "❌"
+                st.info(f"**{r_icon} 3개월 누적 수익률**\n\n`{ret_val:+.2f}%` (기준: > 5%)")
+            with col_s3:
+                rsi_icon = "✅" if rsi_val > 50 else "❌"
+                st.info(f"**{rsi_icon} 상대강도지수 (RSI 14)**\n\n`{rsi_val:.1f}` (기준: > 50)")
+
+            st.divider()
+
+            # --- 3열: AI 분석관 브리핑 ---
             st.markdown("##### 🤖 AMLS AI 전략 분석관 Report")
             app_reg = ms['regime']
             
             col_a1, col_a2 = st.columns([1, 4])
             with col_a1:
-                st.markdown(f"<div style='text-align: center; padding: 20px; border-radius: 10px; background-color: {'#e74c3c' if app_reg>=3 else '#2ecc71'};'><h1 style='color: white; margin:0;'>R{app_reg}</h1><p style='color: white; margin:0;'>현재 국면</p></div>", unsafe_allow_html=True)
+                bg_color = "#e74c3c" if app_reg >= 3 else "#2ecc71"
+                st.markdown(f"<div style='text-align: center; padding: 20px; border-radius: 10px; background-color: {bg_color};'><h1 style='color: white; margin:0;'>R{app_reg}</h1><p style='color: white; margin:0;'>현재 국면</p></div>", unsafe_allow_html=True)
             with col_a2:
                 if app_reg == 4:
                     st.error("🚨 **[초비상] 패닉장 도래!** VIX 지수가 40을 돌파했습니다. 시스템이 시장의 붕괴를 감지했습니다. 모든 주식 포지션을 전량 청산하고 즉시 **현금 및 금(GLD)**으로 대피하십시오.")
@@ -510,7 +520,7 @@ def make_portfolio_page(acc_name):
                 elif app_reg == 1:
                     st.success("🔥 **[강세] 완벽한 골디락스 상승장.** VIX가 안정적이고 이평선이 정배열을 이뤘습니다. 적극적인 **3배 레버리지(TQQQ, SOXL) 베팅**을 통해 자산을 폭발적으로 증식시킬 최적의 구간입니다.")
                 else:
-                    st.info("🛡️ **[조정] 안전 마진 확보 구간.** 상승 추세는 살아있으나 변동성이 감지되는 조정 국면입니다. 3배 레버리지 비중을 줄이고 안전 마진을 일정 수준 확보하세요.")
+                    st.info("🛡️ **[조정] 안전 마진 확보 구간.** 상승 추세는 살아있으나 변동성이 확대되거나 단기 모멘텀이 꺾였습니다. 과도한 레버리지를 축소하고 QLD/SSO 등 2배수로 속도를 조절하세요.")
 
         # --- 💼 자산 기입표 & 도넛 차트 ---
         st.write("")
@@ -562,10 +572,62 @@ def make_portfolio_page(acc_name):
                 fig.update_layout(height=320, margin=dict(l=0,r=0,t=0,b=0), showlegend=False, annotations=[dict(text=f"총 평가액<br><b>${total_val:,.0f}</b>", x=0.5, y=0.5, font_size=16, showarrow=False)])
                 st.plotly_chart(fig, use_container_width=True)
 
+        # 🔥 리밸런싱 액션 지침 복구본
+        st.write("")
+        st.markdown("**[ 🎯 리밸런싱 액션 지침 ]**")
+        target_seed = st.number_input("운용 시드 입력 ($)", value=float(curr_acc_data.get("target_seed", 10000.0)), step=1000.0, key=f"seed_{acc_name}")
+        if target_seed != curr_acc_data.get("target_seed"):
+            st.session_state['accounts'][acc_name]["target_seed"] = target_seed
+            save_accounts_data(st.session_state['accounts'])
+
+        status_d = []
+        smh_cond = (ms['smh'] > ms['smh_ma50']) and (ms['smh_3m_ret'] > 0.05) and (ms['smh_rsi'] > 50)
+        
+        def get_w_local(reg, usx):
+            w = {t: 0.0 for t in REQUIRED_TICKERS}
+            semi = 'SOXL' if usx else 'USD'
+            if reg == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'], w['CASH'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
+            elif reg == 2: w['QLD'], w['SSO'], w['GLD'], w['USD'], w['QQQ'], w['CASH'] = 0.30, 0.25, 0.20, 0.10, 0.05, 0.10
+            elif reg == 3: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.35, 0.15
+            elif reg == 4: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.40, 0.10
+            return {k: v for k, v in w.items() if v > 0}
+            
+        target_w_dict = get_w_local(ms['regime'], smh_cond)
+
+        all_tkrs = set([t for t in asset_vals.keys()] + list(target_w_dict.keys()))
+        for tkr in all_tkrs:
+            tkr = tkr.upper()
+            my_v = asset_vals.get(tkr, 0.0)
+            my_w = (my_v / total_val * 100) if total_val > 0 else 0.0
+            tw = target_w_dict.get(tkr, 0.0)
+            tv = target_seed * tw
+            diff = tv - my_v
+            cp = live_prices.get(tkr, 0.0)
+            act = "적정" if abs(diff) < 50 else (f"🟢 ${diff:,.0f} 매수" if diff > 0 else f"🔴 ${abs(diff):,.0f} 매도")
+            
+            if my_v > 0 or tw > 0: 
+                status_d.append({"종목": tkr, "목표비중": f"{tw*100:.1f}%", "현재비중": f"{my_w:.1f}%", "목표액": f"${tv:,.0f}", "현재액": f"${my_v:,.0f}", "액션": act})
+                
+        if status_d:
+            status_df = pd.DataFrame(status_d).sort_values("목표비중", ascending=False)
+            fig_comp = go.Figure(data=[
+                go.Bar(name='현재 비중 (Actual)', x=list(status_df['종목']), y=[float(str(x).replace('%','')) for x in status_df['현재비중']], marker_color='#3498db'),
+                go.Bar(name='목표 비중 (Target)', x=list(status_df['종목']), y=[float(str(x).replace('%','')) for x in status_df['목표비중']], marker_color='#18bc9c')
+            ])
+            fig_comp.update_layout(barmode='group', height=250, margin=dict(t=30, b=0, l=0, r=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+            st.plotly_chart(fig_comp, use_container_width=True)
+
+            def color_act(val):
+                val_s = str(val)
+                if '매수' in val_s: return 'color: #ff4b4b; font-weight: bold;'
+                elif '매도' in val_s: return 'color: #3498db; font-weight: bold;'
+                return ''
+            st.dataframe(status_df.style.map(color_act, subset=['액션']), use_container_width=True, hide_index=True)
+
+
         # --- 📈 자산 가치 추이: 운용 시드 곡선 ---
         st.write("")
         st.markdown("**[ 📈 00시 종가 기준 운용 시드(Target Seed) 성장 곡선 ]**")
-        target_seed = curr_acc_data.get('target_seed', 10000.0)
         
         if target_seed > 0:
             with st.container(border=True):
