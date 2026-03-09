@@ -679,10 +679,20 @@ def make_portfolio_page(acc_name):
         # 🔥 리밸런싱 액션 지침 복구 (주식 수 계산 추가)
         st.write("")
         st.markdown("**[ 🎯 리밸런싱 액션 지침 ]**")
-        target_seed = st.number_input("운용 시드 입력 ($)", value=float(curr_acc_data.get("target_seed", 10000.0)), step=1000.0, key=f"seed_{acc_name}")
-        if target_seed != curr_acc_data.get("target_seed"):
-            st.session_state['accounts'][acc_name]["target_seed"] = target_seed
-            save_accounts_data(st.session_state['accounts'])
+        # 운용 시드 자동 계산: 포트폴리오 기입표의 (수량 × 평균 단가) 합산
+        auto_seed = 0.0
+        for _, row in ed_disp.iterrows():
+            qty = float(row["수량 (주/달러)"] if pd.notna(row["수량 (주/달러)"]) else 0)
+            avg_p = float(row["평균 단가 ($)"] if pd.notna(row["평균 단가 ($)"]) else 0)
+            tkr = str(row["티커 (Ticker)"]).upper().strip()
+            if qty > 0:
+                if tkr == "CASH":
+                    auto_seed += qty  # CASH는 수량 자체가 달러 금액
+                else:
+                    auto_seed += qty * avg_p
+        target_seed = auto_seed
+        st.session_state['accounts'][acc_name]["target_seed"] = target_seed
+        st.metric("💰 운용 시드 (투입 원금 기준, 자동 계산)", f"${target_seed:,.2f}", help="포트폴리오 기입표의 (수량 × 평균 단가) 합산입니다.")
 
         status_d = []
         smh_cond = (ms['smh'] > ms['smh_ma50']) and (ms['smh_3m_ret'] > 0.05) and (ms['smh_rsi'] > 50)
