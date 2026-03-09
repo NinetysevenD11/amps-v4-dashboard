@@ -429,11 +429,54 @@ def make_portfolio_page(acc_name):
             except:
                 current_usdkrw = 0.0
 
+            # 레짐 체류 일수 및 신규 진입 적합도 계산
+            ma200_s = data['QQQ'].rolling(200).mean()
+            ma50_s = data['QQQ'].rolling(50).mean()
+            regime_series = []
+            for i in range(len(data)):
+                v = data['^VIX'].iloc[i]; q = data['QQQ'].iloc[i]
+                m200 = ma200_s.iloc[i]; m50 = ma50_s.iloc[i]
+                if pd.isna(m200): regime_series.append(2); continue
+                if v > 40: regime_series.append(4)
+                elif q < m200: regime_series.append(3)
+                elif q >= m200 and m50 >= m200 and v < 25: regime_series.append(1)
+                else: regime_series.append(2)
+
+            current_reg = regime_series[-1]
+            regime_duration = 0
+            for i in range(len(regime_series)-1, -1, -1):
+                if regime_series[i] == current_reg: regime_duration += 1
+                else: break
+
+            prev_reg = current_reg
+            for i in range(len(regime_series)-regime_duration-1, -1, -1):
+                prev_reg = regime_series[i]; break
+
+            if current_reg < prev_reg: regime_direction = "ascending"
+            elif current_reg > prev_reg: regime_direction = "descending"
+            else: regime_direction = "stable"
+
+            if regime_direction == "ascending":
+                if regime_duration <= 10: entry_grade = "최적 진입 구간"
+                elif regime_duration <= 30: entry_grade = "진입 적합"
+                elif regime_duration <= 60: entry_grade = "진입 가능 (장기 체류)"
+                else: entry_grade = "진입 주의 — 전환 리스크"
+            elif regime_direction == "descending":
+                if regime_duration <= 5: entry_grade = "진입 보류 — 하락 전환 직후"
+                elif regime_duration <= 20: entry_grade = "진입 주의 — 추가 하락 가능"
+                else: entry_grade = "바닥 탐색 — 상향 전환 대기"
+            else:
+                if regime_duration <= 30: entry_grade = "진입 적합"
+                elif regime_duration <= 60: entry_grade = "진입 가능 (장기 체류)"
+                else: entry_grade = "진입 주의 — 전환 리스크"
+
             return {
                 'regime': reg, 'vix': today['^VIX'], 'qqq': today['QQQ'], 'ma200': ma200, 'ma50': ma50,
                 'smh': today['SMH'], 'smh_ma50': smh_ma50, 'smh_3m_ret': smh_3m_ret, 'smh_rsi': smh_rsi,
                 'prices': today.to_dict(), 'prev_prices': yesterday.to_dict(), 'date': data.index[-1],
-                'usdkrw': current_usdkrw
+                'usdkrw': current_usdkrw,
+                'regime_duration': regime_duration, 'prev_regime': prev_reg,
+                'regime_direction': regime_direction, 'entry_grade': entry_grade
             }
 
         with st.spinner("시장 데이터 동기화 및 AI 분석 중..."): 
@@ -520,6 +563,53 @@ def make_portfolio_page(acc_name):
                 else:
                     st.info("🛡️ **[조정] 안전 마진 확보 구간.** 상승 추세는 살아있으나 변동성이 확대되거나 단기 모멘텀이 꺾였습니다. 과도한 레버리지를 축소하고 QLD/SSO 등 2배수로 속도를 조절하세요.")
 
+            # 🚦 신규 진입 적합도 신호등
+            st.divider()
+            st.markdown("##### 🚦 신규 자금 투입 적합도 (New Entry Signal)")
+            entry_g = ms['entry_grade']
+            dur = ms['regime_duration']
+            direction = ms['regime_direction']
+            prev_r = ms['prev_regime']
+            reg_names = {1: 'R1 강세', 2: 'R2 보통', 3: 'R3 약세', 4: 'R4 위기'}
+            dir_arrows = {'ascending': '📈 상향', 'descending': '📉 하향', 'stable': '➡️ 유지'}
+
+            if '최적' in entry_g or ('적합' in entry_g and '주의' not in entry_g):
+                sig_color, sig_icon = '#2ecc71', '🟢'
+            elif '가능' in entry_g:
+                sig_color, sig_icon = '#f39c12', '🟡'
+            elif '보류' in entry_g or '주의' in entry_g:
+                sig_color, sig_icon = '#e67e22', '🟠'
+            elif '바닥' in entry_g or '대기' in entry_g:
+                sig_color, sig_icon = '#3498db', '🔵'
+            else:
+                sig_color, sig_icon = '#e74c3c', '🔴'
+
+            col_sig, col_detail = st.columns([1, 2.5])
+            with col_sig:
+                st.markdown(f"""
+                <div style="text-align:center; padding:16px; border-radius:12px; background:{sig_color}15; border:2px solid {sig_color};">
+                    <div style="font-size:13px; color:#aaa;">신규 자금 투입 신호</div>
+                    <div style="font-size:24px; font-weight:bold; color:{sig_color}; margin:6px 0;">{sig_icon} {entry_g}</div>
+                    <div style="font-size:12px; color:#999;">체류 {dur}일 | {reg_names.get(prev_r,'')} → {reg_names.get(app_reg,'')}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_detail:
+                st.markdown(f"**전환 방향:** {dir_arrows.get(direction, '')} ({reg_names.get(prev_r,'')} → {reg_names.get(app_reg,'')}) &nbsp; | &nbsp; **체류:** {dur}일차")
+                if direction == 'ascending' and dur <= 10:
+                    st.success("**상향 전환 초입.** 신규 진입에 가장 유리한 타이밍입니다.")
+                elif direction == 'ascending':
+                    st.success("**상향 전환 안정 구간.** 신규 진입에 적합합니다.")
+                elif direction == 'descending' and dur <= 5:
+                    st.error("**하향 전환 직후.** 신규 진입을 보류하세요. 기존 보유자는 리밸런싱을 진행하세요.")
+                elif direction == 'descending' and dur <= 20:
+                    st.warning("**하향 전환 진행 중.** 추가 하락 가능성이 있으므로 신규 진입에 신중하세요.")
+                elif direction == 'descending':
+                    st.info("**바닥 탐색 구간.** 다음 상향 전환(R3→R2 또는 R2→R1) 신호를 기다리세요.")
+                elif dur > 60:
+                    st.warning("**장기 체류 중.** 전환 리스크가 누적되고 있으므로 소규모 분할 진입을 권장합니다.")
+                else:
+                    st.info("**안정 체류 구간.** 현재 레짐에서 정상적으로 운용 가능합니다.")
+
         # --- 💼 자산 기입표 & 도넛 차트 (환율 칸 추가) ---
         st.write("")
         c_h1, c_h2 = st.columns([5, 1])
@@ -540,6 +630,13 @@ def make_portfolio_page(acc_name):
             if row["수량 (주/달러)"] == 0 or row["평균 단가 ($)"] == 0 or row["티커 (Ticker)"] == "CASH": return 0.0
             return (row["현재가 ($)"] - row["평균 단가 ($)"]) / row["평균 단가 ($)"] * 100
         disp_df["수익률 (%)"] = disp_df.apply(cy, axis=1)
+        def cy_krw(row):
+            if row["수량 (주/달러)"] == 0 or row["평균 단가 ($)"] == 0 or row["티커 (Ticker)"] == "CASH": return 0.0
+            if row["매입 환율"] <= 0 or current_usdkrw <= 0: return 0.0
+            buy_krw = row["평균 단가 ($)"] * row["매입 환율"]
+            now_krw = row["현재가 ($)"] * current_usdkrw
+            return (now_krw - buy_krw) / buy_krw * 100
+        disp_df["원화 수익률 (%)"] = disp_df.apply(cy_krw, axis=1)
 
         def color_y(val):
             if isinstance(val, (int, float)):
@@ -551,12 +648,13 @@ def make_portfolio_page(acc_name):
         with c_t:
             st.caption("💡 더블 클릭하여 수량, 평단가, 매입 환율을 입력하세요. (현재가·현재 환율·수익률은 자동 연동)")
             ed_disp = st.data_editor(
-                disp_df.style.map(color_y, subset=["수익률 (%)"]), 
+                disp_df.style.map(color_y, subset=["수익률 (%)", "원화 수익률 (%)"]), 
                 num_rows="dynamic", use_container_width=True, height=350,
                 column_config={
                     "현재가 ($)": st.column_config.NumberColumn(disabled=True, format="$ %.2f"),
                     "현재 환율": st.column_config.NumberColumn(disabled=True, format="₩ %.1f"),
                     "수익률 (%)": st.column_config.NumberColumn(disabled=True, format="%.2f %%"),
+                    "원화 수익률 (%)": st.column_config.NumberColumn(disabled=True, format="%.2f %%"),
                     "매입 환율": st.column_config.NumberColumn(format="₩ %.1f"),
                 }
             )
@@ -612,16 +710,18 @@ def make_portfolio_page(acc_name):
             
             if tkr != "CASH" and cp > 0:
                 shares_to_trade = abs(diff) / cp
-                action_suffix = f" (약 {shares_to_trade:.1f}주)"
+                krw_amt = abs(diff) * current_usdkrw if current_usdkrw > 0 else 0
+                action_suffix = f" (약 {shares_to_trade:.1f}주, ₩{krw_amt:,.0f})"
             else:
                 action_suffix = ""
+                krw_amt = abs(diff) * current_usdkrw if current_usdkrw > 0 else 0
 
             if abs(diff) < 50: action = "적정 (유지)"
             elif diff > 0: action = f"🟢 ${diff:,.0f} 매수{action_suffix}"
             else: action = f"🔴 ${abs(diff):,.0f} 매도{action_suffix}"
             
             if my_v > 0 or tw > 0: 
-                status_d.append({"종목": tkr, "목표비중": f"{tw*100:.1f}%", "현재비중": f"{my_w:.1f}%", "목표액": f"${tv:,.0f}", "현재액": f"${my_v:,.0f}", "액션": action})
+                status_d.append({"종목": tkr, "목표비중": f"{tw*100:.1f}%", "현재비중": f"{my_w:.1f}%", "목표액($)": f"${tv:,.0f}", "현재액($)": f"${my_v:,.0f}", "목표액(₩)": f"₩{tv*current_usdkrw:,.0f}" if current_usdkrw > 0 else "-", "액션": action})
                 
         if status_d:
             status_df = pd.DataFrame(status_d).sort_values("목표비중", ascending=False)
