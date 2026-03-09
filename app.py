@@ -42,7 +42,7 @@ if 'accounts' not in st.session_state:
     if not loaded:
         loaded = {
             "기본 계좌 (AMLS)": {
-                "portfolio": [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in REQUIRED_TICKERS],
+                "portfolio": [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0, "매입 환율": 0.0} for t in REQUIRED_TICKERS],
                 "history": [], "first_entry_date": None, "journal_text": "", "target_seed": 10000.0
             }
         }
@@ -58,9 +58,14 @@ for acc_name, acc_data in st.session_state['accounts'].items():
         new_port = []
         for req_t in REQUIRED_TICKERS:
             if req_t in port_dict: new_port.append(port_dict[req_t])
-            else: new_port.append({"티커 (Ticker)": req_t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0})
+            else: new_port.append({"티커 (Ticker)": req_t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0, "매입 환율": 0.0})
         acc_data["portfolio"] = new_port
         needs_save = True
+    # 매입 환율 필드 마이그레이션 (기존 데이터에 없으면 추가)
+    for item in acc_data["portfolio"]:
+        if "매입 환율" not in item:
+            item["매입 환율"] = 0.0
+            needs_save = True
 if needs_save: save_accounts_data(st.session_state['accounts'])
 
 
@@ -319,16 +324,6 @@ def page_amls_backtest():
     with tab1:
         st.markdown("#### 🏆 핵심 퍼포먼스 비교표")
         st.info(f"**투입 원금 총합:** ${df['Invested'].iloc[-1]:,.0f} (초기 {INITIAL_CAPITAL} + 매월 {MONTHLY_CONTRIBUTION} 적립)")
-        
-        def highlight_metrics(val):
-            if isinstance(val, str) and '%' in val:
-                num = float(val.replace('%', '').replace('+', ''))
-                if '낙폭' in metrics_df.columns or num < 0:
-                    if num < -30: return 'color: #ff4b4b; font-weight: bold;'
-                else:
-                    if num > 100: return 'color: #2ecc71; font-weight: bold;'
-            return ''
-            
         st.dataframe(metrics_df, use_container_width=True)
 
         st.markdown("#### 🥧 AMLS v4.3 국면별 자산 배분 비중")
@@ -408,6 +403,7 @@ def make_portfolio_page(acc_name):
         pf_df = pd.DataFrame(curr_acc_data["portfolio"])
         pf_df["수량 (주/달러)"] = pf_df["수량 (주/달러)"].astype(float)
         pf_df["평균 단가 ($)"] = pf_df["평균 단가 ($)"].astype(float)
+        pf_df["매입 환율"] = pf_df["매입 환율"].astype(float)
 
         @st.cache_data(ttl=1800)
         def get_market_status():
@@ -425,10 +421,19 @@ def make_portfolio_page(acc_name):
             elif today['QQQ'] >= ma200 and ma50 >= ma200 and today['^VIX'] < 25: reg = 1
             else: reg = 2
 
+            # 현재 환율 가져오기
+            try:
+                fx_data = yf.download('USDKRW=X', period='5d', progress=False)['Close'].ffill()
+                if isinstance(fx_data, pd.DataFrame): fx_data = fx_data.iloc[:, 0]
+                current_usdkrw = float(fx_data.iloc[-1])
+            except:
+                current_usdkrw = 0.0
+
             return {
                 'regime': reg, 'vix': today['^VIX'], 'qqq': today['QQQ'], 'ma200': ma200, 'ma50': ma50,
                 'smh': today['SMH'], 'smh_ma50': smh_ma50, 'smh_3m_ret': smh_3m_ret, 'smh_rsi': smh_rsi,
-                'prices': today.to_dict(), 'prev_prices': yesterday.to_dict(), 'date': data.index[-1]
+                'prices': today.to_dict(), 'prev_prices': yesterday.to_dict(), 'date': data.index[-1],
+                'usdkrw': current_usdkrw
             }
 
         with st.spinner("시장 데이터 동기화 및 AI 분석 중..."): 
@@ -515,20 +520,22 @@ def make_portfolio_page(acc_name):
                 else:
                     st.info("🛡️ **[조정] 안전 마진 확보 구간.** 상승 추세는 살아있으나 변동성이 확대되거나 단기 모멘텀이 꺾였습니다. 과도한 레버리지를 축소하고 QLD/SSO 등 2배수로 속도를 조절하세요.")
 
-        # --- 💼 자산 기입표 & 도넛 차트 ---
+        # --- 💼 자산 기입표 & 도넛 차트 (환율 칸 추가) ---
         st.write("")
         c_h1, c_h2 = st.columns([5, 1])
         with c_h1: st.markdown(f"**[ 💼 포트폴리오 기입표 및 실시간 수익률 ]**")
         with c_h2:
             if st.button("🔄 숫자 리셋", use_container_width=True):
-                st.session_state['accounts'][acc_name]["portfolio"] = [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in REQUIRED_TICKERS]
+                st.session_state['accounts'][acc_name]["portfolio"] = [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0, "매입 환율": 0.0} for t in REQUIRED_TICKERS]
                 save_accounts_data(st.session_state['accounts']); st.rerun()
 
         live_prices = {k: ms['prices'].get(k, 1.0) for k in REQUIRED_TICKERS}
         live_prices['CASH'] = 1.0
+        current_usdkrw = ms['usdkrw']
         
         disp_df = pf_df.copy()
         disp_df["현재가 ($)"] = disp_df["티커 (Ticker)"].apply(lambda x: live_prices.get(x, 0.0))
+        disp_df["현재 환율"] = current_usdkrw
         def cy(row):
             if row["수량 (주/달러)"] == 0 or row["평균 단가 ($)"] == 0 or row["티커 (Ticker)"] == "CASH": return 0.0
             return (row["현재가 ($)"] - row["평균 단가 ($)"]) / row["평균 단가 ($)"] * 100
@@ -542,14 +549,20 @@ def make_portfolio_page(acc_name):
 
         c_t, c_c = st.columns([1.2, 1])
         with c_t:
-            st.caption("💡 더블 클릭하여 수량과 평단가를 입력하세요. (현재가는 실시간 연동됩니다)")
+            st.caption("💡 더블 클릭하여 수량, 평단가, 매입 환율을 입력하세요. (현재가·현재 환율·수익률은 자동 연동)")
             ed_disp = st.data_editor(
                 disp_df.style.map(color_y, subset=["수익률 (%)"]), 
                 num_rows="dynamic", use_container_width=True, height=350,
-                column_config={"현재가 ($)": st.column_config.NumberColumn(disabled=True, format="$ %.2f"), "수익률 (%)": st.column_config.NumberColumn(disabled=True, format="%.2f %%")}
+                column_config={
+                    "현재가 ($)": st.column_config.NumberColumn(disabled=True, format="$ %.2f"),
+                    "현재 환율": st.column_config.NumberColumn(disabled=True, format="₩ %.1f"),
+                    "수익률 (%)": st.column_config.NumberColumn(disabled=True, format="%.2f %%"),
+                    "매입 환율": st.column_config.NumberColumn(format="₩ %.1f"),
+                }
             )
-            if not ed_disp[["티커 (Ticker)", "수량 (주/달러)", "평균 단가 ($)"]].equals(pf_df):
-                st.session_state['accounts'][acc_name]["portfolio"] = ed_disp[["티커 (Ticker)", "수량 (주/달러)", "평균 단가 ($)"]].to_dict(orient="records")
+            base_cols = ["티커 (Ticker)", "수량 (주/달러)", "평균 단가 ($)", "매입 환율"]
+            if not ed_disp[base_cols].equals(pf_df[["티커 (Ticker)", "수량 (주/달러)", "평균 단가 ($)", "매입 환율"]]):
+                st.session_state['accounts'][acc_name]["portfolio"] = ed_disp[base_cols].to_dict(orient="records")
                 save_accounts_data(st.session_state['accounts']); st.rerun()
 
         with c_c:
@@ -597,7 +610,6 @@ def make_portfolio_page(acc_name):
             diff = tv - my_v
             cp = live_prices.get(tkr, 0.0)
             
-            # 🔥 신규: 매수/매도해야 할 예상 주식 수(Shares) 계산 로직 추가
             if tkr != "CASH" and cp > 0:
                 shares_to_trade = abs(diff) / cp
                 action_suffix = f" (약 {shares_to_trade:.1f}주)"
@@ -653,7 +665,6 @@ def make_portfolio_page(acc_name):
                         else: bench_series = bench_data
                         
                         bench_series = bench_series[bench_series.index >= chart_start_ts]
-                        # 운용 시드를 기준으로 한 가상 성장 곡선
                         seed_curve = (bench_series / bench_series.iloc[0]) * target_seed
                         
                         fig_seed = go.Figure()
@@ -685,7 +696,7 @@ def page_manage_accounts():
     new_acc = st.text_input("신규 계좌 이름")
     if st.button("🚀 계좌 개설", type="primary") and new_acc:
         if new_acc not in st.session_state['accounts']:
-            st.session_state['accounts'][new_acc] = {"portfolio": [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0} for t in REQUIRED_TICKERS], "history": [{"Date": datetime.now().strftime("%Y-%m-%d"), "Log": "✨ 계좌 개설"}], "target_seed": 10000.0}
+            st.session_state['accounts'][new_acc] = {"portfolio": [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0, "매입 환율": 0.0} for t in REQUIRED_TICKERS], "history": [{"Date": datetime.now().strftime("%Y-%m-%d"), "Log": "✨ 계좌 개설"}], "target_seed": 10000.0}
             save_accounts_data(st.session_state['accounts']); st.rerun()
     st.divider()
     for acc in list(st.session_state['accounts'].keys()):
