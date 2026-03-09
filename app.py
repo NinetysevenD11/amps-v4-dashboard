@@ -711,14 +711,20 @@ def make_portfolio_page(acc_name):
             if tkr != "CASH" and cp > 0:
                 shares_to_trade = abs(diff) / cp
                 krw_amt = abs(diff) * current_usdkrw if current_usdkrw > 0 else 0
-                action_suffix = f" (약 {shares_to_trade:.1f}주, ₩{krw_amt:,.0f})"
-            else:
-                action_suffix = ""
+                # 1주 미만 차이면 적정으로 판단
+                if shares_to_trade < 1.0:
+                    action = "✅ 적정 (유지)"
+                elif diff > 0:
+                    action = f"🟢 {shares_to_trade:.0f}주 매수 (${diff:,.0f}, ₩{krw_amt:,.0f})"
+                else:
+                    action = f"🔴 {shares_to_trade:.0f}주 매도 (${abs(diff):,.0f}, ₩{krw_amt:,.0f})"
+            elif tkr == "CASH":
                 krw_amt = abs(diff) * current_usdkrw if current_usdkrw > 0 else 0
-
-            if abs(diff) < 50: action = "적정 (유지)"
-            elif diff > 0: action = f"🟢 ${diff:,.0f} 매수{action_suffix}"
-            else: action = f"🔴 ${abs(diff):,.0f} 매도{action_suffix}"
+                if abs(diff) < 50: action = "✅ 적정 (유지)"
+                elif diff > 0: action = f"🟢 ${diff:,.0f} 추가 (₩{krw_amt:,.0f})"
+                else: action = f"🔴 ${abs(diff):,.0f} 인출 (₩{krw_amt:,.0f})"
+            else:
+                action = "✅ 적정 (유지)"
             
             if my_v > 0 or tw > 0: 
                 status_d.append({"종목": tkr, "목표비중": f"{tw*100:.1f}%", "현재비중": f"{my_w:.1f}%", "목표액($)": f"${tv:,.0f}", "현재액($)": f"${my_v:,.0f}", "목표액(₩)": f"₩{tv*current_usdkrw:,.0f}" if current_usdkrw > 0 else "-", "액션": action})
