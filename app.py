@@ -479,13 +479,43 @@ def make_portfolio_page(acc_name):
                 'regime_direction': regime_direction, 'entry_grade': entry_grade
             }
 
+        # 실시간 가격 (1분 캐시 — 장중 현재가 반영)
+        @st.cache_data(ttl=60)
+        def get_realtime_prices():
+            RT_TICKERS = ['QQQ', 'TQQQ', 'SOXL', 'USD', 'QLD', 'SSO', 'SPY', 'SMH', 'GLD', '^VIX', 'USDKRW=X']
+            try:
+                rt = yf.download(RT_TICKERS, period='1d', interval='5m', progress=False)['Close']
+                if rt.empty: return None
+                return rt.ffill().iloc[-1].to_dict()
+            except:
+                return None
+
         with st.spinner("시장 데이터 동기화 및 AI 분석 중..."): 
             ms = get_market_status()
+            rt_prices = get_realtime_prices()
+
+        # 실시간 가격이 있으면 덮어쓰기 (MA/레짐 체류 계산은 종가 기반 유지, 표시 가격+레짐만 실시간)
+        if rt_prices:
+            for k, v in rt_prices.items():
+                if k in ms['prices'] and pd.notna(v): ms['prices'][k] = v
+            if pd.notna(rt_prices.get('^VIX', None)): ms['vix'] = rt_prices['^VIX']
+            if pd.notna(rt_prices.get('QQQ', None)): ms['qqq'] = rt_prices['QQQ']
+            if pd.notna(rt_prices.get('SMH', None)): ms['smh'] = rt_prices['SMH']
+            if pd.notna(rt_prices.get('USDKRW=X', None)): ms['usdkrw'] = rt_prices['USDKRW=X']
+            # 실시간 VIX/QQQ로 레짐 재판단
+            vix_rt, qqq_rt = ms['vix'], ms['qqq']
+            if vix_rt > 40: ms['regime'] = 4
+            elif qqq_rt < ms['ma200']: ms['regime'] = 3
+            elif qqq_rt >= ms['ma200'] and ms['ma50'] >= ms['ma200'] and vix_rt < 25: ms['regime'] = 1
+            else: ms['regime'] = 2
+            price_label = "실시간"
+        else:
+            price_label = "종가"
 
         # 🔥 실시간 시장 인텔리전스
         st.markdown("### 📡 실시간 시장 인텔리전스 (Market Intelligence)")
         with st.container(border=True):
-            st.markdown(f"**기준일:** {ms['date'].strftime('%Y-%m-%d')} 종가")
+            st.markdown(f"**기준일:** {ms['date'].strftime('%Y-%m-%d')} | 💹 **{price_label}** 가격 기준")
             
             col1, col2, col3 = st.columns(3)
             
@@ -646,7 +676,7 @@ def make_portfolio_page(acc_name):
 
         c_t, c_c = st.columns([1.2, 1])
         with c_t:
-            st.caption("💡 더블 클릭하여 수량, 평단가, 매입 환율을 입력하세요. (현재가·현재 환율·수익률은 자동 연동)")
+            st.caption(f"💡 더블 클릭하여 수량, 평단가, 매입 환율을 입력하세요. (현재가·환율은 {price_label} 자동 연동)")
             ed_disp = st.data_editor(
                 disp_df.style.map(color_y, subset=["수익률 (%)", "원화 수익률 (%)"]), 
                 num_rows="dynamic", use_container_width=True, height=350,
