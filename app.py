@@ -484,7 +484,7 @@ def make_portfolio_page(acc_name):
         def get_realtime_prices():
             RT_TICKERS = ['QQQ', 'TQQQ', 'SOXL', 'USD', 'QLD', 'SSO', 'SPY', 'SMH', 'GLD', '^VIX', 'USDKRW=X']
             try:
-                rt = yf.download(RT_TICKERS, period='1d', interval='5m', progress=False)['Close']
+                rt = yf.download(RT_TICKERS, period='1d', interval='5m', prepost=True, progress=False)['Close']
                 if rt.empty: return None
                 return rt.ffill().iloc[-1].to_dict()
             except:
@@ -508,7 +508,14 @@ def make_portfolio_page(acc_name):
             elif qqq_rt < ms['ma200']: ms['regime'] = 3
             elif qqq_rt >= ms['ma200'] and ms['ma50'] >= ms['ma200'] and vix_rt < 25: ms['regime'] = 1
             else: ms['regime'] = 2
-            price_label = "실시간"
+            # 현재 시간 기준 마켓 세션 판별 (ET 기준)
+            from datetime import timezone
+            now_utc = datetime.now(timezone.utc)
+            et_hour = (now_utc.hour - 5) % 24  # 대략적 ET (DST 미반영)
+            if 4 <= et_hour < 9.5: price_label = "프리마켓"
+            elif 9.5 <= et_hour < 16: price_label = "장중 실시간"
+            elif 16 <= et_hour < 20: price_label = "애프터마켓"
+            else: price_label = "실시간"
         else:
             price_label = "종가"
 
