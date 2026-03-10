@@ -706,23 +706,25 @@ def make_portfolio_page(acc_name):
                 fig.update_layout(height=320, margin=dict(l=0,r=0,t=0,b=0), showlegend=False, annotations=[dict(text=f"총 평가액<br><b>${total_val:,.0f}</b>", x=0.5, y=0.5, font_size=16, showarrow=False)])
                 st.plotly_chart(fig, use_container_width=True)
 
-        # 🔥 리밸런싱 액션 지침 복구 (주식 수 계산 추가)
+        # 🔥 리밸런싱 액션 지침
         st.write("")
         st.markdown("**[ 🎯 리밸런싱 액션 지침 ]**")
-        # 운용 시드 자동 계산: 포트폴리오 기입표의 (수량 × 평균 단가) 합산
+        # 투입 원금 (참고용): 포트폴리오 기입표의 (수량 × 평균 단가) 합산
         auto_seed = 0.0
         for _, row in ed_disp.iterrows():
             qty = float(row["수량 (주/달러)"] if pd.notna(row["수량 (주/달러)"]) else 0)
             avg_p = float(row["평균 단가 ($)"] if pd.notna(row["평균 단가 ($)"]) else 0)
             tkr = str(row["티커 (Ticker)"]).upper().strip()
             if qty > 0:
-                if tkr == "CASH":
-                    auto_seed += qty  # CASH는 수량 자체가 달러 금액
-                else:
-                    auto_seed += qty * avg_p
-        target_seed = auto_seed
-        st.session_state['accounts'][acc_name]["target_seed"] = target_seed
-        st.metric("💰 운용 시드 (투입 원금 기준, 자동 계산)", f"${target_seed:,.2f}", help="포트폴리오 기입표의 (수량 × 평균 단가) 합산입니다.")
+                if tkr == "CASH": auto_seed += qty
+                else: auto_seed += qty * avg_p
+        st.session_state['accounts'][acc_name]["target_seed"] = auto_seed
+
+        # 리밸런싱 기준 = 현재 총 평가액 (매매해도 총액이 안 바뀌므로 목표가 흔들리지 않음)
+        rebal_base = total_val if total_val > 0 else auto_seed
+        col_m1, col_m2 = st.columns(2)
+        col_m1.metric("💰 투입 원금 (원가 합산)", f"${auto_seed:,.2f}", help="수량 × 평균 단가 합계")
+        col_m2.metric("📊 리밸런싱 기준액 (현재 평가)", f"${rebal_base:,.2f}", help="현재 시세 기준 총 평가액. 이 금액을 기준으로 목표 비중을 계산합니다.")
 
         status_d = []
         smh_cond = (ms['smh'] > ms['smh_ma50']) and (ms['smh_3m_ret'] > 0.05) and (ms['smh_rsi'] > 50)
@@ -744,7 +746,7 @@ def make_portfolio_page(acc_name):
             my_v = asset_vals.get(tkr, 0.0)
             my_w = (my_v / total_val * 100) if total_val > 0 else 0.0
             tw = target_w_dict.get(tkr, 0.0)
-            tv = target_seed * tw
+            tv = rebal_base * tw
             diff = tv - my_v
             cp = live_prices.get(tkr, 0.0)
             
@@ -790,7 +792,7 @@ def make_portfolio_page(acc_name):
         st.write("")
         st.markdown("**[ 📈 00시 종가 기준 운용 시드(Target Seed) 성장 곡선 ]**")
         
-        if target_seed > 0:
+        if auto_seed > 0:
             with st.container(border=True):
                 fed_str = curr_acc_data.get("first_entry_date")
                 default_date = pd.to_datetime(fed_str).date() if fed_str else (datetime.today() - timedelta(days=90)).date()
@@ -811,11 +813,11 @@ def make_portfolio_page(acc_name):
                         else: bench_series = bench_data
                         
                         bench_series = bench_series[bench_series.index >= chart_start_ts]
-                        seed_curve = (bench_series / bench_series.iloc[0]) * target_seed
+                        seed_curve = (bench_series / bench_series.iloc[0]) * auto_seed
                         
                         fig_seed = go.Figure()
                         fig_seed.add_trace(go.Scatter(x=seed_curve.index, y=seed_curve.values, name="운용 시드 궤적", line=dict(color='#00d1ff', width=3), fill='tozeroy', fillcolor='rgba(0, 209, 255, 0.1)'))
-                        fig_seed.add_trace(go.Scatter(x=seed_curve.index, y=[target_seed]*len(seed_curve), name="현재 시드 원금", line=dict(color='#e74c3c', width=2, dash='dot')))
+                        fig_seed.add_trace(go.Scatter(x=seed_curve.index, y=[auto_seed]*len(seed_curve), name="현재 시드 원금", line=dict(color='#e74c3c', width=2, dash='dot')))
                         fig_seed.update_layout(height=350, template="plotly_dark", margin=dict(l=10,r=10,t=10,b=10), yaxis_title="운용 자산 ($)", hovermode="x unified")
                         st.plotly_chart(fig_seed, use_container_width=True)
                 except Exception as e: pass
