@@ -204,6 +204,25 @@ apply_custom_css()
 # =====================================================================
 # [3] 카드뉴스 렌더링 3단계 Wrapper 함수 (들여쓰기 완전 제거)
 # =====================================================================
+def card_news_card(header_text: str, body_html: str, chapter: str = ""):
+    chapter_tag = f'<div style="font-size:0.65rem;font-weight:700;color:#00C060;letter-spacing:0.15em;">{chapter}</div>' if chapter else ''
+    header_tag = f'<h4 style="font-weight:900;margin:4px 0 16px;">{header_text}</h4>' if header_text else ''
+    html_str = f"""
+<div style="background:#fff; border:2.5px solid #1a1a1a; border-radius:16px; overflow:hidden; box-shadow:4px 4px 0px #1a1a1a; margin-bottom:20px;">
+<div style="background:#00C060; height:38px; display:flex; align-items:center; justify-content:space-between; padding:0 16px;">
+<div style="width:20px;height:20px;border:2.5px solid #1a1a1a;border-radius:50%;background:#f5f5f0;"></div>
+<span style="font-size:0.7rem;color:#1a1a1a;font-weight:600;letter-spacing:0.05em;">AMLS QUANT SYSTEM</span>
+<div style="width:20px;height:20px;border:2.5px solid #1a1a1a;border-radius:50%;background:#f5f5f0;"></div>
+</div>
+<div style="padding:20px 24px;">
+{chapter_tag}
+{header_tag}
+{body_html}
+</div>
+</div>
+"""
+    st.markdown(html_str, unsafe_allow_html=True)
+
 def open_card(header_text: str, chapter: str = ""):
     chapter_tag = f'<div style="font-size:0.65rem;font-weight:700;color:#00C060;letter-spacing:0.15em;">{chapter}</div>' if chapter else ''
     header_tag = f'<h4 style="font-weight:900;margin:4px 0 16px;">{header_text}</h4>' if header_text else ''
@@ -388,7 +407,7 @@ def get_sector_momentum():
 # [5] 페이지 구성: 글로벌 마켓 대시보드
 # =====================================================================
 def page_market_dashboard():
-    st.markdown("<h1 style='font-size:3rem; margin-bottom:0;'><span class='highlight'>마켓</span> 터미널</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='font-size:3rem; margin-bottom:0;'>🌐 <span style='color:#00C060;'>마켓</span> 터미널</h1>", unsafe_allow_html=True)
     st.caption("실시간 글로벌 자금 흐름 및 거시 경제 모니터링")
     
     open_card("🌐 실시간 시세", "GLOBAL MARKET")
@@ -471,16 +490,13 @@ def page_market_dashboard():
         except: st.info("데이터 로딩 중...")
         close_card()
         
-        open_card("🔄 주도 섹터 스캐너 (3M TOP 3)", "SECTOR MOMENTUM")
         top_sectors = get_sector_momentum()
+        sec_html = ""
         if top_sectors:
-            sec_html = ""
             for i, (s_name, s_ret) in enumerate(top_sectors):
                 sec_html += f"<div style='display:flex; justify-content:space-between; margin-bottom:8px;'><span style='font-weight:900; color:{TEXT_COLOR};'><span style='display:inline-flex; width:24px; height:24px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; align-items:center; justify-content:center; font-size:0.8rem; margin-right:8px;'>{i+1}</span>{s_name}</span><span style='color:{C_UP if s_ret>0 else C_DOWN}; font-weight:900; font-size:1.1rem;'>{s_ret*100:+.1f}%</span></div>"
-            st.markdown(f"<div style='padding: 15px; border-radius: 12px; background-color: #f5f5f0; border: 2.5px solid #1a1a1a;'>{sec_html}</div>", unsafe_allow_html=True)
-        else:
-            st.info("데이터 로딩 중...")
-        close_card()
+            card_news_card("🔄 주도 섹터 스캐너", f"<div style='padding: 15px; border-radius: 12px; background-color: #f5f5f0; border: 2.5px solid #1a1a1a;'>{sec_html}</div>", "SECTOR MOMENTUM")
+        else: card_news_card("🔄 주도 섹터 스캐너", "<p>데이터 로딩 중...</p>", "SECTOR MOMENTUM")
 
     with col_mac2:
         open_card("🔥 시장 주도주 (Top Gainers & Losers)", "MOVERS")
@@ -508,7 +524,7 @@ def page_market_dashboard():
 # [6] 페이지 구성: 백테스트
 # =====================================================================
 def page_amls_backtest():
-    st.markdown("<h1 style='font-size:3rem; margin-bottom:0;'><span class='highlight'>V4.5</span> 전략 시뮬레이터</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='font-size:3rem; margin-bottom:0;'>🦅 <span style='color:#00C060;'>V4.5</span> 전략 시뮬레이터</h1>", unsafe_allow_html=True)
     st.caption("과거 데이터 기반 퍼포먼스 및 궤적 추적")
     st.sidebar.header("⚙️ 시뮬레이션 설정")
     BACKTEST_START = st.sidebar.date_input("시작일", datetime(2018, 1, 1))
@@ -541,7 +557,7 @@ def page_amls_backtest():
 
     with tab1:
         open_card("🏆 성과 요약", "SUMMARY")
-        st.markdown(f"**투입 원금:** <span class='highlight'>${df['Invested'].iloc[-1]:,.0f}</span>", unsafe_allow_html=True)
+        st.markdown(f"**투입 원금:** <span style='color:#00C060; font-weight:900;'>${df['Invested'].iloc[-1]:,.0f}</span>", unsafe_allow_html=True)
         st.dataframe(metrics_df, use_container_width=True)
         close_card()
 
@@ -591,7 +607,7 @@ def page_amls_backtest():
 # =====================================================================
 def make_portfolio_page(acc_name):
     def page_func():
-        st.markdown(f"<h1 style='font-size:3rem; margin-bottom:0;'><span class='highlight'>{acc_name}</span></h1>", unsafe_allow_html=True)
+        st.markdown(f"<h1 style='font-size:3rem; margin-bottom:0;'>💼 <span style='color:#00C060;'>{acc_name}</span></h1>", unsafe_allow_html=True)
         st.caption("나의 전략 계좌 현황 및 리밸런싱 지침")
         
         curr_acc_data = st.session_state['accounts'][acc_name]
@@ -846,6 +862,7 @@ def make_portfolio_page(acc_name):
             elif block == "📊 실시간 요약":
                 pn_col = C_UP if daily_diff > 0 else C_DOWN
                 pn_ico = "▲" if daily_diff > 0 else ("▼" if daily_diff < 0 else "-")
+                
                 html_str = f"""
 <div style='display:flex; flex-direction:row; justify-content:space-between; align-items:center; text-align:center;'>
 <div style='flex:1; border-right:2.5px dashed #1a1a1a; padding:0 10px;'>
@@ -959,7 +976,8 @@ def make_portfolio_page(acc_name):
 <div style='font-size: 1.2rem; font-weight: 900;'>{soxl_res}</div>
 </div>
 </div>
-<div style='grid-column: span 2; background:#ffffff; border:2.5px solid #1a1a1a; border-radius:16px; padding:20px; display:flex; flex-direction:column; justify-content:flex-start; box-shadow: 4px 4px 0px rgba(0,0,0,0.05);'>
+
+<div style='grid-column: span 2; background:#ffffff; border:2.5px solid #1a1a1a; border-radius:16px; padding:20px; display:flex; flex-direction:column; justify-content:flex-start; box-shadow: 4px 4px 0px #1a1a1a;'>
 <div style='font-weight:900; font-size:1.1rem; margin-bottom:12px; border-bottom:2.5px dashed #1a1a1a; padding-bottom:6px;'>🤖 AI 전략 분석관 리서치 Report</div>
 <div style='font-size:1rem; line-height:1.7; padding-top: 5px;'>
 <div style='margin-bottom:12px;'>{reg_t}</div>
@@ -1095,7 +1113,7 @@ def make_portfolio_page(acc_name):
                     total_w = sum(w.values())
                     if total_w < 1.0: w['CASH'] = round(1.0 - total_w, 4)
                     return {k: v for k, v in w.items() if v > 0}
-                        
+                    
                 target_w_dict = get_w_local(ms['regime'], smh_cond)
                 
                 target_seed = st.number_input("운용 시드 설정 ($)", value=float(curr_acc_data.get("target_seed", 10000.0)), step=1000.0, key=f"seed_{acc_name}")
@@ -1308,7 +1326,7 @@ def page_strategy_specification():
     
     html_str = """
 <p style="color:#ff3b30; font-weight:900;">기밀 등급: CLASSIFIED - 내부 전용</p>
-<hr style="border: 2px solid #1a1a1a;">
+<hr style="border: 1.5px solid #1a1a1a;">
 <br>
 <h4><span style='display:inline-flex; width:28px; height:28px; background:#00C060; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; margin-right:8px;'>1</span> 전략 개요 (Philosophy)</h4>
 <p style="text-align:left;">AMLS는 스탠 웬스타인(Stan Weinstein)의 '4단계 국면 이론(Stage Analysis)'을 현대적 퀀트 자산배분 기법으로 재해석한 전략입니다. 시장의 상승/하락 추세뿐만 아니라 <b>'공포 지수(VIX)'</b>를 결합하여, 국면별 최적의 레버리지 배수를 동적으로 조절합니다.</p>
@@ -1321,7 +1339,7 @@ def page_strategy_specification():
 <li><b>Regime 3/4:</b> 극한의 방어가 필요한 하락장에서는 여전히 현금 35~40%를 쥐고 관망합니다.</li>
 </ul>
 <br>
-<hr style="border: 2px solid #1a1a1a;">
+<hr style="border: 1.5px solid #1a1a1a;">
 <br>
 <h4><span style='display:inline-flex; width:28px; height:28px; background:#00C060; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; margin-right:8px;'>3</span> 레짐(Regime) 판단 기준 및 배분표</h4>
 <p style="text-align:left;">AI 엔진은 매일 종가 기준으로 아래의 3가지 지표를 분석하여 내일의 타겟 레짐을 결정합니다.</p>
@@ -1347,7 +1365,7 @@ def page_strategy_specification():
 <li><b>R4 (위기):</b> GLD 50% / CASH 40% / QQQ 10%</li>
 </ul>
 <br>
-<hr style="border: 2px solid #1a1a1a;">
+<hr style="border: 1.5px solid #1a1a1a;">
 <br>
 <h4><span style='display:inline-flex; width:28px; height:28px; background:#00C060; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; margin-right:8px;'>5</span> 휩쏘(가짜 신호) 방지: 비대칭 5일 대기 프로토콜</h4>
 <ul style="text-align:left; font-size:0.95rem; color:#444; line-height:1.8;">
