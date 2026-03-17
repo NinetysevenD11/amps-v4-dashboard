@@ -99,6 +99,11 @@ if needs_save: save_accounts_data(st.session_state['accounts'])
 # =====================================================================
 # [2] 색상 변수 및 전역 CSS 설정 (카드뉴스 스타일 전면 개편)
 # =====================================================================
+MAIN_GREEN = "#00C060"
+PANEL_BG = "#ffffff"
+PANEL_BORDER = "2.5px solid #1a1a1a"
+PANEL_RADIUS = "16px"
+
 C_UP = "#00C060"
 C_DOWN = "#FF3B30"  
 C_WARN = "#FF9500"
@@ -185,7 +190,7 @@ def apply_custom_css():
         letter-spacing: -0.03em !important;
     }}
     
-    .stMarkdown p, span, label {{ font-size: 0.95rem; color: #444; text-align: center; line-height: 1.8; }}
+    .stMarkdown p, span, label {{ font-size: 0.95rem; color: #444; line-height: 1.8; }}
     strong, b {{ color: #1a1a1a; font-weight: 900; }}
     
     /* 탭 메뉴 */
@@ -241,7 +246,7 @@ def close_card():
     </div>
     """, unsafe_allow_html=True)
 
-# --- Plotly Sparkline ---
+# --- Plotly Sparkline (미니 차트) 생성 함수 ---
 def get_plotly_sparkline(data_list, color, hline=None):
     if not data_list or all(pd.isna(x) for x in data_list): return go.Figure()
     fig = go.Figure()
@@ -833,6 +838,7 @@ def make_portfolio_page(acc_name):
             if block == "🎯 목표 달성률":
                 target_val = curr_acc_data.get("target_portfolio_value", 100000.0)
                 progress_pct = (total_val_now / target_val) * 100 if target_val > 0 else 0.0
+                
                 open_card("🎯 포트폴리오 목표 달성률", "PROGRESS")
                 c_prog, c_set = st.columns([4, 1.2])
                 with c_set:
@@ -934,7 +940,7 @@ def make_portfolio_page(acc_name):
 <div style='background:#ffffff; border:2.5px solid #1a1a1a; border-radius:16px; padding:20px; display:flex; flex-direction:column; justify-content:space-between; box-shadow: 4px 4px 0px rgba(0,0,0,0.05);'>
 <div style='font-weight:900; font-size:1.1rem; margin-bottom:12px; border-bottom:2.5px dashed #1a1a1a; padding-bottom:6px;'>⚡ SOXL 진입 판독기</div>
 <div style='display: flex; flex-direction: column; gap: 10px;'>
-<div style='background: #f5f5f0; padding: 10px 14px; border-radius: 8px; border: 2px solid #1a1a1a; border-left: 6px solid {s_col};'>
+<div style='background: #f5f5f0; padding: 10px 14px; border-radius: 8px; border: 2.5px solid #1a1a1a; border-left: 6px solid {s_col};'>
 <div style='display: flex; justify-content: space-between; align-items: center;'>
 <span style='font-size: 0.85rem; font-weight: bold;'>① 50MA 추세</span>
 <span style='font-size: 0.9rem; font-weight: 900; color: {s_col};'>{s_stat}</span>
@@ -944,7 +950,7 @@ def make_portfolio_page(acc_name):
 <span style='font-size: 0.85rem; opacity: 0.7;'>기준: ${smh_ma50_c:.2f}</span>
 </div>
 </div>
-<div style='background: #f5f5f0; padding: 10px 14px; border-radius: 8px; border: 2px solid #1a1a1a; border-left: 6px solid {r_col};'>
+<div style='background: #f5f5f0; padding: 10px 14px; border-radius: 8px; border: 2.5px solid #1a1a1a; border-left: 6px solid {r_col};'>
 <div style='display: flex; justify-content: space-between; align-items: center;'>
 <span style='font-size: 0.85rem; font-weight: bold;'>② 3M 수익률</span>
 <span style='font-size: 0.9rem; font-weight: 900; color: {r_col};'>{r_stat}</span>
@@ -954,7 +960,7 @@ def make_portfolio_page(acc_name):
 <span style='font-size: 0.85rem; opacity: 0.7;'>기준: +5.0% 이상</span>
 </div>
 </div>
-<div style='background: #f5f5f0; padding: 10px 14px; border-radius: 8px; border: 2px solid #1a1a1a; border-left: 6px solid {rsi_col};'>
+<div style='background: #f5f5f0; padding: 10px 14px; border-radius: 8px; border: 2.5px solid #1a1a1a; border-left: 6px solid {rsi_col};'>
 <div style='display: flex; justify-content: space-between; align-items: center;'>
 <span style='font-size: 0.85rem; font-weight: bold;'>③ 과열/침체 (RSI)</span>
 <span style='font-size: 0.9rem; font-weight: 900; color: {rsi_col};'>{rsi_stat}</span>
@@ -987,25 +993,25 @@ def make_portfolio_page(acc_name):
                 m1, m2, m3 = st.columns(3)
                 with m1:
                     st.markdown(f"""<div style='text-align:center; padding: 10px; background: #f5f5f0; border: 2.5px solid #1a1a1a; border-radius: 12px; min-width: 120px; box-shadow: 2px 2px 0px #1a1a1a;'>
-<div style='font-size: 0.85rem; font-weight: bold;'>조건 1. 공포 지수 (VIX)</div>
-<div style='font-size: 1.3rem; font-weight: 900; color: {vix_col}; margin-top: 5px;'>{vix_status}</div>
+<div style='font-size: 0.8rem; font-weight: bold;'>조건 1. 공포 지수 (VIX)</div>
+<div style='font-size: 1.2rem; font-weight: 900; color: {vix_col}; margin-top: 5px;'>{vix_status}</div>
 </div>""", unsafe_allow_html=True)
                     st.plotly_chart(get_plotly_sparkline(ms['hist_vix'], vix_col, hline=40 if vix_c>30 else 25), use_container_width=True, config={'displayModeBar': False})
-                    st.markdown(f"<div style='text-align:center; font-size: 0.85rem; margin-top: -10px; font-weight: bold;'>현재: {vix_c:.2f}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:center; font-size: 0.8rem; margin-top: -10px; font-weight: bold;'>현재: {vix_c:.2f}</div>", unsafe_allow_html=True)
                 with m2:
                     st.markdown(f"""<div style='text-align:center; padding: 10px; background: #f5f5f0; border: 2.5px solid #1a1a1a; border-radius: 12px; min-width: 120px; box-shadow: 2px 2px 0px #1a1a1a;'>
-<div style='font-size: 0.85rem; font-weight: bold;'>조건 2. 장기 추세 (QQQ)</div>
-<div style='font-size: 1.3rem; font-weight: 900; color: {trend_col}; margin-top: 5px;'>{trend_status}</div>
+<div style='font-size: 0.8rem; font-weight: bold;'>조건 2. 장기 추세 (QQQ)</div>
+<div style='font-size: 1.2rem; font-weight: 900; color: {trend_col}; margin-top: 5px;'>{trend_status}</div>
 </div>""", unsafe_allow_html=True)
                     st.plotly_chart(get_plotly_dual_sparkline(ms['hist_qqq'], ms['hist_ma200'], trend_col, 'rgba(150,150,150,0.5)'), use_container_width=True, config={'displayModeBar': False})
-                    st.markdown(f"<div style='text-align:center; font-size: 0.85rem; margin-top: -10px; font-weight: bold;'>200MA 이격: {trend_gap:+.1f}%</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:center; font-size: 0.8rem; margin-top: -10px; font-weight: bold;'>200MA 이격: {trend_gap:+.1f}%</div>", unsafe_allow_html=True)
                 with m3:
                     st.markdown(f"""<div style='text-align:center; padding: 10px; background: #f5f5f0; border: 2.5px solid #1a1a1a; border-radius: 12px; min-width: 120px; box-shadow: 2px 2px 0px #1a1a1a;'>
-<div style='font-size: 0.85rem; font-weight: bold;'>조건 3. 이평선 배열</div>
-<div style='font-size: 1.3rem; font-weight: 900; color: {align_col}; margin-top: 5px;'>{align_status}</div>
+<div style='font-size: 0.8rem; font-weight: bold;'>조건 3. 이평선 배열</div>
+<div style='font-size: 1.2rem; font-weight: 900; color: {align_col}; margin-top: 5px;'>{align_status}</div>
 </div>""", unsafe_allow_html=True)
                     st.plotly_chart(get_plotly_dual_sparkline(ms['hist_ma50'], ms['hist_ma200'], align_col, 'rgba(150,150,150,0.5)'), use_container_width=True, config={'displayModeBar': False})
-                    st.markdown(f"<div style='text-align:center; font-size: 0.85rem; margin-top: -10px; font-weight: bold;'>50MA 이격: {align_gap:+.1f}%</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:center; font-size: 0.8rem; margin-top: -10px; font-weight: bold;'>50MA 이격: {align_gap:+.1f}%</div>", unsafe_allow_html=True)
                 close_card()
                 
             elif block == "🚀 실전 퀀트 무기":
