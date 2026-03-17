@@ -155,7 +155,7 @@ def apply_custom_css():
         border: 2.5px solid #1a1a1a !important;
         border-radius: 16px !important;
         box-shadow: 4px 4px 0px #1a1a1a !important;
-        padding: 24px !important; 
+        padding: 24px !important;
         overflow: visible !important;
         margin-bottom: 10px;
     }
@@ -224,12 +224,9 @@ def apply_custom_css():
 apply_custom_css()
 
 # =====================================================================
-# [3] 카드 헤더 렌더기 (위젯을 내부에 품기 위한 해킹 함수)
+# [3] 카드 헤더 렌더기
 # =====================================================================
 def render_card_header(title: str, chapter: str = ""):
-    """
-    st.container(border=True) 내부에 호출되어, 최상단에 초록색 바와 제목을 예쁘게 밀착시킵니다.
-    """
     chapter_html = f"<div style='font-size:0.65rem; font-weight:900; letter-spacing:0.15em; color:#00C060; margin-bottom:4px; text-transform:uppercase;'>{chapter}</div>" if chapter else ""
     st.markdown(f"""
     <div style="margin: -24px -24px 20px -24px; background: #00C060; height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom: 2.5px solid #1a1a1a; border-radius: 13px 13px 0 0;">
@@ -411,7 +408,7 @@ def page_market_dashboard():
     
     with st.container(border=True):
         render_card_header("🌐 실시간 시세", "GLOBAL MARKET")
-        components.html(f"""<div class="tradingview-widget-container" style="border-radius: 12px; overflow: hidden; border: 1px solid rgba(0,0,0,0.05);">
+        components.html(f"""<div class="tradingview-widget-container" style="border-radius: 12px; overflow: hidden; border: 2px solid #1a1a1a;">
 <div class="tradingview-widget-container__widget"></div>
 <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
 {{
@@ -492,14 +489,14 @@ def page_market_dashboard():
                 sec_html = ""
                 for i, (s_name, s_ret) in enumerate(top_sectors):
                     sec_html += f"<div style='display:flex; justify-content:space-between; margin-bottom:8px;'><span style='font-weight:900; color:{TEXT_COLOR};'><span style='display:inline-flex; width:24px; height:24px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; align-items:center; justify-content:center; font-size:0.8rem; margin-right:8px;'>{i+1}</span>{s_name}</span><span style='color:{C_UP if s_ret>0 else C_DOWN}; font-weight:900; font-size:1.1rem;'>{s_ret*100:+.1f}%</span></div>"
-                st.markdown(f"<div style='padding: 15px; border-radius: 12px; background-color: #f5f5f0; border: 2.5px solid #1a1a1a;'>{sec_html}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div>{sec_html}</div>", unsafe_allow_html=True)
             else:
                 st.info("데이터 로딩 중...")
 
     with col_mac2:
         with st.container(border=True):
             render_card_header("🔥 시장 주도주 (Top Gainers & Losers)", "MOVERS")
-            components.html(f"""<div class="tradingview-widget-container" style="border: 2.5px solid #1a1a1a; border-radius:12px; overflow:hidden;">
+            components.html(f"""<div class="tradingview-widget-container">
               <div class="tradingview-widget-container__widget"></div>
               <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-hotlists.js" async>
               {{ "colorTheme": "{WIDGET_THEME}", "dateRange": "12M", "exchange": "US", "showChart": true, "locale": "kr", "largeChartUrl": "", "isTransparent": true, "showSymbolLogo": true, "showFloatingTooltip": false, "width": "100%", "height": "350" }}
@@ -507,7 +504,7 @@ def page_market_dashboard():
 
     with st.container(border=True):
         render_card_header("🇺🇸 미국 핵심 경제 캘린더", "CALENDAR")
-        components.html(f"""<div class="tradingview-widget-container" style="border: 2.5px solid #1a1a1a; border-radius:12px; overflow:hidden;">
+        components.html(f"""<div class="tradingview-widget-container">
           <div class="tradingview-widget-container__widget"></div>
           <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-events.js" async>
           {{ "colorTheme": "{WIDGET_THEME}", "isTransparent": true, "width": "100%", "height": "450", "locale": "kr", "importanceFilter": "0,1", "currencyFilter": "USD" }}
@@ -899,13 +896,13 @@ def make_portfolio_page(acc_name):
                     
                     is_soxl_appr = (smh_c > smh_ma50_c and ms['smh_3m_ret'] > 0.05 and ms['smh_rsi'] > 50)
                     soxl_res = f"<span style='color:{C_UP}; font-weight:900;'>✅ SOXL 편입 승인</span>" if is_soxl_appr else f"<span style='color:{C_WARN}; font-weight:900;'>⚠️ USD 방어 유지</span>"
-                    soxl_bg = "rgba(52, 199, 89, 0.15)" if is_soxl_appr else "rgba(255, 149, 0, 0.15)"
+                    soxl_bg = "rgba(0, 192, 96, 0.15)" if is_soxl_appr else "rgba(255, 149, 0, 0.15)"
 
                     wait_msg = ""
                     if is_wait and tgt_reg < app_reg:
-                        wait_msg = f"<div style='margin-top:10px; padding:10px; background-color:rgba(255,193,7,0.15); border-left:4px solid #ffc107; font-size:0.95rem; font-weight:bold; border-radius:8px;'><span style='color:#ff9800;'>⏳ 상향 전환 검증 진행 중 ({wait_d}/5일차)</span><br>휩쏘 방지를 위해 R{app_reg} 유지 중</div>"
+                        wait_msg = f"<div style='margin-top:10px; padding:10px; background-color:rgba(255,193,7,0.15); border-left:6px solid #ffc107; font-size:0.95rem; font-weight:bold; border-radius:8px;'><span style='color:#ff9800;'>⏳ 상향 전환 검증 진행 중 ({wait_d}/5일차)</span><br>휩쏘 방지를 위해 R{app_reg} 유지 중</div>"
                     elif tgt_reg > app_reg:
-                        wait_msg = f"<div style='margin-top:10px; padding:10px; background-color:rgba(231,76,60,0.15); border-left:4px solid #e74c3c; font-size:0.95rem; font-weight:bold; border-radius:8px;'><span style='color:#e74c3c;'>🚨 하락 전환 주의</span><br>내일 아침 즉시 하향 전환(R{tgt_reg}) 예상</div>"
+                        wait_msg = f"<div style='margin-top:10px; padding:10px; background-color:rgba(231,76,60,0.15); border-left:6px solid #e74c3c; font-size:0.95rem; font-weight:bold; border-radius:8px;'><span style='color:#e74c3c;'>🚨 하락 전환 주의</span><br>내일 아침 즉시 하향 전환(R{tgt_reg}) 예상</div>"
 
                     dur_text = f"<br><span style='color:{TEXT_COLOR}; font-weight:800; font-size:1rem;'>⏱️ 현재 R{app_reg} 진입일: {start_dt} ({dur}일째 체류 중)</span>"
 
@@ -932,73 +929,70 @@ def make_portfolio_page(acc_name):
                     align_col = C_UP if ma50_c >= ma200_c else C_DOWN
                     align_gap = (ma50_c / ma200_c - 1) * 100
 
-                    # CSS Grid를 활용하여 판독기와 리포트를 완벽한 정사각형/동일 높이로 배치
                     html_str = f"""
 <div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;'>
-    <div style='background:rgba(255,255,255,0.7); border:1px solid rgba(0,0,0,0.05); border-radius:16px; padding:20px; display:flex; flex-direction:column; justify-content:space-between;'>
-        <div style='font-weight:800; font-size:1.1rem; margin-bottom:12px; border-bottom:1px solid rgba(0,0,0,0.05); padding-bottom:6px;'>⚡ SOXL 진입 판독기</div>
-        <div style='display: flex; flex-direction: column; gap: 8px;'>
-            <div style='background: rgba(255,255,255,0.9); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.05); border-left: 5px solid {s_col}; display:flex; justify-content:space-between; align-items:center;'>
-                <div>
-                    <div style='font-size: 0.8rem; font-weight: bold;'>① 50MA 추세</div>
-                    <div style='font-size: 1.15rem; font-weight: 800;'>${smh_c:.2f} <span style='font-size:0.75rem; opacity:0.6; font-weight:bold;'>/ 기준 ${smh_ma50_c:.2f}</span></div>
-                </div>
-                <div style='font-size: 0.95rem; font-weight: 800; color: {s_col};'>{s_stat}</div>
-            </div>
-            <div style='background: rgba(255,255,255,0.9); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.05); border-left: 5px solid {r_col}; display:flex; justify-content:space-between; align-items:center;'>
-                <div>
-                    <div style='font-size: 0.8rem; font-weight: bold;'>② 3M 수익률</div>
-                    <div style='font-size: 1.15rem; font-weight: 800;'>{ms['smh_3m_ret']*100:+.2f}% <span style='font-size:0.75rem; opacity:0.6; font-weight:bold;'>/ 기준 +5.0%</span></div>
-                </div>
-                <div style='font-size: 0.95rem; font-weight: 800; color: {r_col};'>{r_stat}</div>
-            </div>
-            <div style='background: rgba(255,255,255,0.9); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.05); border-left: 5px solid {rsi_col}; display:flex; justify-content:space-between; align-items:center;'>
-                <div>
-                    <div style='font-size: 0.8rem; font-weight: bold;'>③ 과열/침체 (RSI)</div>
-                    <div style='font-size: 1.15rem; font-weight: 800;'>{ms['smh_rsi']:.1f} <span style='font-size:0.75rem; opacity:0.6; font-weight:bold;'>/ 기준 50.0</span></div>
-                </div>
-                <div style='font-size: 0.95rem; font-weight: 800; color: {rsi_col};'>{rsi_stat}</div>
-            </div>
-        </div>
-        <div style='margin-top:12px; padding:12px; border-radius:12px; background-color:{soxl_bg}; text-align: center;'>
-            <div style='font-size: 1.15rem; font-weight: 800;'>{soxl_res}</div>
-        </div>
-    </div>
-
-    <div style='background:rgba(255,255,255,0.4); border:1px solid rgba(0,0,0,0.05); border-radius:16px; padding:20px; display:flex; flex-direction:column; justify-content:flex-start;'>
-        <div style='font-weight:800; font-size:1.1rem; margin-bottom:12px; border-bottom:1px solid rgba(0,0,0,0.05); padding-bottom:6px;'>🤖 AI 전략 분석관 리서치 Report</div>
-        <div style='font-size:0.95rem; line-height:1.6; padding-top: 5px;'>
-            <div style='margin-bottom:12px;'>{reg_t}</div>
-            {reg_d}
-        </div>
-    </div>
+<div style='background:#ffffff; border:2.5px solid #1a1a1a; border-radius:16px; padding:20px; display:flex; flex-direction:column; justify-content:space-between; box-shadow: 4px 4px 0px #1a1a1a;'>
+<div style='font-weight:900; font-size:1.1rem; margin-bottom:12px; border-bottom:2.5px dashed #1a1a1a; padding-bottom:6px;'>⚡ SOXL 진입 판독기</div>
+<div style='display: flex; flex-direction: column; gap: 8px;'>
+<div style='background: #f5f5f0; padding: 10px 14px; border-radius: 8px; border: 2.5px solid #1a1a1a; border-left: 6px solid {s_col}; display:flex; justify-content:space-between; align-items:center;'>
+<div>
+<div style='font-size: 0.8rem; font-weight: bold;'>① 50MA 추세</div>
+<div style='font-size: 1.15rem; font-weight: 900;'>${smh_c:.2f} <span style='font-size:0.75rem; opacity:0.6; font-weight:bold;'>/ 기준 ${smh_ma50_c:.2f}</span></div>
 </div>
-
-<div style='margin-top: 25px; padding-top: 15px; border-top: 1px dashed rgba(0,0,0,0.1);'>
-    <div style='font-weight:800; margin-bottom:10px; font-size: 1rem;'>🔍 타겟 국면(Regime) 산출 근거 시각화 <span style='font-weight:bold; color:{MAIN_GREEN};'>(현재 AI 타겟: R{tgt_reg})</span></div>
+<div style='font-size: 0.95rem; font-weight: 900; color: {s_col};'>{s_stat}</div>
+</div>
+<div style='background: #f5f5f0; padding: 10px 14px; border-radius: 8px; border: 2.5px solid #1a1a1a; border-left: 6px solid {r_col}; display:flex; justify-content:space-between; align-items:center;'>
+<div>
+<div style='font-size: 0.8rem; font-weight: bold;'>② 3M 수익률</div>
+<div style='font-size: 1.15rem; font-weight: 900;'>{ms['smh_3m_ret']*100:+.2f}% <span style='font-size:0.75rem; opacity:0.6; font-weight:bold;'>/ 기준 +5.0%</span></div>
+</div>
+<div style='font-size: 0.95rem; font-weight: 900; color: {r_col};'>{r_stat}</div>
+</div>
+<div style='background: #f5f5f0; padding: 10px 14px; border-radius: 8px; border: 2.5px solid #1a1a1a; border-left: 6px solid {rsi_col}; display:flex; justify-content:space-between; align-items:center;'>
+<div>
+<div style='font-size: 0.8rem; font-weight: bold;'>③ 과열/침체 (RSI)</div>
+<div style='font-size: 1.15rem; font-weight: 900;'>{ms['smh_rsi']:.1f} <span style='font-size:0.75rem; opacity:0.6; font-weight:bold;'>/ 기준 50.0</span></div>
+</div>
+<div style='font-size: 0.95rem; font-weight: 900; color: {rsi_col};'>{rsi_stat}</div>
+</div>
+</div>
+<div style='margin-top:12px; padding:12px; border-radius:12px; border: 2.5px solid #1a1a1a; background-color:{soxl_bg}; text-align: center;'>
+<div style='font-size: 1.15rem; font-weight: 900;'>{soxl_res}</div>
+</div>
+</div>
+<div style='background:#ffffff; border:2.5px solid #1a1a1a; border-radius:16px; padding:20px; display:flex; flex-direction:column; justify-content:flex-start; box-shadow: 4px 4px 0px #1a1a1a;'>
+<div style='font-weight:900; font-size:1.1rem; margin-bottom:12px; border-bottom:2.5px dashed #1a1a1a; padding-bottom:6px;'>🤖 AI 전략 분석관 리서치 Report</div>
+<div style='font-size:0.95rem; line-height:1.6; padding-top: 5px;'>
+<div style='margin-bottom:12px;'>{reg_t}</div>
+{reg_d}
+</div>
+</div>
+</div>
+<div style='margin-top: 25px; padding-top: 15px; border-top: 2.5px dashed #1a1a1a;'>
+<div style='font-weight:900; margin-bottom:10px; font-size: 1rem;'>🔍 타겟 국면(Regime) 산출 근거 시각화 <span style='font-weight:bold; color:{MAIN_GREEN};'>(현재 AI 타겟: R{tgt_reg})</span></div>
 </div>
 """
                     st.markdown(html_str, unsafe_allow_html=True)
                     
                     m1, m2, m3 = st.columns(3)
                     with m1:
-                        st.markdown(f"""<div style='text-align:center; padding: 10px; background: rgba(255,255,255,0.7); border: 1px solid rgba(0,0,0,0.05); border-radius: 12px; min-width: 120px;'>
+                        st.markdown(f"""<div style='text-align:center; padding: 10px; background: rgba(255,255,255,0.7); border: 2.5px solid #1a1a1a; border-radius: 12px; min-width: 120px; box-shadow: 2px 2px 0px #1a1a1a;'>
 <div style='font-size: 0.8rem; font-weight: bold;'>조건 1. 공포 지수 (VIX)</div>
-<div style='font-size: 1.2rem; font-weight: 800; color: {vix_col}; margin-top: 5px;'>{vix_status}</div>
+<div style='font-size: 1.2rem; font-weight: 900; color: {vix_col}; margin-top: 5px;'>{vix_status}</div>
 </div>""", unsafe_allow_html=True)
                         st.plotly_chart(get_plotly_sparkline(ms['hist_vix'], vix_col, hline=40 if vix_c>30 else 25), use_container_width=True, config={'displayModeBar': False})
                         st.markdown(f"<div style='text-align:center; font-size: 0.8rem; margin-top: -10px; font-weight: bold; color:{TEXT_SUB};'>현재: {vix_c:.2f}</div>", unsafe_allow_html=True)
                     with m2:
-                        st.markdown(f"""<div style='text-align:center; padding: 10px; background: rgba(255,255,255,0.7); border: 1px solid rgba(0,0,0,0.05); border-radius: 12px; min-width: 120px;'>
+                        st.markdown(f"""<div style='text-align:center; padding: 10px; background: rgba(255,255,255,0.7); border: 2.5px solid #1a1a1a; border-radius: 12px; min-width: 120px; box-shadow: 2px 2px 0px #1a1a1a;'>
 <div style='font-size: 0.8rem; font-weight: bold;'>조건 2. 장기 추세 (QQQ)</div>
-<div style='font-size: 1.2rem; font-weight: 800; color: {trend_col}; margin-top: 5px;'>{trend_status}</div>
+<div style='font-size: 1.2rem; font-weight: 900; color: {trend_col}; margin-top: 5px;'>{trend_status}</div>
 </div>""", unsafe_allow_html=True)
                         st.plotly_chart(get_plotly_dual_sparkline(ms['hist_qqq'], ms['hist_ma200'], trend_col, 'rgba(150,150,150,0.5)'), use_container_width=True, config={'displayModeBar': False})
                         st.markdown(f"<div style='text-align:center; font-size: 0.8rem; margin-top: -10px; font-weight: bold; color:{TEXT_SUB};'>200MA 이격: {trend_gap:+.1f}%</div>", unsafe_allow_html=True)
                     with m3:
-                        st.markdown(f"""<div style='text-align:center; padding: 10px; background: rgba(255,255,255,0.7); border: 1px solid rgba(0,0,0,0.05); border-radius: 12px; min-width: 120px;'>
+                        st.markdown(f"""<div style='text-align:center; padding: 10px; background: rgba(255,255,255,0.7); border: 2.5px solid #1a1a1a; border-radius: 12px; min-width: 120px; box-shadow: 2px 2px 0px #1a1a1a;'>
 <div style='font-size: 0.8rem; font-weight: bold;'>조건 3. 이평선 배열</div>
-<div style='font-size: 1.2rem; font-weight: 800; color: {align_col}; margin-top: 5px;'>{align_status}</div>
+<div style='font-size: 1.2rem; font-weight: 900; color: {align_col}; margin-top: 5px;'>{align_status}</div>
 </div>""", unsafe_allow_html=True)
                         st.plotly_chart(get_plotly_dual_sparkline(ms['hist_ma50'], ms['hist_ma200'], align_col, 'rgba(150,150,150,0.5)'), use_container_width=True, config={'displayModeBar': False})
                         st.markdown(f"<div style='text-align:center; font-size: 0.8rem; margin-top: -10px; font-weight: bold; color:{TEXT_SUB};'>50MA 이격: {align_gap:+.1f}%</div>", unsafe_allow_html=True)
@@ -1024,25 +1018,25 @@ def make_portfolio_page(acc_name):
 
                     st.markdown(f"""
 <div style='display: flex; gap: 15px; flex-wrap: wrap;'>
-<div style='flex: 1; min-width: 250px; background: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.05); border-radius: 14px; padding: 16px;'>
-<div style='font-weight:800; margin-bottom:8px; border-bottom:1px dashed rgba(0,0,0,0.1); padding-bottom:4px;'>💰 스마트 DCA (자금 투입)</div>
+<div style='flex: 1; min-width: 250px; background: #ffffff; border: 2.5px solid #1a1a1a; border-radius: 16px; padding: 16px; box-shadow: 4px 4px 0px #1a1a1a;'>
+<div style='font-weight:900; margin-bottom:8px; border-bottom:2.5px dashed #1a1a1a; padding-bottom:4px;'>💰 스마트 DCA (자금 투입)</div>
 <div style='font-size:0.95rem; line-height:1.6;'>
-<span style='color:{dca_col}; font-weight:800; font-size:1.3rem;'>{dca_stat}</span><br>
-<span style='font-weight:bold; color:{TEXT_SUB};'>{dca_desc}</span>
+<span style='color:{dca_col}; font-weight:900; font-size:1.3rem;'>{dca_stat}</span><br>
+<span style='font-weight:bold;'>{dca_desc}</span>
 </div>
 </div>
-<div style='flex: 1; min-width: 250px; background: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.05); border-radius: 14px; padding: 16px;'>
-<div style='font-weight:800; margin-bottom:8px; border-bottom:1px dashed rgba(0,0,0,0.1); padding-bottom:4px;'>🚨 채권 스프레드 (스마트머니)</div>
+<div style='flex: 1; min-width: 250px; background: #ffffff; border: 2.5px solid #1a1a1a; border-radius: 16px; padding: 16px; box-shadow: 4px 4px 0px #1a1a1a;'>
+<div style='font-weight:900; margin-bottom:8px; border-bottom:2.5px dashed #1a1a1a; padding-bottom:4px;'>🚨 채권 스프레드 (스마트머니)</div>
 <div style='font-size:0.95rem; line-height:1.6;'>
-<span style='color:{sm_col}; font-weight:800; font-size:1.3rem;'>{sm_stat}</span><br>
-<span style='font-weight:bold; color:{TEXT_SUB};'>{sm_desc}</span>
+<span style='color:{sm_col}; font-weight:900; font-size:1.3rem;'>{sm_stat}</span><br>
+<span style='font-weight:bold;'>{sm_desc}</span>
 </div>
 </div>
-<div style='flex: 1; min-width: 250px; background: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.05); border-radius: 14px; padding: 16px;'>
-<div style='font-weight:800; margin-bottom:8px; border-bottom:1px dashed rgba(0,0,0,0.1); padding-bottom:4px;'>⚖️ 시장 폭 (Market Breadth)</div>
+<div style='flex: 1; min-width: 250px; background: #ffffff; border: 2.5px solid #1a1a1a; border-radius: 16px; padding: 16px; box-shadow: 4px 4px 0px #1a1a1a;'>
+<div style='font-weight:900; margin-bottom:8px; border-bottom:2.5px dashed #1a1a1a; padding-bottom:4px;'>⚖️ 시장 폭 (Market Breadth)</div>
 <div style='font-size:0.95rem; line-height:1.6;'>
-<span style='color:{br_col}; font-weight:800; font-size:1.3rem;'>{br_stat}</span><br>
-<span style='font-weight:bold; color:{TEXT_SUB};'>{br_desc}</span>
+<span style='color:{br_col}; font-weight:900; font-size:1.3rem;'>{br_stat}</span><br>
+<span style='font-weight:bold;'>{br_desc}</span>
 </div>
 </div>
 </div>
@@ -1056,8 +1050,8 @@ def make_portfolio_page(acc_name):
                     with col_tab:
                         def color_y(val):
                             if isinstance(val, (int, float)):
-                                if val > 0: return f'color: {C_UP}; font-weight: 800;'
-                                elif val < 0: return f'color: {C_DOWN}; font-weight: 800;'
+                                if val > 0: return f'color: {C_UP}; font-weight: 900;'
+                                elif val < 0: return f'color: {C_DOWN}; font-weight: 900;'
                             return ''
                         ed_disp = st.data_editor(
                             disp_df.style.map(color_y, subset=["수익률 (%)", "원화 수익률 (%)"]), 
@@ -1087,7 +1081,7 @@ def make_portfolio_page(acc_name):
                             fig.update_traces(textposition='inside', textinfo='percent+label', textfont_size=14, textfont_color="#fff")
                             st.plotly_chart(fig, use_container_width=True)
                         else:
-                            st.markdown(f"<div style='height: 280px; display: flex; align-items: center; justify-content: center; color: {TEXT_SUB}; font-weight:800;'>자산을 입력해 주세요.</div>", unsafe_allow_html=True)
+                            st.markdown("<div style='height: 280px; display: flex; align-items: center; justify-content: center; color: #1a1a1a; font-weight:900;'>자산을 입력해 주세요.</div>", unsafe_allow_html=True)
                 
                 with st.container(border=True):
                     render_card_header("⚖️ 기계적 리밸런싱 지침 (Tolerance: ±1.5주)", "REBALANCING")
@@ -1147,8 +1141,8 @@ def make_portfolio_page(acc_name):
 
                         def color_act(val):
                             val_s = str(val)
-                            if '매수' in val_s or '비축' in val_s: return f'color: {C_UP}; font-weight:800;'
-                            elif '매도' in val_s or '활용' in val_s: return f'color: {C_DOWN}; font-weight:800;'
+                            if '매수' in val_s or '비축' in val_s: return f'color: {C_UP}; font-weight:900;'
+                            elif '매도' in val_s or '활용' in val_s: return f'color: {C_DOWN}; font-weight:900;'
                             elif '적정' in val_s: return f'color: {TEXT_SUB}; font-weight:bold;'
                             return ''
                         st.dataframe(status_df.style.map(color_act, subset=['리밸런싱 액션']), use_container_width=True, hide_index=True)
@@ -1165,7 +1159,7 @@ def make_portfolio_page(acc_name):
                             fig_corr = go.Figure(data=go.Heatmap(
                                 z=corr_matrix.values, x=corr_matrix.columns, y=corr_matrix.index,
                                 text=corr_matrix.values, texttemplate="%{text}",
-                                colorscale="RdBu", zmin=-1, zmax=1
+                                colorscale="RdYlGn", zmin=-1, zmax=1
                             ))
                             cust_corr = THEME_LAYOUT.copy(); cust_corr.update(height=400, margin=dict(l=10, r=10, t=10, b=10))
                             fig_corr.update_layout(**cust_corr)
@@ -1274,7 +1268,7 @@ def make_portfolio_page(acc_name):
 
                             fig_seed = go.Figure()
                             fig_seed.add_trace(go.Scatter(x=hist_df.index, y=hist_df['equity'], name="실제 총 평가액", line=dict(color=MAIN_GREEN, width=3.5, shape='hv'), mode='lines'))
-                            fig_seed.add_trace(go.Scatter(x=hist_df.index, y=hist_df['seed'], name="투입 시드 원금", line=dict(color=TEXT_SUB, width=2, dash='dot', shape='hv'), mode='lines'))
+                            fig_seed.add_trace(go.Scatter(x=hist_df.index, y=hist_df['seed'], name="투입 시드 원금", line=dict(color=TEXT_COLOR, width=2, dash='dot', shape='hv'), mode='lines'))
                             
                             cust_s = THEME_LAYOUT.copy()
                             cust_s.update(height=350, hovermode="x unified", yaxis=dict(showgrid=True, autorange=True, rangemode="normal"))
@@ -1319,8 +1313,8 @@ def page_strategy_specification():
     with st.container(border=True):
         render_card_header("AMLS v4.5 전략 명세서", "DOCUMENTATION")
         st.markdown(f"""
-<p style="color:#ff3b30; font-weight:800;">기밀 등급: CLASSIFIED - 내부 전용</p>
-<hr style="border: 1px solid rgba(0,0,0,0.1);">
+<p style="color:#ff3b30; font-weight:900;">기밀 등급: CLASSIFIED - 내부 전용</p>
+<hr style="border: 1.5px solid #1a1a1a;">
 <br>
 <h4><span style='display:inline-flex; width:28px; height:28px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; margin-right:8px;'>1</span> 전략 개요 (Philosophy)</h4>
 <p style="text-align:left;">AMLS는 스탠 웬스타인(Stan Weinstein)의 '4단계 국면 이론(Stage Analysis)'을 현대적 퀀트 자산배분 기법으로 재해석한 전략입니다. 시장의 상승/하락 추세뿐만 아니라 <b>'공포 지수(VIX)'</b>를 결합하여, 국면별 최적의 레버리지 배수를 동적으로 조절합니다.</p>
@@ -1333,22 +1327,22 @@ def page_strategy_specification():
 <li><b>Regime 3/4:</b> 극한의 방어가 필요한 하락장에서는 여전히 현금 35~40%를 쥐고 관망합니다.</li>
 </ul>
 <br>
-<hr style="border: 1px solid rgba(0,0,0,0.1);">
+<hr style="border: 1.5px solid #1a1a1a;">
 <br>
 <h4><span style='display:inline-flex; width:28px; height:28px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; margin-right:8px;'>3</span> 레짐(Regime) 판단 기준 및 배분표</h4>
 <p style="text-align:left;">AI 엔진은 매일 종가 기준으로 아래의 3가지 지표를 분석하여 내일의 타겟 레짐을 결정합니다.</p>
-<table style="width:100%; border-collapse: collapse; text-align:left; font-size:0.9rem; border: 1px solid rgba(0,0,0,0.1); background:rgba(255,255,255,0.7);">
-<tr style="background:rgba(0,0,0,0.05); color:{TEXT_COLOR};">
-<th style="padding:10px; border:1px solid rgba(0,0,0,0.1);">판단 순위</th>
-<th style="padding:10px; border:1px solid rgba(0,0,0,0.1);">상태</th>
-<th style="padding:10px; border:1px solid rgba(0,0,0,0.1);">진입 조건 (Daily Close)</th>
-<th style="padding:10px; border:1px solid rgba(0,0,0,0.1);">시장 상태 해석</th>
-<th style="padding:10px; border:1px solid rgba(0,0,0,0.1);">레버리지</th>
+<table style="width:100%; border-collapse: collapse; text-align:left; font-size:0.9rem; border: 2.5px solid #1a1a1a; background:#f5f5f0;">
+<tr style="background:#1a1a1a; color:#fff;">
+<th style="padding:10px; border:2.5px solid #1a1a1a;">판단 순위</th>
+<th style="padding:10px; border:2.5px solid #1a1a1a;">상태</th>
+<th style="padding:10px; border:2.5px solid #1a1a1a;">진입 조건 (Daily Close)</th>
+<th style="padding:10px; border:2.5px solid #1a1a1a;">시장 상태 해석</th>
+<th style="padding:10px; border:2.5px solid #1a1a1a;">레버리지</th>
 </tr>
-<tr><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);"><b>1순위</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">🔴 R4</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);"><b>VIX > 40</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">이성을 잃은 패닉/투매 장세</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1); font-weight:bold;">0.10x</td></tr>
-<tr><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);"><b>2순위</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">🟠 R3</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">VIX ≤ 40 & <b>QQQ < 200MA</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">베어마켓 진입, 장기 하락 추세</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1); font-weight:bold;">0.15x</td></tr>
-<tr><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);"><b>3순위</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">🟢 R1</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">VIX < 25 & <b>QQQ ≥ 200MA</b> & <b>50MA ≥ 200MA</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">완벽한 정배열, 변동성이 낮은 대세 상승장</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1); font-weight:800; color:{MAIN_GREEN};">2.30x</td></tr>
-<tr><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);"><b>4순위</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">🟡 R2</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">위 조건에 해당하지 않는 모든 경우</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">단기 조정 또는 모멘텀 둔화 구간</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1); font-weight:bold;">1.80x</td></tr>
+<tr><td style="padding:10px; border:2.5px solid #1a1a1a;"><b>1순위</b></td><td style="padding:10px; border:2.5px solid #1a1a1a;">🔴 R4</td><td style="padding:10px; border:2.5px solid #1a1a1a;"><b>VIX > 40</b></td><td style="padding:10px; border:2.5px solid #1a1a1a;">이성을 잃은 패닉/투매 장세</td><td style="padding:10px; border:2.5px solid #1a1a1a; font-weight:bold;">0.10x</td></tr>
+<tr><td style="padding:10px; border:2.5px solid #1a1a1a;"><b>2순위</b></td><td style="padding:10px; border:2.5px solid #1a1a1a;">🟠 R3</td><td style="padding:10px; border:2.5px solid #1a1a1a;">VIX ≤ 40 & <b>QQQ < 200MA</b></td><td style="padding:10px; border:2.5px solid #1a1a1a;">베어마켓 진입, 장기 하락 추세</td><td style="padding:10px; border:2.5px solid #1a1a1a; font-weight:bold;">0.15x</td></tr>
+<tr><td style="padding:10px; border:2.5px solid #1a1a1a;"><b>3순위</b></td><td style="padding:10px; border:2.5px solid #1a1a1a;">🟢 R1</td><td style="padding:10px; border:2.5px solid #1a1a1a;">VIX < 25 & <b>QQQ ≥ 200MA</b> & <b>50MA ≥ 200MA</b></td><td style="padding:10px; border:2.5px solid #1a1a1a;">완벽한 정배열, 변동성이 낮은 대세 상승장</td><td style="padding:10px; border:2.5px solid #1a1a1a; font-weight:900; color:{MAIN_GREEN};">2.30x</td></tr>
+<tr><td style="padding:10px; border:2.5px solid #1a1a1a;"><b>4순위</b></td><td style="padding:10px; border:2.5px solid #1a1a1a;">🟡 R2</td><td style="padding:10px; border:2.5px solid #1a1a1a;">위 조건에 해당하지 않는 모든 경우</td><td style="padding:10px; border:2.5px solid #1a1a1a;">단기 조정 또는 모멘텀 둔화 구간</td><td style="padding:10px; border:2.5px solid #1a1a1a; font-weight:bold;">1.80x</td></tr>
 </table>
 <br>
 <h4><span style='display:inline-flex; width:28px; height:28px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; margin-right:8px;'>4</span> 포트폴리오 비중 세부 지침 (Weights)</h4>
@@ -1359,7 +1353,7 @@ def page_strategy_specification():
 <li><b>R4 (위기):</b> GLD 50% / CASH 40% / QQQ 10%</li>
 </ul>
 <br>
-<hr style="border: 1px solid rgba(0,0,0,0.1);">
+<hr style="border: 1.5px solid #1a1a1a;">
 <br>
 <h4><span style='display:inline-flex; width:28px; height:28px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; margin-right:8px;'>5</span> 휩쏘(가짜 신호) 방지: 비대칭 5일 대기 프로토콜</h4>
 <ul style="text-align:left; font-size:0.95rem; color:{TEXT_SUB}; line-height:1.8;">
