@@ -97,9 +97,13 @@ if needs_save: save_accounts_data(st.session_state['accounts'])
 
 
 # =====================================================================
-# [2] 전역 CSS 설정 (단일 카드 통합 스타일)
+# [2] 색상 변수 및 전역 CSS 설정 (카드뉴스 스타일 전면 교체)
 # =====================================================================
 MAIN_GREEN = "#00C060"
+PANEL_BG = "#ffffff"
+PANEL_BORDER = "2.5px solid #1a1a1a"
+PANEL_RADIUS = "16px"
+
 C_UP = "#00C060"
 C_DOWN = "#FF3B30"  
 C_WARN = "#FF9500"
@@ -140,7 +144,7 @@ def apply_custom_css():
         border-right: 2.5px solid #1a1a1a !important;
     }
 
-    /* 메트릭 (숫자 위젯) */
+    /* 메트릭 카드 */
     [data-testid="stMetric"] {
         background: #ffffff;
         border: 2px solid #1a1a1a;
@@ -164,7 +168,7 @@ def apply_custom_css():
     .stButton > button {
         background: #00C060 !important;
         color: #ffffff !important;
-        border: 2px solid #1a1a1a !important;
+        border: 2.5px solid #1a1a1a !important;
         border-radius: 10px !important;
         font-weight: 800 !important;
         box-shadow: 3px 3px 0px #1a1a1a !important;
@@ -230,6 +234,44 @@ def render_card_header(title: str, chapter: str = ""):
     {chapter_html}
     <div style="font-size:1.4rem; font-weight:900; color:#1a1a1a; margin-bottom:12px;">{title}</div>
     """, unsafe_allow_html=True)
+
+def card_news_card(header_text: str, body_html: str, chapter: str = ""):
+    chapter_tag = f'<div style="font-size:0.65rem;font-weight:700;color:#00C060;letter-spacing:0.15em;">{chapter}</div>' if chapter else ''
+    header_tag = f'<h4 style="font-weight:900;margin:4px 0 16px;">{header_text}</h4>' if header_text else ''
+    html_str = f"""
+<div style="background:#fff; border:2.5px solid #1a1a1a; border-radius:16px; overflow:hidden; box-shadow:4px 4px 0px #1a1a1a; margin-bottom:20px;">
+<div style="background:#00C060; height:38px; display:flex; align-items:center; justify-content:space-between; padding:0 16px; border-bottom: 2.5px solid #1a1a1a;">
+<div style="width:20px;height:20px;border:2.5px solid #1a1a1a;border-radius:50%;background:#f5f5f0;"></div>
+<span style="font-size:0.7rem;color:#ffffff;font-weight:900;letter-spacing:0.1em;">AMLS QUANT SYSTEM</span>
+<div style="width:20px;height:20px;border:2.5px solid #1a1a1a;border-radius:50%;background:#f5f5f0;"></div>
+</div>
+<div style="padding:20px 24px;">
+{chapter_tag}
+{header_tag}
+{body_html}
+</div>
+</div>
+"""
+    st.markdown(html_str, unsafe_allow_html=True)
+
+def open_card(header_text: str, chapter: str = ""):
+    chapter_tag = f'<div style="font-size:0.65rem;font-weight:700;color:#00C060;letter-spacing:0.15em;">{chapter}</div>' if chapter else ''
+    header_tag = f'<h4 style="font-weight:900;margin:4px 0 16px;">{header_text}</h4>' if header_text else ''
+    html_str = f"""
+<div style="background:#fff; border:2.5px solid #1a1a1a; border-radius:16px; overflow:hidden; box-shadow:4px 4px 0px #1a1a1a; margin-bottom:20px;">
+<div style="background:#00C060; height:38px; display:flex; align-items:center; justify-content:space-between; padding:0 16px; border-bottom: 2.5px solid #1a1a1a;">
+<div style="width:20px;height:20px;border:2.5px solid #1a1a1a;border-radius:50%;background:#f5f5f0;"></div>
+<span style="font-size:0.7rem;color:#ffffff;font-weight:900;letter-spacing:0.1em;">AMLS QUANT SYSTEM</span>
+<div style="width:20px;height:20px;border:2.5px solid #1a1a1a;border-radius:50%;background:#f5f5f0;"></div>
+</div>
+<div style="padding:20px 24px;">
+{chapter_tag}
+{header_tag}
+"""
+    st.markdown(html_str, unsafe_allow_html=True)
+
+def close_card():
+    st.markdown("</div></div>", unsafe_allow_html=True)
 
 # --- Plotly Sparkline (미니 차트) 생성 함수 ---
 def get_plotly_sparkline(data_list, color, hline=None):
@@ -911,7 +953,7 @@ def make_portfolio_page(acc_name):
                     align_col = C_UP if ma50_c >= ma200_c else C_DOWN
                     align_gap = (ma50_c / ma200_c - 1) * 100
 
-                    st.markdown(f"""
+                    html_str = f"""
 <div class='info-grid'>
 <div style='background:#ffffff; border:2.5px solid #1a1a1a; border-radius:16px; padding:20px; display:flex; flex-direction:column; justify-content:space-between; box-shadow: 4px 4px 0px rgba(0,0,0,0.05);'>
 <div style='font-weight:900; font-size:1.1rem; margin-bottom:12px; border-bottom:2.5px dashed #1a1a1a; padding-bottom:6px;'>⚡ SOXL 진입 판독기</div>
@@ -951,7 +993,8 @@ def make_portfolio_page(acc_name):
 <div style='font-size: 1.2rem; font-weight: 900;'>{soxl_res}</div>
 </div>
 </div>
-<div style='grid-column: span 2; background:#ffffff; border:2.5px solid #1a1a1a; border-radius:16px; padding:20px; display:flex; flex-direction:column; justify-content:flex-start; box-shadow: 4px 4px 0px #1a1a1a;'>
+
+<div style='grid-column: span 2; background:#ffffff; border:2.5px solid #1a1a1a; border-radius:16px; padding:20px; display:flex; flex-direction:column; justify-content:flex-start; box-shadow: 4px 4px 0px rgba(0,0,0,0.05);'>
 <div style='font-weight:900; font-size:1.1rem; margin-bottom:12px; border-bottom:2.5px dashed #1a1a1a; padding-bottom:6px;'>🤖 AI 전략 분석관 리서치 Report</div>
 <div style='font-size:1rem; line-height:1.7; padding-top: 5px;'>
 <div style='margin-bottom:12px;'>{reg_t}</div>
@@ -962,7 +1005,8 @@ def make_portfolio_page(acc_name):
 </div>
 </div>
 </div>
-""", unsafe_allow_html=True)
+"""
+                    st.markdown(html_str, unsafe_allow_html=True)
                     
                     m1, m2, m3 = st.columns(3)
                     with m1:
@@ -1113,8 +1157,8 @@ def make_portfolio_page(acc_name):
                             else: action = f"매도 ${abs(diff):,.0f}{action_suffix}"
                         elif tkr == "CASH":
                             if abs(diff) < 50: action = "유지 (적정)"
-                            elif diff > 0: action = f"추가 ${diff:,.0f}"
-                            else: action = f"인출 ${abs(diff):,.0f}"
+                            elif diff > 0: action = f"현금 비축 필요 (+${diff:,.0f})"
+                            else: action = f"타 종목 매수에 활용 (${abs(diff):,.0f} 여유)"
                         else: action = "유지 (적정)"
                         
                         if my_v > 0 or tw > 0: 
@@ -1131,8 +1175,8 @@ def make_portfolio_page(acc_name):
 
                         def color_act(val):
                             val_s = str(val)
-                            if '매수' in val_s or '추가' in val_s: return f'color: {C_UP}; font-weight:900;'
-                            elif '매도' in val_s or '인출' in val_s: return f'color: {C_DOWN}; font-weight:900;'
+                            if '매수' in val_s or '비축' in val_s: return f'color: {C_UP}; font-weight:900;'
+                            elif '매도' in val_s or '활용' in val_s: return f'color: {C_DOWN}; font-weight:900;'
                             elif '적정' in val_s: return f'color: {TEXT_SUB}; font-weight:bold;'
                             return ''
                         st.dataframe(status_df.style.map(color_act, subset=['리밸런싱 액션']), use_container_width=True, hide_index=True)
@@ -1283,7 +1327,7 @@ def make_portfolio_page(acc_name):
 
 # --- 페이지 구성: 계좌 관리 ---
 def page_manage_accounts():
-    st.markdown("<h1 style='font-size:3rem; margin-bottom:0;'>⚙️ <span class='highlight'>계좌</span> 관리</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='font-size:3.5rem; margin-bottom:0;'>⚙️ <span class='highlight'>계좌</span> 관리</h1>", unsafe_allow_html=True)
     new_acc = st.text_input("새 계좌명")
     if st.button("개설", type="primary") and new_acc:
         if new_acc not in st.session_state['accounts']:
@@ -1298,7 +1342,7 @@ def page_manage_accounts():
 
 # --- 페이지 구성: 전략 명세서 ---
 def page_strategy_specification():
-    st.markdown("<h1 style='font-size:3rem; margin-bottom:0;'>📜 전략 명세서</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='font-size:3.5rem; margin-bottom:0;'>📜 전략 명세서</h1>", unsafe_allow_html=True)
     
     with st.container(border=True):
         render_card_header("AMLS v4.5 전략 명세서", "DOCUMENTATION")
