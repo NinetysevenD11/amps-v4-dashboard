@@ -1475,7 +1475,7 @@ if page == "📊 Dashboard":
 # ──────────────────────────────────────────
 elif page == "💼 Portfolio":
 
-    # ── 데이터 계산 ─────────────────────────────────────────
+    # ── 데이터 계산
     current_prices = {}
     for t in ASSET_LIST:
         if t == 'CASH': current_prices[t] = 1.0
@@ -1499,199 +1499,209 @@ elif page == "💼 Portfolio":
     C_GREEN = main_color
     C_RED   = "#DC2626"
     r_acc   = {1: main_color, 2: "#D97706", 3: "#DC2626", 4: "#7C3AED"}[curr_regime]
+    _smh_passed = sum([smh_c1, smh_c2, smh_c3])
 
-    # ══════════════════════════════════════════════════════════
-    # ZONE 0 — 다크 터미널 마스트헤드
-    # ══════════════════════════════════════════════════════════
-    def _kv(label, val, color="#E2E8F0", sub=""):
-        sub_html = (
-            f'<span style="font-family:DM Mono,monospace;font-size:0.62em;'
-            f'color:rgba(255,255,255,0.35);">{sub}</span>'
-        ) if sub else ""
-        return (
-            f'<div style="display:flex;flex-direction:column;padding:0 22px;'
-            f'border-right:1px solid rgba(255,255,255,0.07);min-width:110px;">'
-            f'<span style="font-family:DM Mono,monospace;font-size:0.55em;'
-            f'color:rgba(255,255,255,0.38);letter-spacing:0.2em;text-transform:uppercase;'
-            f'margin-bottom:3px;">{label}</span>'
-            f'<span style="font-family:DM Mono,monospace;font-size:1.0em;font-weight:500;'
-            f'color:{color};font-variant-numeric:tabular-nums;line-height:1.2;">{val}</span>'
-            f'{sub_html}'
+    # ── 공통 섹션 레이블
+    def _sl(text):
+        return apply_theme(
+            f'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px;'
+            f'padding-bottom:7px;border-bottom:1px solid rgba(0,0,0,0.09);">'
+            f'<div style="width:2px;height:12px;background:{main_color};flex-shrink:0;"></div>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:600;'
+            f'color:{tc_heading};letter-spacing:0.2em;text-transform:uppercase;">{text}</span>'
             f'</div>'
         )
 
+    # ══════════════════════════════════════════════════════
+    # ROW 0 — KPI 마스트헤드 (풀 너비)
+    # ══════════════════════════════════════════════════════
+    def _kv(label, val, color, sub=""):
+        sub_html = f'<span style="font-family:DM Mono,monospace;font-size:0.6em;color:rgba(255,255,255,0.3);">{sub}</span>' if sub else ""
+        return (
+            f'<div style="display:flex;flex-direction:column;padding:0 20px;'
+            f'border-right:1px solid rgba(255,255,255,0.06);min-width:115px;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.53em;'
+            f'color:rgba(255,255,255,0.35);letter-spacing:0.2em;text-transform:uppercase;margin-bottom:3px;">{label}</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:1.0em;font-weight:500;'
+            f'color:{color};font-variant-numeric:tabular-nums;line-height:1.2;">{val}</span>'
+            f'{sub_html}</div>'
+        )
+
+    _pnl_s = "▲" if pnl_pct >= 0 else "▼"
     st.markdown(apply_theme(
-        f'<div style="background:#111118;border-left:4px solid {r_acc};'
-        f'padding:14px 0;margin-bottom:18px;display:flex;align-items:center;overflow-x:auto;">'
-        f'<div style="padding:0 22px 0 18px;border-right:1px solid rgba(255,255,255,0.07);'
-        f'min-width:170px;flex-shrink:0;">'
-        f'<div style="font-family:DM Mono,monospace;font-size:0.54em;'
-        f'color:rgba(255,255,255,0.32);letter-spacing:0.22em;text-transform:uppercase;'
-        f'margin-bottom:3px;">AMLS V4.5</div>'
-        f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.15em;'
-        f'font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;line-height:1;">Portfolio</div>'
+        f'<div style="background:#111118;border-left:4px solid {r_acc};padding:13px 0;'
+        f'margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;">'
+        f'<div style="padding:0 20px 0 16px;border-right:1px solid rgba(255,255,255,0.06);flex-shrink:0;">'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.52em;color:rgba(255,255,255,0.3);'
+        f'letter-spacing:0.22em;text-transform:uppercase;margin-bottom:2px;">AMLS V4.5</div>'
+        f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.1em;font-weight:800;'
+        f'color:#FFFFFF;letter-spacing:-0.3px;line-height:1;">Portfolio</div>'
         f'</div>'
-        + _kv("Total NAV",  f"${total_val_usd:,.2f}", "#FFFFFF",              f"₩{total_val_krw:,.0f}")
-        + _kv("USD / KRW",  f"₩{cur_fx:,.0f}",        "rgba(255,255,255,0.7)","환율")
-        + _kv("P & L",      f"{pnl_pct:+.2f}%",
-              "#6EE7B7" if pnl_pct >= 0 else "#FCA5A5",
-              f"{pnl_sign} ${pnl_usd:,.0f}")
-        + _kv("Regime",     f"R{curr_regime}  {regime_info[curr_regime][1]}", r_acc)
-        + _kv("투자 원금",  f"${invested_cost:,.0f}",  "rgba(255,255,255,0.7)","취득원가")
-        + f'<div style="margin-left:auto;padding:0 18px;flex-shrink:0;">'
-        + f'<span class="live-pulse" style="font-family:DM Mono,monospace;font-size:0.6em;'
-        + f'color:#6EE7B7;letter-spacing:0.06em;">{rt_label}</span>'
-        + f'</div></div>'
+        + _kv("Total NAV", f"${total_val_usd:,.2f}", "#FFFFFF", f"₩{total_val_krw:,.0f}")
+        + _kv("USD / KRW", f"₩{cur_fx:,.0f}", "rgba(255,255,255,0.65)", "환율")
+        + _kv("P & L", f"{pnl_pct:+.2f}%", "#6EE7B7" if pnl_pct >= 0 else "#FCA5A5", f"{_pnl_s} ${pnl_usd:,.0f}")
+        + _kv("Regime", f"R{curr_regime}  {regime_info[curr_regime][1]}", r_acc)
+        + _kv("투자원금", f"${invested_cost:,.0f}", "rgba(255,255,255,0.65)", "취득원가")
+        + f'<div style="margin-left:auto;padding:0 16px;flex-shrink:0;">'
+        + f'<span class="live-pulse" style="font-family:DM Mono,monospace;font-size:0.58em;'
+        + f'color:#6EE7B7;letter-spacing:0.06em;">{rt_label}</span></div></div>'
     ), unsafe_allow_html=True)
 
-    # ══════════════════════════════════════════════════════════
-    # ZONE 1 — Goal Tracker
-    # ══════════════════════════════════════════════════════════
-    _gc_a, _gc_b = st.columns([1, 3.5])
-    with _gc_a:
+    # ══════════════════════════════════════════════════════
+    # ROW 1 — Goal Tracker (풀 너비, 컴팩트 1줄)
+    # ══════════════════════════════════════════════════════
+    _gi_col, _gb_col = st.columns([1, 3.5])
+    with _gi_col:
         new_goal = st.number_input(
-            "🎯 목표 금액 (USD)", min_value=1000.0, max_value=100_000_000.0,
-            value=st.session_state.goal_usd, step=1000.0, format="%.0f", key="goal_input"
+            "목표금액", min_value=1000.0, max_value=100_000_000.0,
+            value=st.session_state.goal_usd, step=1000.0, format="%.0f",
+            key="goal_input", label_visibility="collapsed"
         )
         if new_goal != st.session_state.goal_usd:
             st.session_state.goal_usd = new_goal
             st.rerun()
+        st.markdown(
+            f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_label};'
+            f'text-align:center;margin-top:-4px;">목표 금액 (USD)</div>',
+            unsafe_allow_html=True
+        )
 
-    with _gc_b:
+    with _gb_col:
         _goal    = st.session_state.goal_usd
         _pct_raw = (total_val_usd / _goal * 100) if _goal > 0 else 0.0
         _pct     = min(_pct_raw, 100.0)
         _over    = _pct_raw > 100.0
         _remain  = max(_goal - total_val_usd, 0.0)
-
-        if _over:         _gc, _gbadge, _gicon = "#059669", "목표 달성!", "🏆"
-        elif _pct >= 75:  _gc, _gbadge, _gicon = main_color, "75% 돌파",  "⚡"
-        elif _pct >= 50:  _gc, _gbadge, _gicon = "#D97706",  "순항 중",   "📈"
-        else:             _gc, _gbadge, _gicon = "#94A3B8",  "시작 단계", "🌱"
-
+        if _over:        _gc, _gbadge = "#059669", "ACHIEVED"
+        elif _pct >= 75: _gc, _gbadge = main_color, "75%+"
+        elif _pct >= 50: _gc, _gbadge = "#D97706",  "ON TRACK"
+        else:            _gc, _gbadge = "#94A3B8",  "GROWING"
         _gr, _gg, _gb = hex_to_rgb(_gc)
-        _pin_x = min(_pct, 98.5)
-
-        _seg_html = "".join([
-            f'<div style="position:absolute;left:{m}%;top:-20px;bottom:-4px;'
-            f'width:1px;background:rgba(0,0,0,0.09);">'
-            f'<span style="position:absolute;top:0;left:50%;transform:translateX(-50%);'
-            f'font-family:DM Mono,monospace;font-size:0.52em;color:#BBBBBB;'
-            f'white-space:nowrap;">{m}%</span></div>'
+        _seg = "".join([
+            f'<div style="position:absolute;left:{m}%;top:0;bottom:-18px;width:1px;'
+            f'background:rgba(0,0,0,0.08);">'
+            f'<span style="position:absolute;top:calc(100% + 2px);left:50%;'
+            f'transform:translateX(-50%);font-family:DM Mono,monospace;font-size:0.5em;'
+            f'color:#BBBBBB;white-space:nowrap;">{m}%</span></div>'
             for m in [25, 50, 75, 100]
         ])
-
         st.markdown(apply_theme(
             f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);'
-            f'border-left:4px solid {_gc};padding:16px 24px 14px;margin-bottom:0;">'
-
-            f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">'
-            f'<div style="display:flex;align-items:center;gap:10px;">'
-            f'<span style="font-size:1.1em;">{_gicon}</span>'
-            f'<span style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;'
+            f'border-left:4px solid {_gc};padding:10px 18px;display:flex;align-items:center;gap:18px;">'
+            f'<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};'
             f'letter-spacing:0.18em;text-transform:uppercase;">Goal Tracker</span>'
-            f'<span style="background:rgba({_gr},{_gg},{_gb},0.10);'
-            f'border:1px solid rgba({_gr},{_gg},{_gb},0.28);color:{_gc};'
-            f'font-family:DM Mono,monospace;font-size:0.6em;padding:2px 10px;'
-            f'letter-spacing:0.06em;">{_gbadge}</span>'
+            f'<span style="background:rgba({_gr},{_gg},{_gb},0.1);border:1px solid rgba({_gr},{_gg},{_gb},0.28);'
+            f'color:{_gc};font-family:DM Mono,monospace;font-size:0.55em;padding:1px 8px;">{_gbadge}</span>'
             f'</div>'
-            f'<div style="display:flex;gap:28px;align-items:baseline;">'
-            f'<div style="text-align:center;">'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.52em;color:#9494A0;'
-            f'text-transform:uppercase;letter-spacing:0.1em;">현재</div>'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.9em;color:#111118;'
-            f'font-variant-numeric:tabular-nums;">${total_val_usd:,.2f}</div></div>'
-            f'<div style="text-align:center;">'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.52em;color:#9494A0;'
-            f'text-transform:uppercase;letter-spacing:0.1em;">목표</div>'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.9em;color:#111118;'
-            f'font-variant-numeric:tabular-nums;">${_goal:,.0f}</div></div>'
-            f'<div style="text-align:right;">'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.52em;color:#9494A0;'
-            f'text-transform:uppercase;letter-spacing:0.1em;">{"초과달성" if _over else "잔여"}</div>'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.9em;font-weight:600;'
-            f'color:{_gc};font-variant-numeric:tabular-nums;">'
-            f'{"🎉" if _over else f"${_remain:,.0f}"}</div></div>'
-            f'<div style="padding-left:20px;border-left:1px solid rgba(0,0,0,0.09);">'
-            f'<span style="font-family:DM Mono,monospace;font-size:2.4em;font-weight:400;'
-            f'color:{_gc};font-variant-numeric:tabular-nums;letter-spacing:-2px;line-height:1;">'
-            f'{_pct_raw:.1f}%</span>'
-            f'</div>'
-            f'</div>'
-            f'</div>'
-
-            f'<div style="position:relative;padding-top:22px;">'
-            + _seg_html +
-            f'<div style="position:relative;height:12px;background:rgba(0,0,0,0.07);">'
-            f'<div style="height:12px;width:{_pct:.2f}%;'
+            f'<div style="flex:1;position:relative;padding-bottom:18px;">'
+            + _seg +
+            f'<div style="height:8px;background:rgba(0,0,0,0.07);">'
+            f'<div style="height:8px;width:{_pct:.2f}%;'
             f'background:linear-gradient(90deg,rgba({_gr},{_gg},{_gb},0.4),{_gc});"></div>'
-            f'<div style="position:absolute;left:{_pin_x}%;top:-6px;bottom:-6px;width:3px;'
-            f'background:{_gc};transform:translateX(-50%);">'
-            f'<div style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);'
-            f'width:13px;height:13px;border-radius:50%;background:{_gc};'
-            f'box-shadow:0 0 8px rgba({_gr},{_gg},{_gb},0.55);"></div>'
-            f'</div>'
-            f'</div>'
-            f'</div>'
-            f'</div>'
+            f'</div></div>'
+            f'<div style="display:flex;gap:20px;flex-shrink:0;align-items:center;">'
+            f'<div style="text-align:center;">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.5em;color:{tc_label};'
+            f'text-transform:uppercase;letter-spacing:0.1em;">현재</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.82em;color:{tc_body};'
+            f'font-variant-numeric:tabular-nums;">${total_val_usd:,.0f}</div></div>'
+            f'<div style="text-align:center;">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.5em;color:{tc_label};'
+            f'text-transform:uppercase;letter-spacing:0.1em;">목표</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.82em;color:{tc_body};'
+            f'font-variant-numeric:tabular-nums;">${_goal:,.0f}</div></div>'
+            f'<div style="text-align:right;padding-left:14px;border-left:1px solid rgba(0,0,0,0.08);">'
+            f'<span style="font-family:DM Mono,monospace;font-size:1.8em;font-weight:400;'
+            f'color:{_gc};font-variant-numeric:tabular-nums;letter-spacing:-1.5px;line-height:1;">'
+            f'{_pct_raw:.1f}%</span></div></div></div>'
         ), unsafe_allow_html=True)
 
-    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-    # ══════════════════════════════════════════════════════════
-    # ZONE 2 — 3열 메인 그리드
-    # ══════════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════
+    # ROW 2 — 2열 메인 그리드 [LEFT | RIGHT]
+    # LEFT ≈ RIGHT 높이 맞춤:
+    #   LEFT  = editor(355) + orders(≈130) + labels/padding ≈ 570px
+    #   RIGHT = row_A(≈130) + row_B(≈210) + row_C(≈185) + gaps ≈ 570px
+    # ══════════════════════════════════════════════════════
+    _col_l, _col_r = st.columns([1, 1.65])
 
-    def _zone_label(text):
-        return apply_theme(
-            f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">'
-            f'<div style="width:3px;height:14px;background:{main_color};flex-shrink:0;"></div>'
-            f'<span style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:600;'
-            f'color:{tc_heading};letter-spacing:0.2em;text-transform:uppercase;">{text}</span>'
-            f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.10);"></div>'
-            f'</div>'
-        )
-
-    _z_left, _z_mid, _z_right = st.columns([1, 1.5, 0.9])
-
-    # ── LEFT: Position Input + Quick Orders ─────────────────
-    with _z_left:
-        st.markdown(_zone_label("Position Input"), unsafe_allow_html=True)
-
-        _edata = []
-        for asset in ASSET_LIST:
-            v = st.session_state.portfolio.get(asset, {})
-            _edata.append({
-                "Asset":        asset,
-                "Shares":       float(v.get('shares', 0.0)),
-                "Avg Price($)": float(v.get('avg_price', 1.0 if asset == 'CASH' else 0.0)),
-                "FX Rate(₩)":  float(v.get('fx', 1350.0))
-            })
-        _df_ed = pd.DataFrame(_edata)
+    # ── LEFT ────────────────────────────────────────────────
+    with _col_l:
         with st.container(border=True):
+            st.markdown(_sl("Position Input"), unsafe_allow_html=True)
+            _edata = []
+            for asset in ASSET_LIST:
+                v = st.session_state.portfolio.get(asset, {})
+                _edata.append({
+                    "Asset":        asset,
+                    "Shares":       float(v.get('shares', 0.0)),
+                    "Avg Price($)": float(v.get('avg_price', 1.0 if asset == 'CASH' else 0.0)),
+                    "FX Rate(₩)":  float(v.get('fx', 1350.0))
+                })
+            _df_ed = pd.DataFrame(_edata)
             _df_edited = st.data_editor(
                 _df_ed, disabled=["Asset"], hide_index=True,
-                use_container_width=True, key="pf_editor",
+                use_container_width=True, key="pf_editor", height=355,
                 column_config={
                     "Shares":       st.column_config.NumberColumn("Shares", format="%.4f"),
                     "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"),
                     "FX Rate(₩)":  st.column_config.NumberColumn("FX(₩)",  format="%.0f"),
                 }
             )
-        if not _df_edited.equals(_df_ed):
-            for _, row in _df_edited.iterrows():
-                st.session_state.portfolio[row["Asset"]] = {
-                    'shares':    float(row["Shares"]),
-                    'avg_price': float(row["Avg Price($)"]),
-                    'fx':        float(row["FX Rate(₩)"])
-                }
-            save_portfolio_to_disk()
-            st.rerun()
+            if not _df_edited.equals(_df_ed):
+                for _, row in _df_edited.iterrows():
+                    st.session_state.portfolio[row["Asset"]] = {
+                        'shares':    float(row["Shares"]),
+                        'avg_price': float(row["Avg Price($)"]),
+                        'fx':        float(row["FX Rate(₩)"])
+                    }
+                save_portfolio_to_disk()
+                st.rerun()
 
-        # Quick Orders
-        if total_val_usd > 0:
-            st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-            st.markdown(_zone_label("Quick Orders"), unsafe_allow_html=True)
+            # ── Live Prices 인라인 (에디터 바로 아래) ──────────
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(_sl("Live Prices"), unsafe_allow_html=True)
+
+            _lp_html = (
+                f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px;">'
+            )
+            for _asset in ASSET_LIST:
+                _lp_p   = current_prices.get(_asset, 0.0) if _asset != 'CASH' else 1.0
+                _lp_str = f"${_lp_p:,.2f}" if _lp_p > 0 else "—"
+                _avg    = st.session_state.portfolio[_asset].get('avg_price', 0.0)
+                _shs    = st.session_state.portfolio[_asset].get('shares', 0.0)
+                if _asset != 'CASH' and _avg > 0 and _lp_p > 0:
+                    _lr = (_lp_p / _avg - 1) * 100
+                    _lc, _ls = ("#059669" if _lr >= 0 else "#DC2626"), f"{_lr:+.1f}%"
+                elif _asset == 'CASH' and _shs > 0:
+                    _lc, _ls = tc_muted, f"${_shs:,.0f}"
+                else:
+                    _lc, _ls = "#BBBBBB", "—"
+                _lp_html += (
+                    f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.08);'
+                    f'border-left:2px solid {_lc};padding:5px 8px;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;">'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.72em;'
+                    f'font-weight:700;color:{tc_body};">{_asset}</span>'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.7em;'
+                    f'color:{tc_body};font-variant-numeric:tabular-nums;">{_lp_str}</span>'
+                    f'</div>'
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{_lc};'
+                    f'text-align:right;">{_ls}</div>'
+                    f'</div>'
+                )
+            _lp_html += (
+                f'</div>'
+                f'<div style="text-align:right;margin-top:3px;">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};">'
+                f'⏱ {last_update_time}</span></div>'
+            )
+            st.markdown(_lp_html, unsafe_allow_html=True)
+
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(_sl("Quick Orders"), unsafe_allow_html=True)
 
             _sells, _buys = [], []
             for asset in ASSET_LIST:
@@ -1707,307 +1717,178 @@ elif page == "💼 Portfolio":
                     _buys.append(("CASH", f"${_dv:,.0f} 확보"))
 
             _qo1, _qo2 = st.columns(2)
-
             def _qo_block(col, title, items, accent, bg):
                 _rows = "".join([
-                    f'<div style="display:flex;justify-content:space-between;align-items:center;'
-                    f'padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.05);">'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.8em;'
-                    f'font-weight:700;color:{tc_body};">{a}</span>'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.76em;'
-                    f'color:{accent};font-weight:500;font-variant-numeric:tabular-nums;">{v}</span>'
-                    f'</div>'
+                    f'<div style="display:flex;justify-content:space-between;padding:5px 0;'
+                    f'border-bottom:1px solid rgba(0,0,0,0.04);">'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:700;'
+                    f'color:{tc_body};">{a}</span>'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.74em;color:{accent};'
+                    f'font-variant-numeric:tabular-nums;">{v}</span></div>'
                     for a, v in items
-                ]) or (
-                    f'<div style="text-align:center;padding:8px 0;">'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.7em;color:#CCCCCC;">— 없음</span>'
-                    f'</div>'
-                )
+                ]) or f'<div style="padding:6px 0;text-align:center;font-family:DM Mono,monospace;font-size:0.68em;color:#CCCCCC;">— 없음</div>'
                 col.markdown(
-                    f'<div style="background:{bg};border:1px solid rgba(0,0,0,0.08);'
-                    f'border-top:2px solid {accent};padding:10px 12px;">'
-                    f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.78em;'
-                    f'font-weight:700;color:{accent};margin-bottom:6px;">{title}</div>'
+                    f'<div style="background:{bg};border:1px solid rgba(0,0,0,0.07);'
+                    f'border-top:2px solid {accent};padding:8px 10px;">'
+                    f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.76em;'
+                    f'font-weight:700;color:{accent};margin-bottom:5px;">{title}</div>'
                     f'{_rows}</div>',
                     unsafe_allow_html=True
                 )
-
             with _qo1: _qo_block(_qo1, "🔴  SELL", _sells, "#DC2626", "rgba(220,38,38,0.03)")
             with _qo2: _qo_block(_qo2, "🟢  BUY",  _buys,  "#059669", "rgba(5,150,105,0.03)")
 
-    # ── CENTER: 도넛 차트 + Delta Bar ───────────────────────
-    with _z_mid:
-        st.markdown(_zone_label("Allocation  ·  Visual"), unsafe_allow_html=True)
+    # ── RIGHT — 3개 서브 행 ─────────────────────────────────
+    with _col_r:
 
-        _pie_colors = [line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0',
-                       '#059669','#047857','#065F46','#D1FAE5']
-        _pie_base = dict(
-            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(family="DM Mono", color=t_color),
-            showlegend=True,
-            legend=dict(orientation='v', x=1.0, y=0.5,
-                        font=dict(size=8, family='DM Mono'),
-                        bgcolor='rgba(0,0,0,0)'),
-            margin=dict(l=0, r=72, t=28, b=0),
-            height=210
-        )
-
-        _pc1, _pc2 = st.columns(2)
-
-        _lcur = [a for a in ASSET_LIST if curr_vals[a] > 0]
-        _vcur = [curr_vals[a] for a in _lcur]
-        with _pc1:
-            if sum(_vcur) > 0:
-                _fig_c = go.Figure(go.Pie(
-                    labels=_lcur, values=_vcur, hole=.55,
-                    textinfo='percent', textfont=dict(size=9),
-                    marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))
-                ))
-                _fig_c.update_layout(
-                    title=dict(text="Current", font=dict(family="DM Mono", size=11, color=t_color), x=0),
-                    **_pie_base
-                )
-                with st.container(border=True):
-                    st.plotly_chart(_fig_c, use_container_width=True)
-            else:
-                st.markdown(
-                    f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
-                    f'height:210px;display:flex;align-items:center;justify-content:center;">'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.7em;color:#CCCCCC;">'
-                    f'포지션 없음</span></div>',
-                    unsafe_allow_html=True
-                )
-
-        _ltgt = [a for a in ASSET_LIST if target_weights.get(a, 0) > 0]
-        _vtgt = [target_weights[a] for a in _ltgt]
-        with _pc2:
-            _fig_t = go.Figure(go.Pie(
-                labels=_ltgt, values=_vtgt, hole=.55,
-                textinfo='percent', textfont=dict(size=9),
-                marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))
-            ))
-            _fig_t.update_layout(
-                title=dict(text=f"Target  R{curr_regime}", font=dict(family="DM Mono", size=11, color=t_color), x=0),
-                **_pie_base
-            )
-            with st.container(border=True):
-                st.plotly_chart(_fig_t, use_container_width=True)
-
-        # Delta bar
-        _dlabels = [a for a in ASSET_LIST if abs(diff_vals[a]) >= 1.0]
-        _dvals   = [diff_vals[a] for a in _dlabels]
-        if _dlabels:
-            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-            _fig_d = go.Figure(go.Bar(
-                x=_dlabels, y=_dvals,
-                marker_color=[C_GREEN if v > 0 else C_RED for v in _dvals],
-                text=[f"${v:+,.0f}" for v in _dvals],
-                textposition='outside', textfont=dict(size=9, family='DM Mono'),
-                marker_line_width=0
-            ))
-            _fig_d.update_layout(
-                title=dict(text="Δ Rebalancing ($)", font=dict(family='DM Mono', size=11, color=t_color)),
-                height=190,
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color=t_color, family="DM Mono", size=9),
-                showlegend=False, margin=dict(t=28, b=8, l=0, r=0)
-            )
-            _fig_d.update_xaxes(**_ax_r, tickfont=dict(size=9))
-            _fig_d.update_yaxes(**_ax_r)
-            with st.container(border=True):
-                st.plotly_chart(_fig_d, use_container_width=True)
-
-    # ── RIGHT: Regime 카드 + Target Weights + Live Prices + SMH Gate ─
-    with _z_right:
-
-        # Regime 카드 — 메인 컬러 테두리 라이트 버전
+        # Sub-row A: Regime 카드 (풀 너비)
         st.markdown(apply_theme(
-            f'<div style="background:rgba({r_c},{g_c},{b_c},0.06);'
-            f'border:1px solid rgba({r_c},{g_c},{b_c},0.25);'
-            f'border-left:4px solid {r_acc};'
-            f'padding:14px 16px;margin-bottom:12px;">'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.55em;'
-            f'color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;'
-            f'margin-bottom:4px;">Current Regime</div>'
-            f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.55em;'
-            f'font-weight:800;color:{r_acc};letter-spacing:-0.5px;line-height:1;'
-            f'margin-bottom:3px;">{regime_info[curr_regime][0]}</div>'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.62em;'
-            f'color:{tc_muted};letter-spacing:0.1em;text-transform:uppercase;">'
-            f'{regime_info[curr_regime][1]}</div>'
-            f'<div style="margin-top:8px;padding-top:8px;'
-            f'border-top:1px solid rgba({r_c},{g_c},{b_c},0.18);'
-            f'font-family:DM Mono,monospace;font-size:0.6em;color:{tc_muted};">'
+            f'<div style="background:rgba({r_c},{g_c},{b_c},0.07);'
+            f'border:1px solid rgba({r_c},{g_c},{b_c},0.22);border-left:4px solid {r_acc};'
+            f'padding:12px 20px;display:flex;align-items:center;gap:32px;">'
+            # 레짐 이름 + 상태
+            f'<div style="flex:1;">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.53em;color:{tc_label};'
+            f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:3px;">Current Regime</div>'
+            f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.5em;'
+            f'font-weight:800;color:{r_acc};letter-spacing:-0.5px;line-height:1;margin-bottom:1px;">'
+            f'{regime_info[curr_regime][0]}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_muted};'
+            f'letter-spacing:0.1em;text-transform:uppercase;">{regime_info[curr_regime][1]}</div>'
+            f'</div>'
+            # 구분선
+            f'<div style="width:1px;height:48px;background:rgba({r_c},{g_c},{b_c},0.2);flex-shrink:0;"></div>'
+            # 레짐 위원회 메시지
+            f'<div style="flex:1;font-family:DM Mono,monospace;font-size:0.64em;color:{tc_muted};">'
             f'{regime_committee_msg}</div>'
             f'</div>'
         ), unsafe_allow_html=True)
 
-        # Target Weights
-        st.markdown(_zone_label(f"Target Weights  ·  R{curr_regime}"), unsafe_allow_html=True)
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        _wt_items = sorted([(k, v) for k, v in target_weights.items() if v > 0],
-                           key=lambda x: x[1], reverse=True)
-        _max_wt = max(v for _, v in _wt_items) if _wt_items else 1
-
-        _wt_html = ""
-        for _wk, _wv in _wt_items:
-            _wpct    = _wv * 100
-            _bar_w   = int(_wv / _max_wt * 100)
-            _cur_pct = (curr_vals.get(_wk, 0) / total_val_usd * 100) if total_val_usd > 0 else 0
-            _dp      = _wpct - _cur_pct
-            _dc      = "#059669" if _dp > 0.5 else ("#DC2626" if _dp < -0.5 else "#9494A0")
-            _ds      = f"{_dp:+.1f}%" if abs(_dp) > 0.5 else "—"
-
-            _wt_html += (
-                f'<div style="padding:7px 0;border-bottom:1px solid rgba(0,0,0,0.05);">'
-                f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;">'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.84em;font-weight:700;color:{tc_body};">{_wk}</span>'
-                f'<div style="display:flex;align-items:baseline;gap:5px;">'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.9em;font-weight:600;color:{main_color};">{_wpct:.0f}%</span>'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.65em;color:{_dc};">{_ds}</span>'
-                f'</div>'
-                f'</div>'
-                f'<div style="height:5px;background:rgba(0,0,0,0.07);position:relative;">'
-                f'<div style="height:5px;width:{_bar_w}%;background:{main_color};max-width:100%;"></div>'
-                + (f'<div style="position:absolute;left:{min(_cur_pct/_max_wt*100,99):.1f}%;'
-                   f'top:-2px;bottom:-2px;width:2px;background:{tc_label};opacity:0.6;"></div>'
-                   if total_val_usd > 0 and _cur_pct > 0.5 else "")
-                + f'</div>'
-                f'</div>'
-            )
-
-        with st.container(border=True):
-            st.markdown(f'<div style="padding:4px 0;">{_wt_html}</div>', unsafe_allow_html=True)
-
-        # Live Prices — 포트폴리오 종목 실시간 가격
-        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-        st.markdown(_zone_label("Live Prices"), unsafe_allow_html=True)
-
-        _lp_rows = ""
-        for _asset in ASSET_LIST:
-            if _asset == 'CASH':
-                _lp_p    = 1.0
-                _lp_str  = "$1.00"
-                _lp_c    = tc_muted
-                _lp_dot  = "●"
+        # Sub-row B: 파이 2개 [높이 ≈ 210px]
+        _pie_colors = [line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0','#059669','#047857','#065F46','#D1FAE5']
+        _pie_cfg = dict(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(family="DM Mono", color=t_color),
+            showlegend=True,
+            legend=dict(orientation='v', x=1.0, y=0.5, font=dict(size=8, family='DM Mono'), bgcolor='rgba(0,0,0,0)'),
+            margin=dict(l=0, r=70, t=28, b=0), height=200
+        )
+        _rb1, _rb2 = st.columns(2)
+        _lcur = [a for a in ASSET_LIST if curr_vals[a] > 0]
+        _vcur = [curr_vals[a] for a in _lcur]
+        with _rb1:
+            if sum(_vcur) > 0:
+                _fc = go.Figure(go.Pie(labels=_lcur, values=_vcur, hole=.55,
+                    textinfo='percent', textfont=dict(size=9),
+                    marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))))
+                _fc.update_layout(title=dict(text="Current", font=dict(family="DM Mono", size=11, color=t_color), x=0), **_pie_cfg)
+                with st.container(border=True): st.plotly_chart(_fc, use_container_width=True)
             else:
-                _lp_p   = current_prices.get(_asset, 0.0)
-                _lp_str = f"${_lp_p:,.2f}" if _lp_p > 0 else "—"
-                _lp_c   = tc_muted
-                _lp_dot = "·"
+                st.markdown(
+                    f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);height:200px;'
+                    f'display:flex;align-items:center;justify-content:center;">'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.7em;color:#CCCCCC;">포지션 없음</span></div>',
+                    unsafe_allow_html=True
+                )
+        _ltgt = [a for a in ASSET_LIST if target_weights.get(a, 0) > 0]
+        _vtgt = [target_weights[a] for a in _ltgt]
+        with _rb2:
+            _ft = go.Figure(go.Pie(labels=_ltgt, values=_vtgt, hole=.55,
+                textinfo='percent', textfont=dict(size=9),
+                marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))))
+            _ft.update_layout(title=dict(text=f"Target  R{curr_regime}", font=dict(family="DM Mono", size=11, color=t_color), x=0), **_pie_cfg)
+            with st.container(border=True): st.plotly_chart(_ft, use_container_width=True)
 
-            # 평단 대비 수익/손실 색상
-            _avg = st.session_state.portfolio[_asset].get('avg_price', 0.0)
-            _shs = st.session_state.portfolio[_asset].get('shares', 0.0)
-            if _asset != 'CASH' and _avg > 0 and _lp_p > 0:
-                _lp_ret = (_lp_p / _avg - 1) * 100
-                _lp_c   = "#059669" if _lp_ret >= 0 else "#DC2626"
-                _lp_sub = f"{_lp_ret:+.1f}%"
-            elif _asset == 'CASH' and _shs > 0:
-                _lp_sub = f"${_shs:,.0f}"
-                _lp_c   = tc_muted
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+        # Sub-row C: Delta Bar | Target Weights  [높이 ≈ 185px]
+        _rc1, _rc2 = st.columns([1.1, 1])
+
+        with _rc1:
+            _dlabels = [a for a in ASSET_LIST if abs(diff_vals[a]) >= 1.0]
+            _dvals   = [diff_vals[a] for a in _dlabels]
+            if _dlabels:
+                _fd = go.Figure(go.Bar(
+                    x=_dlabels, y=_dvals,
+                    marker_color=[C_GREEN if v > 0 else C_RED for v in _dvals],
+                    text=[f"${v:+,.0f}" for v in _dvals],
+                    textposition='outside', textfont=dict(size=8, family='DM Mono'),
+                    marker_line_width=0
+                ))
+                _fd.update_layout(
+                    title=dict(text="Δ Rebalancing ($)", font=dict(family='DM Mono', size=10, color=t_color)),
+                    height=185,
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(color=t_color, family="DM Mono", size=8),
+                    showlegend=False, margin=dict(t=24, b=4, l=0, r=0)
+                )
+                _fd.update_xaxes(**_ax_r, tickfont=dict(size=8))
+                _fd.update_yaxes(**_ax_r)
+                with st.container(border=True): st.plotly_chart(_fd, use_container_width=True)
             else:
-                _lp_sub = "—"
+                st.markdown(
+                    f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);height:185px;'
+                    f'display:flex;align-items:center;justify-content:center;">'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.68em;color:#CCCCCC;">Δ 없음</span></div>',
+                    unsafe_allow_html=True
+                )
 
-            _lp_rows += (
-                f'<div style="display:flex;justify-content:space-between;align-items:center;'
-                f'padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.05);">'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.8em;'
-                f'font-weight:700;color:{tc_body};">{_asset}</span>'
-                f'<div style="text-align:right;">'
-                f'<div style="font-family:DM Mono,monospace;font-size:0.8em;'
-                f'color:{tc_body};font-variant-numeric:tabular-nums;">{_lp_str}</div>'
-                f'<div style="font-family:DM Mono,monospace;font-size:0.65em;color:{_lp_c};">{_lp_sub}</div>'
-                f'</div>'
-                f'</div>'
-            )
+        with _rc2:
+            _wt_items = sorted([(k, v) for k, v in target_weights.items() if v > 0], key=lambda x: x[1], reverse=True)
+            _max_wt   = max(v for _, v in _wt_items) if _wt_items else 1
+            _wt_rows  = ""
+            for _wk, _wv in _wt_items:
+                _wpct = _wv * 100
+                _bw   = int(_wv / _max_wt * 100)
+                _cp2  = (curr_vals.get(_wk, 0) / total_val_usd * 100) if total_val_usd > 0 else 0
+                _dp   = _wpct - _cp2
+                _dc   = "#059669" if _dp > 0.5 else ("#DC2626" if _dp < -0.5 else "#9494A0")
+                _ds   = f"{_dp:+.1f}%" if abs(_dp) > 0.5 else "—"
+                _wt_rows += (
+                    f'<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04);">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:700;color:{tc_body};">{_wk}</span>'
+                    f'<div style="display:flex;gap:3px;align-items:baseline;">'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.84em;font-weight:600;color:{main_color};">{_wpct:.0f}%</span>'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.58em;color:{_dc};">{_ds}</span>'
+                    f'</div></div>'
+                    f'<div style="height:4px;background:rgba(0,0,0,0.07);">'
+                    f'<div style="height:4px;width:{_bw}%;background:{main_color};"></div>'
+                    f'</div></div>'
+                )
+            with st.container(border=True):
+                st.markdown(
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.55em;font-weight:600;'
+                    f'color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;'
+                    f'margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid rgba(0,0,0,0.08);">'
+                    f'Target Weights · R{curr_regime}</div>'
+                    f'<div>{_wt_rows}</div>',
+                    unsafe_allow_html=True
+                )
 
-        with st.container(border=True):
-            st.markdown(
-                f'<div style="padding:4px 0;">{_lp_rows}'
-                f'<div style="padding-top:6px;">'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.58em;color:{tc_label};">'
-                f'⏱ {last_update_time}</span>'
-                f'</div></div>',
-                unsafe_allow_html=True
-            )
-
-        # SMH Gate 상태
-        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-        st.markdown(_zone_label("SMH Gate"), unsafe_allow_html=True)
-
-        _smh_items = [
-            ("SMH > 50MA",       smh_c1, f"${smh_close:.2f}"),
-            ("Momentum ≥ 10%",   smh_c2, f"{smh_1m*100:.1f}%"),
-            ("RSI > 50",         smh_c3, f"{smh_rsi:.1f}"),
-        ]
-        _smh_passed = sum(1 for _, ok, _ in _smh_items if ok)
-        _smh_top    = main_color if smh_cond else "#9494A0"
-        _smh_label  = "SOXL APPROVED" if smh_cond else "USD DEFENSE"
-
-        _smh_rows = ""
-        for _sl, _sok, _sv in _smh_items:
-            _sc = main_color if _sok else "#9494A0"
-            _si = "●" if _sok else "○"
-            _smh_rows += (
-                f'<div style="display:flex;justify-content:space-between;align-items:center;'
-                f'padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.05);">'
-                f'<div style="display:flex;align-items:center;gap:6px;">'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.7em;color:{_sc};">{_si}</span>'
-                f'<span style="font-family:DM Sans,sans-serif;font-size:0.78em;color:{tc_body};">{_sl}</span>'
-                f'</div>'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.76em;'
-                f'color:{_sc};font-weight:600;font-variant-numeric:tabular-nums;">{_sv}</span>'
-                f'</div>'
-            )
-
-        with st.container(border=True):
-            st.markdown(apply_theme(
-                f'<div style="padding:2px 0;">'
-                f'<div style="display:flex;justify-content:space-between;align-items:center;'
-                f'margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(0,0,0,0.08);">'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.72em;'
-                f'font-weight:600;color:{_smh_top};">{_smh_label}</span>'
-                f'<span style="background:rgba({r_c},{g_c},{b_c},0.08);'
-                f'border:1px solid rgba({r_c},{g_c},{b_c},0.22);color:{_smh_top};'
-                f'font-family:DM Mono,monospace;font-size:0.6em;padding:2px 8px;">'
-                f'{_smh_passed}/3</span>'
-                f'</div>'
-                f'{_smh_rows}'
-                f'</div>'
-            ), unsafe_allow_html=True)
-
-    # ══════════════════════════════════════════════════════════
-    # ZONE 3 — Rebalancing Matrix (전체 너비)
-    # ══════════════════════════════════════════════════════════
-    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+    # ══════════════════════════════════════════════════════
+    # ROW 3 — Rebalancing Matrix (풀 너비)
+    # ══════════════════════════════════════════════════════
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
     st.markdown(apply_theme(
-        f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
-        f'<div style="width:3px;height:14px;background:{main_color};flex-shrink:0;"></div>'
-        f'<span style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:600;'
-        f'color:{tc_heading};letter-spacing:0.2em;text-transform:uppercase;">'
-        f'Rebalancing Matrix</span>'
-        f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.10);"></div>'
-        f'<span style="font-family:DM Mono,monospace;font-size:0.57em;color:{tc_label};'
-        f'letter-spacing:0.08em;white-space:nowrap;">'
-        f'R{curr_regime}  ·  {regime_info[curr_regime][1]}  ·  ⏱ {last_update_time}</span>'
+        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+        f'<div style="width:2px;height:12px;background:{main_color};flex-shrink:0;"></div>'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:600;'
+        f'color:{tc_heading};letter-spacing:0.2em;text-transform:uppercase;">Rebalancing Matrix</span>'
+        f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.09);"></div>'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};">'
+        f'R{curr_regime} · {regime_info[curr_regime][1]} · ⏱ {last_update_time}</span>'
         f'</div>'
     ), unsafe_allow_html=True)
 
     if total_val_usd > 0:
         _rhtml = (
-            '<div style="overflow-x:auto;">'
-            '<table class="mint-table">'
-            '<thead><tr>'
-            '<th style="text-align:left;">Asset</th>'
-            '<th>현재가</th>'
-            '<th>평균단가</th>'
-            '<th>수익률</th>'
-            '<th>평가액 ($)</th>'
-            '<th>목표 비중</th>'
-            '<th>목표액 ($)</th>'
-            '<th>Δ ($)</th>'
-            '<th style="text-align:center;">Action</th>'
+            '<div style="overflow-x:auto;"><table class="mint-table"><thead><tr>'
+            '<th style="text-align:left;">Asset</th><th>현재가</th><th>평균단가</th>'
+            '<th>수익률</th><th>평가액 ($)</th><th>목표 %</th><th>목표액 ($)</th>'
+            '<th>Δ ($)</th><th style="text-align:center;">Action</th>'
             '</tr></thead><tbody>'
         )
         for asset in ASSET_LIST:
@@ -2018,7 +1899,7 @@ elif page == "💼 Portfolio":
             _tgtw = target_weights.get(asset, 0.0)
             _tgtv = total_val_usd * _tgtw
             _diff = diff_vals[asset]
-
+            _curw = (_curv / total_val_usd * 100) if total_val_usd > 0 else 0
             if asset == 'CASH':
                 _curp_str, _avgp_str, _ret, _retstr = "—", "—", 0.0, "—"
             else:
@@ -2026,49 +1907,34 @@ elif page == "💼 Portfolio":
                 _avgp_str = f"${_avgp:.2f}" if _avgp > 0 else "—"
                 _ret      = (_curp / _avgp - 1) * 100 if _avgp > 0 else 0.0
                 _retstr   = f"{_ret:+.1f}%"
-
-            _retc    = C_GREEN if _ret >= 0 else C_RED
-            _curw    = (_curv / total_val_usd * 100) if total_val_usd > 0 else 0
-
+            _retc = C_GREEN if _ret >= 0 else C_RED
             if abs(_diff) < _curp * 0.05 and asset != 'CASH':
-                _act, _dstr, _rbg = (
-                    "<span style='font-family:DM Mono,monospace;font-size:0.74em;"
-                    "color:#9494A0;letter-spacing:0.08em;'>HOLD</span>",
-                    "<span style='color:#9494A0;'>—</span>",
-                    "#FAFAF7"
-                )
+                _act = f"<span style='font-family:DM Mono,monospace;font-size:0.72em;color:#9494A0;'>HOLD</span>"
+                _dstr, _rbg = "<span style='color:#9494A0;'>—</span>", "#FAFAF7"
             elif abs(_diff) < 1.0 and asset == 'CASH':
-                _act, _dstr, _rbg = (
-                    "<span style='font-family:DM Mono,monospace;font-size:0.74em;"
-                    "color:#9494A0;letter-spacing:0.08em;'>HOLD</span>",
-                    "<span style='color:#9494A0;'>—</span>",
-                    "#FAFAF7"
-                )
+                _act = f"<span style='font-family:DM Mono,monospace;font-size:0.72em;color:#9494A0;'>HOLD</span>"
+                _dstr, _rbg = "<span style='color:#9494A0;'>—</span>", "#FAFAF7"
             elif _diff > 0:
-                _act = (f"<span style='font-family:DM Mono,monospace;font-size:0.72em;"
-                        f"font-weight:700;color:#059669;letter-spacing:0.1em;"
-                        f"background:rgba(5,150,105,0.09);padding:3px 10px;"
-                        f"border-left:2px solid #059669;'>▲ BUY</span>")
+                _act  = (f"<span style='font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;"
+                         f"color:#059669;background:rgba(5,150,105,0.09);padding:2px 8px;"
+                         f"border-left:2px solid #059669;'>▲ BUY</span>")
                 _dstr = f"<span style='color:#059669;font-weight:600;'>+${_diff:,.0f}</span>"
                 _rbg  = "rgba(5,150,105,0.025)"
             else:
-                _act = (f"<span style='font-family:DM Mono,monospace;font-size:0.72em;"
-                        f"font-weight:700;color:#DC2626;letter-spacing:0.1em;"
-                        f"background:rgba(220,38,38,0.08);padding:3px 10px;"
-                        f"border-left:2px solid #DC2626;'>▼ SELL</span>")
+                _act  = (f"<span style='font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;"
+                         f"color:#DC2626;background:rgba(220,38,38,0.08);padding:2px 8px;"
+                         f"border-left:2px solid #DC2626;'>▼ SELL</span>")
                 _dstr = f"<span style='color:#DC2626;font-weight:600;'>-${abs(_diff):,.0f}</span>"
                 _rbg  = "rgba(220,38,38,0.025)"
-
             if _tgtw > 0 or _curv > 0 or _shs > 0:
                 _rhtml += (
                     f'<tr style="background:{_rbg};">'
-                    f'<td style="font-weight:700;color:#059669;font-family:DM Mono,monospace;font-size:0.85em;">{asset}</td>'
-                    f'<td style="color:#4A4A57;">{_curp_str}</td>'
-                    f'<td style="color:#6B6B7A;">{_avgp_str}</td>'
+                    f'<td style="font-weight:700;color:#059669;font-family:DM Mono,monospace;font-size:0.84em;">{asset}</td>'
+                    f'<td style="color:{tc_muted};">{_curp_str}</td>'
+                    f'<td style="color:{tc_label};">{_avgp_str}</td>'
                     f'<td><span style="color:{_retc};font-weight:600;">{_retstr}</span></td>'
                     f'<td style="font-weight:500;">{_curv:,.0f}'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;'
-                    f'margin-left:4px;">({_curw:.0f}%)</span></td>'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.68em;color:{tc_label};margin-left:4px;">({_curw:.0f}%)</span></td>'
                     f'<td style="color:{main_color};font-weight:700;">{_tgtw*100:.0f}%</td>'
                     f'<td>{_tgtv:,.0f}</td>'
                     f'<td>{_dstr}</td>'
@@ -2080,9 +1946,9 @@ elif page == "💼 Portfolio":
             st.markdown(apply_theme(_rhtml), unsafe_allow_html=True)
     else:
         st.markdown(
-            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
-            f'padding:32px;text-align:center;">'
-            f'<span style="font-family:DM Mono,monospace;font-size:0.82em;color:#CCCCCC;">'
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);'
+            f'padding:28px;text-align:center;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.8em;color:#CCCCCC;">'
             f'포지션을 입력하면 리밸런싱 매트릭스가 표시됩니다.</span></div>',
             unsafe_allow_html=True
         )
