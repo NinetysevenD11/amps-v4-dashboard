@@ -18,17 +18,17 @@ warnings.filterwarnings('ignore')
 # ==========================================
 # 1. 설정 및 데이터
 # ==========================================
-st.set_page_config(page_title="AMLS V4.5.1 FINANCE STRATEGY", layout="wide", page_icon="🌿", initial_sidebar_state="expanded")
+st.set_page_config(page_title="AMLS V4.5 FINANCE STRATEGY", layout="wide", page_icon="🌿", initial_sidebar_state="expanded")
 
 # --- 🎨 테마 커스텀 시스템 ---
-if 'main_color' not in st.session_state: st.session_state.main_color = '#10B981'
-if 'bg_color' not in st.session_state: st.session_state.bg_color = '#F7F6F2'
-if 'tc_heading' not in st.session_state: st.session_state.tc_heading = '#111118'
-if 'tc_body' not in st.session_state: st.session_state.tc_body = '#2D2D2D'
-if 'tc_muted' not in st.session_state: st.session_state.tc_muted = '#6B6B7A'
-if 'tc_label' not in st.session_state: st.session_state.tc_label = '#9494A0'
-if 'tc_data' not in st.session_state: st.session_state.tc_data = '#111118'
-if 'tc_sidebar' not in st.session_state: st.session_state.tc_sidebar = '#2D2D2D'
+if 'main_color'   not in st.session_state: st.session_state.main_color   = '#10B981'
+if 'bg_color'     not in st.session_state: st.session_state.bg_color     = '#F7F6F2'
+if 'tc_heading'   not in st.session_state: st.session_state.tc_heading   = '#111118'
+if 'tc_body'      not in st.session_state: st.session_state.tc_body      = '#2D2D2D'
+if 'tc_muted'     not in st.session_state: st.session_state.tc_muted     = '#6B6B7A'
+if 'tc_label'     not in st.session_state: st.session_state.tc_label     = '#9494A0'
+if 'tc_data'      not in st.session_state: st.session_state.tc_data      = '#111118'
+if 'tc_sidebar'   not in st.session_state: st.session_state.tc_sidebar   = '#2D2D2D'
 
 main_color = st.session_state.main_color
 bg_color   = st.session_state.bg_color
@@ -251,16 +251,20 @@ def fetch_macro_news():
 
 @st.cache_data(ttl=300)
 def fetch_global_markets():
+    """글로벌 증시 + 금리/원자재/크립토 + 주도주 데이터"""
+    # 글로벌 주요 지수 ETF
     global_tickers = {
         'SPY':'S&P 500','QQQ':'Nasdaq 100','DIA':'Dow Jones','IWM':'Russell 2000',
         'EWJ':'Japan','EWT':'Taiwan','EWY':'Korea','FXI':'China','EWH':'HongKong',
         'VGK':'Europe','EWG':'Germany','EWU':'UK','EWQ':'France','EWC':'Canada',
         'EEM':'Emg Mkt','EWZ':'Brazil','EWA':'Australia',
     }
+    # 금리/원자재/크립토
     asset_tickers = {
         '^TNX':'US 10Y','GLD':'Gold','SLV':'Silver','USO':'Oil',
         'BTC-USD':'Bitcoin','ETH-USD':'Ethereum','UUP':'DXY',
     }
+    # 주도주 (Magnificent 7 + 반도체 주요주)
     leader_tickers = {
         'AAPL':'Apple','MSFT':'Microsoft','NVDA':'Nvidia','AMZN':'Amazon',
         'GOOGL':'Alphabet','META':'Meta','TSLA':'Tesla',
@@ -286,6 +290,7 @@ def fetch_global_markets():
 
 with st.spinner('시장 데이터 수집 중...'):
     df = load_data()
+    # 세션 캐시: 성공하면 저장, 실패하면 이전 값 사용
     if df is not None and not df.empty:
         st.session_state['_df_cache'] = df
     elif '_df_cache' in st.session_state:
@@ -297,14 +302,15 @@ if df is None or df.empty:
     <div style="background:#FEF2F2;border:1px solid #FCA5A5;border-left:4px solid #DC2626;
         padding:20px 24px;margin:20px 0;font-family:'Plus Jakarta Sans',sans-serif;">
         <div style="font-size:1.1em;font-weight:700;color:#DC2626;margin-bottom:6px;">
-            📡 야후 파이낸스 연결 실패
+            📡 야후 파이낸스(Yahoo Finance) 연결 실패
         </div>
         <div style="font-size:0.9em;color:#7F1D1D;line-height:1.6;">
-            서버에 일시적으로 연결하지 못했습니다. 자동 복구 대기중입니다.
+            Streamlit Cloud에서 야후 파이낸스 서버에 일시적으로 연결하지 못했습니다.<br>
+            보통 30초~2분 내에 자동 복구됩니다.
         </div>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("🔄 다시 시도", type="primary"):
+    if st.button("🔄  다시 시도", type="primary", use_container_width=False):
         st.cache_data.clear()
         st.rerun()
     st.stop()
@@ -324,8 +330,9 @@ if 'IWM' in rt_injected and 'SPY' in rt_injected:
     df.at[last_index, 'IWM_SPY_Ratio'] = df.at[last_index, 'IWM'] / df.at[last_index, 'SPY']
 
 last_row = df.iloc[-1].copy()
+
 rt_ok    = len(rt_injected) >= 3
-rt_label = f"⬤ LIVE {len(rt_injected)} feeds" if rt_ok else "⬤ DELAYED"
+rt_label = f"⬤ LIVE  {len(rt_injected)} feeds" if rt_ok else "⬤ DELAYED"
 
 vix_close, vix_ma5, vix_ma20 = last_row['^VIX'], last_row['VIX_MA5'], last_row['VIX_MA20']
 qqq_close, qqq_ma50, qqq_ma200 = last_row['QQQ'], last_row['QQQ_MA50'], last_row['QQQ_MA200']
@@ -363,196 +370,462 @@ else: regime_committee_msg = f"🟡 R{live_regime} 승급 대기 (5일)"
 # 2. 라이트 테마 색상 변수 (차트용)
 # ==========================================
 b_color   = 'rgba(0,0,0,0)'
-t_color   = '#4A4A57'
+t_color   = '#4A4A57'        # 차트 축 텍스트
 line_c    = main_color
 dash_c    = '#B0B0BE'
 rsi_low_c = main_color
 
+# ⚠️ xaxis/yaxis를 여기서 제외 → 각 차트에서 개별 지정 (중복 키 TypeError 방지)
 chart_layout = dict(
-    paper_bgcolor=b_color, plot_bgcolor=b_color,
+    paper_bgcolor=b_color,
+    plot_bgcolor=b_color,
     font=dict(family="DM Mono, DM Sans, monospace", color=t_color),
     margin=dict(l=0, r=0, t=40, b=0),
 )
 radar_layout = dict(
-    height=200, margin=dict(l=10, r=10, t=15, b=15),
-    paper_bgcolor=b_color, plot_bgcolor=b_color,
+    height=200,
+    margin=dict(l=10, r=10, t=15, b=15),
+    paper_bgcolor=b_color,
+    plot_bgcolor=b_color,
     font=dict(family="DM Mono, DM Sans, monospace", color=t_color),
 )
+
+# 공통 축 스타일 (라이트 테마)
 _ax = dict(gridcolor='rgba(0,0,0,0.07)', linecolor='rgba(0,0,0,0.12)', showgrid=True, zeroline=False)
 _ax_r = dict(gridcolor='rgba(0,0,0,0.07)', zeroline=False, showgrid=True)
-regime_info = {1:("R1 BULL","풀 가동"),2:("R2 CORR","방어 진입"), 3:("R3 BEAR","대피"),4:("R4 PANIC","최대 방어")}
+
+regime_info = {1:("R1  BULL","풀 가동"),2:("R2  CORR","방어 진입"), 3:("R3  BEAR","대피"),4:("R4  PANIC","최대 방어")}
 
 # ==========================================
-# 3. CSS (Sanitized)
+# 3. CSS  —  Refined Institutional  (2026)
+#    Concept: Bloomberg × Swiss Grid × Monocle
+#    → Ruled structure, tabular precision, zero decoration
 # ==========================================
 css_block = f"""<style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+    /* ── DESIGN TOKENS ──────────────────────────────── */
     :root {{
-        --paper: {bg_color};
-        --paper-2: {bg_color}dd;
-        --paper-3: {bg_color}bb;
-        --ink: {tc_heading};
-        --ink-2: {tc_body};
-        --ink-3: {tc_body};
-        --ink-4: {tc_muted};
-        --ink-5: {tc_label};
-        --rule: rgba(0,0,0,0.10);
-        --rule-strong: rgba(0,0,0,0.18);
-        --acc: #10B981;
-        --acc-pale: rgba(16,185,129,0.08);
-        --acc-mid: rgba(16,185,129,0.18);
-        --acc-line: rgba(16,185,129,0.40);
-        --bull: #059669;
-        --bear: #DC2626;
-        --warn: #D97706;
-        --u: 8px;
+        /* Paper — user-customizable */
+        --paper:      {bg_color};
+        --paper-2:    {bg_color}dd;
+        --paper-3:    {bg_color}bb;
+        /* Ink — user-customizable per role */
+        --ink:        {tc_heading};
+        --ink-2:      {tc_body};
+        --ink-3:      {tc_body};
+        --ink-4:      {tc_muted};
+        --ink-5:      {tc_label};
+        /* Rule lines */
+        --rule:       rgba(0,0,0,0.10);
+        --rule-strong:rgba(0,0,0,0.18);
+        /* Accent — single color, surgical use */
+        --acc:        #10B981;
+        --acc-pale:   rgba(16,185,129,0.08);
+        --acc-mid:    rgba(16,185,129,0.18);
+        --acc-line:   rgba(16,185,129,0.40);
+        /* State colors */
+        --bull:       #059669;
+        --bear:       #DC2626;
+        --warn:       #D97706;
+        /* Spacing unit */
+        --u:          8px;
     }}
+
+    /* ── RESET / BASE ───────────────────────────────── */
     *, *::before, *::after {{ box-sizing: border-box; }}
+
     .stApp, [data-testid="stAppViewContainer"] {{
         background-color: {bg_color} !important;
         background-image:
+            /* Subtle dot grid — institutional graph paper */
             radial-gradient(circle, rgba(0,0,0,0.055) 1px, transparent 1px),
+            /* Accent corner wash */
             radial-gradient(ellipse 70% 40% at 5% 0%, rgba(16,185,129,0.055) 0%, transparent 55%) !important;
         background-size: 24px 24px, 100% 100% !important;
         color: {tc_body} !important;
         font-family: 'Plus Jakarta Sans', sans-serif;
         font-size: 14px;
     }}
+
     [data-testid="stHeader"] {{
         background: rgba(247,246,242,0.92) !important;
         backdrop-filter: blur(12px);
         border-bottom: 1px solid var(--rule-strong);
     }}
     #MainMenu {{ visibility:hidden; }} footer {{ visibility:hidden; }}
-    .main .block-container {{ max-width: 1540px; padding-top: 1.5rem; padding-bottom: 3rem; }}
+    .main .block-container {{
+        max-width: 1540px;
+        padding-top: 1.5rem;
+        padding-bottom: 3rem;
+    }}
+
+    /* ── SIDEBAR ────────────────────────────────────── */
     [data-testid="stSidebar"] {{
         background: var(--paper-2) !important;
         border-right: 1px solid var(--rule-strong) !important;
         box-shadow: none !important;
     }}
+    /* Vertical accent rule on right edge */
     [data-testid="stSidebar"]::after {{
-        content:''; position:absolute; top:15%; right:0; width:2px; height:70%;
+        content:'';
+        position:absolute; top:15%; right:0; width:2px; height:70%;
         background:linear-gradient(180deg, transparent, var(--acc-line), transparent);
         pointer-events:none;
     }}
+
+    /* Sidebar radio → ruled nav rows */
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] > div:first-child {{ display:none !important; }}
-    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {{ gap:0px !important; padding:0 !important; background:transparent !important; }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {{
+        gap:0px !important; padding:0 !important; background:transparent !important;
+    }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] {{
         display:flex !important; align-items:center !important;
         padding:10px 20px !important; margin:0 !important;
-        border-radius:0 !important; border:none !important;
+        border-radius:0 !important;
+        border:none !important;
         border-bottom:1px solid var(--rule) !important;
-        background:transparent !important; cursor:pointer !important; width:100% !important;
-        transition:background 0.15s ease !important; position:relative;
+        background:transparent !important;
+        cursor:pointer !important; width:100% !important;
+        transition:background 0.15s ease !important;
+        position:relative;
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] p {{
         color:var(--ink-3) !important; font-weight:500 !important;
         font-size:0.82rem !important; margin:0 !important;
         font-family:'DM Sans' !important; letter-spacing:0.01em !important;
     }}
-    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:hover {{ background:var(--paper-3) !important; }}
-    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {{
-        background:var(--paper) !important; border-bottom:1px solid var(--rule) !important;
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:hover {{
+        background:var(--paper-3) !important;
     }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {{
+        background:var(--paper) !important;
+        border-bottom:1px solid var(--rule) !important;
+    }}
+    /* Active indicator — left border bar */
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked)::before {{
-        content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--acc);
+        content:'';
+        position:absolute; left:0; top:0; bottom:0; width:3px;
+        background:var(--acc);
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) p {{
         color:var(--ink) !important; font-weight:700 !important;
     }}
+
     .sidebar-link {{
-        display:flex; align-items:center; gap:10px; padding:10px 20px; margin:0;
-        border-bottom:1px solid var(--rule); text-decoration:none !important;
-        color:var(--ink-3) !important; font-weight:500; font-size:0.82rem;
-        transition:background 0.15s; background:transparent; font-family:'DM Sans'; position:relative;
+        display:flex; align-items:center; gap:10px;
+        padding:10px 20px; margin:0;
+        border-bottom:1px solid var(--rule);
+        text-decoration:none !important;
+        color:var(--ink-3) !important;
+        font-weight:500; font-size:0.82rem;
+        transition:background 0.15s; background:transparent;
+        font-family:'DM Sans';
+        position:relative;
     }}
-    .sidebar-link:hover {{ background:var(--paper-3) !important; color:var(--ink) !important; }}
+    .sidebar-link:hover {{
+        background:var(--paper-3) !important;
+        color:var(--ink) !important;
+    }}
+
+    /* ── INSTITUTIONAL PANEL (replaces glass-card) ──── */
+    /* Ruled panels — no floating, no shadows, just structure */
     .glass-card {{
-        background: #FAFAF7 !important; border: 1px solid var(--rule-strong) !important;
-        border-top: 2px solid var(--ink-2) !important; border-radius: 0 !important;
-        padding: 20px 22px !important; box-shadow: none !important;
-        height: 100%; display:flex; flex-direction:column; justify-content:space-between;
-        transition: border-top-color 0.2s ease; position:relative;
+        background: #FAFAF7 !important;
+        border: 1px solid var(--rule-strong) !important;
+        border-top: 2px solid var(--ink-2) !important;
+        border-radius: 0 !important;
+        padding: 20px 22px !important;
+        box-shadow: none !important;
+        height: 100%; display:flex; flex-direction:column;
+        justify-content:space-between;
+        transition: border-top-color 0.2s ease;
+        position:relative;
     }}
-    .glass-card:hover {{ border-top-color: var(--acc) !important; box-shadow: 0 4px 24px rgba(0,0,0,0.06) !important; }}
+    .glass-card:hover {{
+        border-top-color: var(--acc) !important;
+        transform: none !important;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.06) !important;
+    }}
     .glass-card h3 {{
-        font-family: 'DM Mono', monospace !important; font-size: 0.6em !important; font-weight: 400 !important;
-        color: var(--ink-4) !important; margin-bottom: 14px !important; letter-spacing: 0.20em; text-transform: uppercase;
+        font-family: 'DM Mono', monospace !important;
+        font-size: 0.6em !important; font-weight: 400 !important;
+        color: var(--ink-4) !important;
+        margin-bottom: 14px !important;
+        letter-spacing: 0.20em; text-transform: uppercase;
         border-bottom: 1px solid var(--rule); padding-bottom: 9px;
     }}
+
+    /* Inset — subtle ruled box */
     .glass-inset {{
-        background: var(--paper-2) !important; border: 1px solid var(--rule) !important;
-        border-left: 3px solid var(--acc) !important; border-radius: 0 !important;
-        padding: 14px 16px 12px !important; text-align: left; margin-bottom: 14px; box-shadow: none !important;
+        background: var(--paper-2) !important;
+        border: 1px solid var(--rule) !important;
+        border-left: 3px solid var(--acc) !important;
+        border-radius: 0 !important;
+        padding: 14px 16px 12px !important;
+        text-align: left; margin-bottom: 14px;
+        box-shadow: none !important;
     }}
+
+    /* Streamlit container(border=True) */
     div[data-testid="stVerticalBlockBorderWrapper"] > div {{
-        background: #FAFAF7 !important; border: 1px solid var(--rule-strong) !important;
-        border-top: 2px solid var(--ink-2) !important; border-radius: 0 !important;
-        padding: 20px 22px !important; box-shadow: none !important; transition: border-top-color 0.2s ease; position:relative;
+        background: #FAFAF7 !important;
+        border: 1px solid var(--rule-strong) !important;
+        border-top: 2px solid var(--ink-2) !important;
+        border-radius: 0 !important;
+        padding: 20px 22px !important;
+        box-shadow: none !important;
+        transition: border-top-color 0.2s ease;
+        position:relative;
     }}
-    div[data-testid="stVerticalBlockBorderWrapper"] > div:hover {{ border-top-color: var(--acc) !important; box-shadow: 0 4px 24px rgba(0,0,0,0.06) !important; transform: none !important; }}
+    div[data-testid="stVerticalBlockBorderWrapper"] > div:hover {{
+        border-top-color: var(--acc) !important;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.06) !important;
+        transform: none !important;
+    }}
+
+    /* ── METRIC CARDS ───────────────────────────────── */
     [data-testid="stMetric"] {{
-        background: #FAFAF7 !important; border: 1px solid var(--rule-strong) !important;
-        border-top: 2px solid var(--ink-2) !important; border-radius: 0 !important;
-        padding: 16px 18px !important; box-shadow: none !important; margin-bottom: 8px; transition: border-top-color 0.2s; position:relative;
+        background: #FAFAF7 !important;
+        border: 1px solid var(--rule-strong) !important;
+        border-top: 2px solid var(--ink-2) !important;
+        border-radius: 0 !important;
+        padding: 16px 18px !important;
+        box-shadow: none !important;
+        margin-bottom: 8px;
+        transition: border-top-color 0.2s;
+        position:relative;
     }}
-    [data-testid="stMetric"]:hover {{ border-top-color: var(--acc) !important; transform: none !important; }}
+    [data-testid="stMetric"]:hover {{
+        border-top-color: var(--acc) !important;
+        transform: none !important;
+    }}
     [data-testid="stMetricLabel"] > div > div > p {{
         font-size: 0.65em !important; font-weight: 500; color: var(--ink-4) !important;
-        white-space:normal !important; letter-spacing: 0.14em; text-transform:uppercase; font-family:'DM Mono', monospace !important;
+        white-space:normal !important; letter-spacing: 0.14em; text-transform:uppercase;
+        font-family:'DM Mono', monospace !important;
     }}
-    [data-testid="stMetricValue"] > div {{ font-family:'DM Mono', monospace !important; font-size:1.4em !important; font-weight:400; color:var(--ink) !important; font-variant-numeric: tabular-nums; }}
-    div[data-testid="stMetricDelta"] > div {{ font-size:0.8em !important; font-weight:500; font-family:'DM Mono', monospace !important; font-variant-numeric: tabular-nums; }}
+    [data-testid="stMetricValue"] > div {{
+        font-family:'DM Mono', monospace !important;
+        font-size:1.4em !important; font-weight:400;
+        color:var(--ink) !important;
+        font-variant-numeric: tabular-nums;
+    }}
+    div[data-testid="stMetricDelta"] > div {{
+        font-size:0.8em !important; font-weight:500;
+        font-family:'DM Mono', monospace !important;
+        font-variant-numeric: tabular-nums;
+    }}
+
+    /* ── BUTTONS ────────────────────────────────────── */
     [data-testid="stButton"] > button {{
-        background: transparent !important; border: 1px solid var(--rule-strong) !important;
-        color: var(--ink-2) !important; border-radius: 0 !important; padding: 7px 16px !important;
-        font-weight: 500 !important; font-size: 0.78em !important; transition: all 0.15s ease !important;
-        font-family:'DM Mono', monospace !important; letter-spacing: 0.06em; text-transform: uppercase;
+        background: transparent !important;
+        border: 1px solid var(--rule-strong) !important;
+        color: var(--ink-2) !important;
+        border-radius: 0 !important;
+        padding: 7px 16px !important;
+        font-weight: 500 !important; font-size: 0.78em !important;
+        transition: all 0.15s ease !important;
+        font-family:'DM Mono', monospace !important;
+        letter-spacing: 0.06em; text-transform: uppercase;
     }}
-    [data-testid="stButton"] > button:hover {{ background: var(--acc-pale) !important; border-color: var(--acc-line) !important; color: var(--bull) !important; }}
-    h1 {{ font-family: 'Plus Jakarta Sans', sans-serif !important; font-size: 2.2em !important; font-weight: 800 !important; letter-spacing: -1.5px; margin: 0 !important; color: {tc_heading} !important; }}
-    h2 {{ font-family: 'Plus Jakarta Sans', sans-serif !important; color: {tc_heading} !important; font-weight: 800 !important; letter-spacing: -0.5px; }}
+    [data-testid="stButton"] > button:hover {{
+        background: var(--acc-pale) !important;
+        border-color: var(--acc-line) !important;
+        color: var(--bull) !important;
+    }}
+
+    /* ── TYPOGRAPHY ─────────────────────────────────── */
+    h1 {{
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        font-size: 2.2em !important; font-weight: 800 !important;
+        letter-spacing: -1.5px; margin: 0 !important;
+        color: {tc_heading} !important;
+    }}
+    h2 {{
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        color: {tc_heading} !important; font-weight: 800 !important;
+        letter-spacing: -0.5px;
+    }}
     h3 {{ font-family: 'Plus Jakarta Sans', sans-serif !important; color: {tc_body} !important; }}
     p  {{ color: {tc_body} !important; line-height: 1.65; }}
     strong {{ color: {tc_heading} !important; }}
-    [data-testid="stMetricValue"], .cval, .mint-table td {{ font-variant-numeric: tabular-nums; }}
-    .crow {{ display:flex; justify-content:space-between; align-items:center; padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 0.9em; }}
+
+    /* All numbers — tabular figures */
+    [data-testid="stMetricValue"],
+    .cval, .mint-table td {{ font-variant-numeric: tabular-nums; }}
+
+    /* ── DATA ROWS ──────────────────────────────────── */
+    .crow {{
+        display:flex; justify-content:space-between; align-items:center;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--rule);
+        font-size: 0.9em;
+    }}
     .crow:last-child {{ border-bottom:none; }}
-    .clabel {{ color: {tc_muted}; font-weight:500; font-family:'DM Sans'; font-size:1em; }}
-    .cval {{ font-family:'DM Mono', monospace; font-weight:400; color:#10B981; font-size:0.9em; letter-spacing:0.02em; font-variant-numeric:tabular-nums; }}
+    .clabel {{
+        color: {tc_muted}; font-weight:500;
+        font-family:'DM Sans'; font-size:1em;
+    }}
+    .cval {{
+        font-family:'DM Mono', monospace; font-weight:400;
+        color:#10B981; font-size:0.9em;
+        letter-spacing:0.02em; font-variant-numeric:tabular-nums;
+    }}
+
+    /* ── METRIC CARD TEXT ───────────────────────────── */
+    [data-testid="stMetricLabel"] > div > div > p {{
+        font-size: 0.65em !important; font-weight: 500;
+        color: {tc_label} !important;
+        white-space:normal !important; letter-spacing: 0.14em; text-transform:uppercase;
+        font-family:'DM Mono', monospace !important;
+    }}
+    [data-testid="stMetricValue"] > div {{
+        font-family:'DM Mono', monospace !important;
+        font-size:1.4em !important; font-weight:400;
+        color:{tc_data} !important;
+        font-variant-numeric: tabular-nums;
+    }}
+
+    /* ── SIDEBAR TEXT ───────────────────────────────── */
     [data-testid="stSidebar"] p      {{ color:{tc_sidebar} !important; }}
     [data-testid="stSidebar"] strong {{ color:{tc_heading}   !important; }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] p {{
+        color:{tc_sidebar} !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) p {{
+        color:{tc_heading} !important; font-weight:700 !important;
+    }}
+
+    /* ── RADAR LINKS ────────────────────────────────── */
     .radar-link {{ text-decoration:none !important; display:block; }}
-    .radar-link-title {{ font-size:0.62em; font-weight:500; color:{tc_label}; transition:color 0.15s; font-family:'DM Mono', monospace; letter-spacing:0.16em; text-transform:uppercase; }}
+    .radar-link-title {{
+        font-size:0.62em; font-weight:500; color:{tc_label};
+        transition:color 0.15s; font-family:'DM Mono', monospace;
+        letter-spacing:0.16em; text-transform:uppercase;
+    }}
     .radar-link:hover .radar-link-title {{ color:var(--acc) !important; }}
-    .mint-table {{ width:100%; border-collapse:collapse; font-family:'DM Mono', monospace; }}
-    .mint-table th {{ padding:8px 12px; font-weight:400; color:var(--ink-4); text-align:right; font-size:0.68em; letter-spacing:0.16em; text-transform:uppercase; border-bottom: 2px solid var(--ink-3); background: var(--paper-2); }}
-    .mint-table td {{ padding:10px 12px; background: #FAFAF7; color:var(--ink-2); text-align:right; border-bottom: 1px solid var(--rule); font-size:0.8em; font-variant-numeric:tabular-nums; transition:background 0.12s; }}
+
+    /* ── TABLES ─────────────────────────────────────── */
+    .mint-table {{
+        width:100%; border-collapse:collapse;
+        font-family:'DM Mono', monospace;
+    }}
+    .mint-table th {{
+        padding:8px 12px; font-weight:400; color:var(--ink-4);
+        text-align:right; font-size:0.68em;
+        letter-spacing:0.16em; text-transform:uppercase;
+        border-bottom: 2px solid var(--ink-3);
+        background: var(--paper-2);
+    }}
+    .mint-table td {{
+        padding:10px 12px;
+        background: #FAFAF7;
+        color:var(--ink-2); text-align:right;
+        border-bottom: 1px solid var(--rule);
+        font-size:0.8em;
+        font-variant-numeric:tabular-nums;
+        transition:background 0.12s;
+    }}
     .mint-table tr:hover td {{ background:var(--acc-pale); }}
-    .mint-table td:first-child {{ border-left:3px solid transparent; text-align:left; font-family:'DM Sans'; font-weight:700; color:var(--bull); font-size:0.82em; }}
+    .mint-table td:first-child {{
+        border-left:3px solid transparent;
+        text-align:left; font-family:'DM Sans';
+        font-weight:700; color:var(--bull);
+        font-size:0.82em;
+    }}
     .mint-table tr:hover td:first-child {{ border-left-color:var(--acc); }}
     .mint-table th:first-child {{ text-align:left; }}
-    [data-testid="stNumberInput"] > div > div, [data-testid="stTextInput"] > div > div, [data-testid="stDateInput"] > div > div, [data-baseweb="select"] > div {{ background:#FAFAF7 !important; border:1px solid var(--rule-strong) !important; border-radius:0 !important; color:var(--ink) !important; }}
-    [data-testid="stFileUploader"], [data-testid="stExpander"], [data-testid="stDataEditor"], [data-testid="stDataFrame"] {{ background:#FAFAF7 !important; border:1px solid var(--rule-strong) !important; border-radius:0 !important; }}
+
+    /* ── INPUTS ─────────────────────────────────────── */
+    [data-testid="stNumberInput"] > div > div,
+    [data-testid="stTextInput"] > div > div {{
+        background:#FAFAF7 !important;
+        border:1px solid var(--rule-strong) !important;
+        border-radius:0 !important;
+        color:var(--ink) !important;
+    }}
+    [data-testid="stDateInput"] > div > div {{
+        background:#FAFAF7 !important;
+        border:1px solid var(--rule-strong) !important;
+        border-radius:0 !important;
+        color:var(--ink) !important;
+    }}
+    [data-baseweb="select"] > div {{
+        background:#FAFAF7 !important;
+        border:1px solid var(--rule-strong) !important;
+        border-radius:0 !important;
+    }}
+
+    /* ── FILE UPLOADER ──────────────────────────────── */
+    [data-testid="stFileUploader"] {{
+        background:var(--paper-2) !important;
+        border:1px dashed var(--rule-strong) !important;
+        border-radius:0 !important;
+    }}
+
+    /* ── EXPANDERS ──────────────────────────────────── */
+    [data-testid="stExpander"] {{
+        background:#FAFAF7 !important;
+        border:1px solid var(--rule-strong) !important;
+        border-radius:0 !important;
+    }}
+
+    /* ── DIVIDERS ───────────────────────────────────── */
     hr {{ border-color:var(--rule-strong) !important; }}
+
+    /* ── SCROLLBAR ──────────────────────────────────── */
     ::-webkit-scrollbar {{ width:3px; height:3px; }}
     ::-webkit-scrollbar-track {{ background:var(--paper-2); }}
     ::-webkit-scrollbar-thumb {{ background:var(--ink-5); }}
     ::-webkit-scrollbar-thumb:hover {{ background:var(--ink-3); }}
-    @keyframes pulseGlow {{ 0%,100% {{ opacity:1; }} 50% {{ opacity:0.7; }} }}
+
+    /* ── ANIMATIONS ─────────────────────────────────── */
+    @keyframes pulseGlow {{
+        0%,100% {{ opacity:1; }}
+        50% {{ opacity:0.7; }}
+    }}
+    @keyframes fadeUp {{
+        from {{ opacity:0; transform:translateY(10px); }}
+        to   {{ opacity:1; transform:translateY(0); }}
+    }}
     .live-pulse {{ animation:pulseGlow 2.8s ease-in-out infinite; }}
+
+    .main .block-container > div > div:nth-child(1) {{ animation:fadeUp 0.35s ease 0.05s both; }}
+    .main .block-container > div > div:nth-child(2) {{ animation:fadeUp 0.35s ease 0.10s both; }}
+    .main .block-container > div > div:nth-child(3) {{ animation:fadeUp 0.35s ease 0.15s both; }}
+    .main .block-container > div > div:nth-child(4) {{ animation:fadeUp 0.35s ease 0.20s both; }}
+    .main .block-container > div > div:nth-child(5) {{ animation:fadeUp 0.35s ease 0.25s both; }}
+
+    /* ── DATA EDITOR (portfolio table) ─────────────── */
+    [data-testid="stDataEditor"] {{
+        border:1px solid var(--rule-strong) !important;
+        border-radius:0 !important;
+    }}
+
+    /* ── DATA TABLE (stDataFrame) ───────────────────── */
+    [data-testid="stDataFrame"] {{
+        border:1px solid var(--rule-strong) !important;
+        border-radius:0 !important;
+    }}
+
+    /* ── MINT TABLE BODY TEXT ───────────────────────── */
+    .mint-table td {{ color:{tc_body} !important; }}
+    .mint-table th {{ color:{tc_label} !important; }}
 </style>"""
+
+
 st.markdown(apply_theme(css_block), unsafe_allow_html=True)
 
 # ==========================================
-# 4. 사이드바 UI
+# 4. 사이드바 UI  —  Dark Glass Terminal
 # ==========================================
 sidebar_top = st.sidebar.container()
 sidebar_top.markdown(apply_theme(f"""
 <div style="padding:20px 20px 14px; border-bottom:1px solid rgba(0,0,0,0.10);">
     <div style="font-family:'DM Mono'; font-size:0.58em; color:#9494A0; letter-spacing:0.22em; text-transform:uppercase; margin-bottom:8px;">Quantitative Engine</div>
-    <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:1.5em; font-weight:800; color:#111118; letter-spacing:-0.5px; line-height:1.1; margin-bottom:12px;">
-        AMLS <span style="color:#10B981;">V4.5.1</span>
+    <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:1.5em; font-weight:800; color:#111118; letter-spacing:-0.5px; letter-spacing:-0.3px; line-height:1.1; margin-bottom:12px;">
+        AMLS <span style="color:#10B981;">V4.5</span>
     </div>
     <div class="live-pulse" style="display:inline-flex; align-items:center; gap:5px; font-family:'DM Mono'; font-size:0.65em; color:#059669; padding:4px 10px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); letter-spacing:0.06em;">
         {rt_label}
@@ -561,7 +834,9 @@ sidebar_top.markdown(apply_theme(f"""
 """), unsafe_allow_html=True)
 
 st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 15px 6px;">Navigation</div>""", unsafe_allow_html=True)
-page = st.sidebar.radio("MENU", ["📊 Dashboard", "💼 Portfolio", "🍫 12-Pack Radar", "📈 Backtest Lab", "📰 Macro News"], label_visibility="collapsed")
+page = st.sidebar.radio("MENU",
+    ["📊 Dashboard", "💼 Portfolio", "🍫 12-Pack Radar", "📈 Backtest Lab", "📰 Macro News"],
+    label_visibility="collapsed")
 
 st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:6px 15px;">Theme Color</div>""", unsafe_allow_html=True)
 col1, col2, col3 = st.sidebar.columns([0.1, 1, 0.1])
@@ -571,6 +846,7 @@ with col2:
         st.session_state.main_color = new_color
         st.rerun()
 
+# ── 배경색 설정 ────────────────────────────────────────
 st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 15px 4px; border-top:1px solid rgba(0,0,0,0.08);">배경 색상</div>""", unsafe_allow_html=True)
 _bg_c1, _bg_c2, _bg_c3 = st.sidebar.columns([0.1, 1, 0.1])
 with _bg_c2:
@@ -579,25 +855,36 @@ with _bg_c2:
         st.session_state.bg_color = _new_bg
         st.rerun()
 
-with st.sidebar.expander("🎨 글씨 색상 설정", expanded=False):
+
+# ── 글씨 색상 개별 설정 (접기/펼치기) ───────────────
+with st.sidebar.expander("🎨  글씨 색상 설정", expanded=False):
     _tc_defs = [
-        ("heading", "헤딩 (제목·큰 숫자)", "tc_heading", "cp_tc_heading"),
-        ("body", "본문 (설명·라벨)", "tc_body", "cp_tc_body"),
-        ("muted", "뮤트 (보조 텍스트)", "tc_muted", "cp_tc_muted"),
-        ("label", "서브라벨 (캡션·단위)", "tc_label", "cp_tc_label"),
-        ("data", "데이터 (숫자·표)", "tc_data", "cp_tc_data"),
-        ("sidebar", "사이드바 (메뉴)", "tc_sidebar", "cp_tc_sidebar"),
+        ("heading",  "헤딩  (제목·큰 숫자)",    "tc_heading",  "cp_tc_heading"),
+        ("body",     "본문  (설명·라벨)",        "tc_body",     "cp_tc_body"),
+        ("muted",    "뮤트  (보조 텍스트)",      "tc_muted",    "cp_tc_muted"),
+        ("label",    "서브라벨  (캡션·단위)",    "tc_label",    "cp_tc_label"),
+        ("data",     "데이터  (숫자·표)",        "tc_data",     "cp_tc_data"),
+        ("sidebar",  "사이드바  (메뉴)",         "tc_sidebar",  "cp_tc_sidebar"),
     ]
     for _role, _disp, _key, _widget_key in _tc_defs:
         _lc, _rc = st.columns([2, 1])
-        _lc.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.72em;color:{getattr(st.session_state, _key)};padding:6px 0 0 2px;">{_disp}</div>', unsafe_allow_html=True)
-        _picked = _rc.color_picker("", getattr(st.session_state, _key), label_visibility="collapsed", key=_widget_key)
+        _lc.markdown(
+            f'<div style="font-family:DM Mono,monospace;font-size:0.72em;'
+            f'color:{getattr(st.session_state, _key)};padding:6px 0 0 2px;">{_disp}</div>',
+            unsafe_allow_html=True
+        )
+        _picked = _rc.color_picker("", getattr(st.session_state, _key),
+                                    label_visibility="collapsed", key=_widget_key)
         if _picked != getattr(st.session_state, _key):
             setattr(st.session_state, _key, _picked)
             st.rerun()
+
     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-    if st.button("↺ 색상 전체 초기화", use_container_width=True, key="reset_colors"):
-        for _k, _v in [("main_color","#10B981"),("bg_color","#F7F6F2"), ("tc_heading","#111118"),("tc_body","#2D2D2D"), ("tc_muted","#6B6B7A"),("tc_label","#9494A0"), ("tc_data","#111118"),("tc_sidebar","#2D2D2D")]:
+    if st.button("↺  색상 전체 초기화", use_container_width=True, key="reset_colors"):
+        for _k, _v in [("main_color","#10B981"),("bg_color","#F7F6F2"),
+                        ("tc_heading","#111118"),("tc_body","#2D2D2D"),
+                        ("tc_muted","#6B6B7A"),("tc_label","#9494A0"),
+                        ("tc_data","#111118"),("tc_sidebar","#2D2D2D")]:
             setattr(st.session_state, _k, _v)
         st.rerun()
 
@@ -615,13 +902,26 @@ st.sidebar.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# ── 사이드바 포트폴리오 백업/복구 ──────────────────
 st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 20px 6px; border-top:1px solid rgba(0,0,0,0.08);">Portfolio Data</div>""", unsafe_allow_html=True)
 
 import json as _json2
 _sb_json = _json2.dumps(st.session_state.portfolio)
-st.sidebar.download_button("💾 Backup (JSON 저장)", data=_sb_json, file_name="portfolio.json", mime="application/json", use_container_width=True, key="sb_backup")
+st.sidebar.download_button(
+    "💾  Backup (JSON 저장)",
+    data=_sb_json,
+    file_name="portfolio.json",
+    mime="application/json",
+    use_container_width=True,
+    key="sb_backup"
+)
 
-_sidebar_upload = st.sidebar.file_uploader("📂 Restore (JSON 불러오기)", type="json", key="sb_uploader", label_visibility="visible")
+_sidebar_upload = st.sidebar.file_uploader(
+    "📂  Restore (JSON 불러오기)",
+    type="json",
+    key="sb_uploader",
+    label_visibility="visible"
+)
 if _sidebar_upload is not None:
     try:
         import json as _json
@@ -635,14 +935,21 @@ if _sidebar_upload is not None:
         st.sidebar.error("❌ 파일 형식 오류")
 
 # ==========================================
-# 5. 메인 헤더
+# 5. 메인 헤더  —  Editorial Bento Style
 # ==========================================
+
+# ① 풀 너비 상단 인트로 스트립 (타이틀 + 컨트롤 인라인)
 _qqq_chg  = (last_row['QQQ'] / last_row['QQQ_MA200'] - 1) * 100
 _vix_now  = last_row['^VIX']
 _smh_chg  = last_row['SMH_1M_Ret'] * 100
 
 def _pill(label, value, color):
-    return (f'<div style="display:flex;flex-direction:column;align-items:center;padding:8px 18px;background:#FFFFFF;border:1px solid rgba(0,0,0,0.07);border-top:2px solid {color};border-radius:12px;min-width:90px;"><span style="font-family:\'DM Mono\';font-size:0.6em;color:#4A5568;letter-spacing:0.14em;text-transform:uppercase;">{label}</span><span style="font-family:\'DM Mono\';font-size:1.05em;font-weight:500;color:#0F172A;margin-top:2px;">{value}</span></div>')
+    return (f'<div style="display:flex;flex-direction:column;align-items:center;'
+            f'padding:8px 18px;background:#FFFFFF;border:1px solid rgba(0,0,0,0.07);'
+            f'border-top:2px solid {color};border-radius:12px;min-width:90px;">'
+            f'<span style="font-family:\'DM Mono\';font-size:0.6em;color:#4A5568;letter-spacing:0.14em;text-transform:uppercase;">{label}</span>'
+            f'<span style="font-family:\'DM Mono\';font-size:1.05em;font-weight:500;color:#0F172A;margin-top:2px;">{value}</span>'
+            f'</div>')
 
 _p_qqq  = _pill("QQQ/200MA", f"{_qqq_chg:+.1f}%", main_color if _qqq_chg >= 0 else "#EF4444")
 _p_vix  = _pill("VIX", f"{_vix_now:.1f}", main_color if _vix_now < 20 else ("#F59E0B" if _vix_now < 30 else "#EF4444"))
@@ -652,17 +959,19 @@ _p_reg  = _pill("REGIME", f"R{curr_regime}", main_color)
 _hdr_left = apply_theme(f"""
 <div style="display:flex;flex-direction:column;justify-content:center;">
     <div style="font-family:'Plus Jakarta Sans';font-size:2.5em;font-weight:800;letter-spacing:-2px;color:#0F172A;line-height:1;">
-        AMLS <span style="color:#10B981;">V4.5.1</span>
+        AMLS <span style="color:#10B981;">V4.5</span>
     </div>
     <div style="font-family:'DM Mono';font-size:0.65em;color:#4A5568;letter-spacing:0.22em;text-transform:uppercase;margin-top:4px;">
-        The Wall Street Quantitative Strategy (Sync Test)
+        The Wall Street Quantitative Strategy
     </div>
 </div>
 """)
 
 _hdr_right = apply_theme(f"""
 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
-    <div style="display:flex;gap:6px;">{_p_qqq}{_p_vix}{_p_smh}{_p_reg}</div>
+    <div style="display:flex;gap:6px;">
+        {_p_qqq}{_p_vix}{_p_smh}{_p_reg}
+    </div>
     <div style="display:flex;align-items:center;gap:10px;">
         <div class="live-pulse" style="font-family:'DM Mono';font-size:0.68em;color:#059669;padding:4px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:6px;letter-spacing:0.06em;">{rt_label}</div>
         <div style="font-family:'DM Mono';font-size:0.68em;color:#4A5568;letter-spacing:0.04em;">⏱ {last_update_time}</div>
@@ -671,7 +980,8 @@ _hdr_right = apply_theme(f"""
 """)
 
 hdr_c1, hdr_c2 = st.columns([1, 1.6])
-with hdr_c1: st.markdown(_hdr_left, unsafe_allow_html=True)
+with hdr_c1:
+    st.markdown(_hdr_left, unsafe_allow_html=True)
 with hdr_c2:
     c_sync1, c_sync2 = st.columns([4, 1])
     with c_sync2:
@@ -680,34 +990,61 @@ with hdr_c2:
             fetch_realtime_prices.clear()
             load_data.clear()
             st.rerun()
-    with c_sync1: st.markdown(_hdr_right, unsafe_allow_html=True)
+    with c_sync1:
+        st.markdown(_hdr_right, unsafe_allow_html=True)
 
-st.markdown(apply_theme(f"""<div style="position:relative;margin:14px 0 24px;height:1px;background:rgba(0,0,0,0.07);"><div style="position:absolute;left:0;top:0;width:100%;height:1px;background:rgba(0,0,0,0.12);"></div><div style="position:absolute;left:0;top:-1px;width:80px;height:3px;background:var(--acc);"></div></div>"""), unsafe_allow_html=True)
+st.markdown(apply_theme(f"""
+<div style="position:relative;margin:14px 0 24px;height:1px;background:rgba(0,0,0,0.07);">
+    <div style="position:absolute;left:0;top:0;width:100%;height:1px;background:rgba(0,0,0,0.12);"></div>
+    <div style="position:absolute;left:0;top:-1px;width:80px;height:3px;background:var(--acc);"></div>
+</div>
+"""), unsafe_allow_html=True)
 
 # ==========================================
 # 6. 페이지 라우팅
 # ==========================================
 if page == "📊 Dashboard":
+
     def _lg_row(label, val, passed):
         icon  = "●" if passed else "○"
         color = main_color if passed else "#B0B0BE"
-        val_str = f"${val:.2f}" if isinstance(val, (int, float)) and val > 5 else (f"{val:.2f}" if isinstance(val, (int, float)) else str(val))
-        return f'<div class="crow"><span class="clabel">{label}</span><span class="cval" style="color:{color};">{val_str}&nbsp;<span style="font-size:0.7em;">{icon}</span></span></div>'
+        if isinstance(val, (int, float)):
+            val_str = f"${val:.2f}" if val > 5 else f"{val:.2f}"
+        elif isinstance(val, str) and '%' in val:
+            val_str = val
+        else:
+            val_str = str(val)
+        return (f'<div class="crow">'
+                f'<span class="clabel">{label}</span>'
+                f'<span class="cval" style="color:{color};">{val_str}&nbsp;'
+                f'<span style="font-size:0.7em;">{icon}</span></span>'
+                f'</div>')
 
-    soxl_title = "SOXL APPROVED" if smh_cond else "USD DEFENSE"
+    soxl_title = "SOXL  APPROVED" if smh_cond else "USD  DEFENSE"
     soxl_strat = "3× Leverage Active" if smh_cond else "2× Defense Mode"
     soxl_color = main_color if smh_cond else "#9494A0"
 
-    _qqq_vs  = (last_row['QQQ'] / last_row['QQQ_MA200'] - 1) * 100
+    # ── ① 상단 Live Feed 티커 바 ───────────────────────────────
+    _qqq_vs  = (last_row['QQQ']  / last_row['QQQ_MA200']  - 1) * 100
     _tqqq_vs = (last_row['TQQQ'] / last_row['TQQQ_MA200'] - 1) * 100
-    _smh_vs  = (last_row['SMH'] / last_row['SMH_MA50'] - 1) * 100
+    _smh_vs  = (last_row['SMH']  / last_row['SMH_MA50']   - 1) * 100
     _vix_val = last_row['^VIX']
     _rsi_val = last_row['SMH_RSI']
 
     def _tick(label, val, sub, ok):
         c   = "#059669" if ok else "#DC2626"
         dot = "▲" if ok else "▼"
-        return f'<div style="display:inline-flex;flex-direction:column;padding:0 20px;border-right:1px solid rgba(0,0,0,0.09);min-width:110px;"><span style="font-family:DM Mono,monospace;font-size:0.65em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">{label}</span><span style="font-family:DM Mono,monospace;font-size:1.05em;color:#111118;font-variant-numeric:tabular-nums;">{val}</span><span style="font-family:DM Mono,monospace;font-size:0.76em;color:{c};">{dot} {sub}</span></div>'
+        return (
+            f'<div style="display:inline-flex;flex-direction:column;'
+            f'padding:0 20px;border-right:1px solid rgba(0,0,0,0.09);min-width:110px;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.65em;color:#9494A0;'
+        f'letter-spacing:0.14em;text-transform:uppercase;">{label}</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:1.05em;color:#111118;'
+            f'font-variant-numeric:tabular-nums;">{val}</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.76em;color:{c};">'
+            f'{dot} {sub}</span>'
+            f'</div>'
+        )
 
     tickers = (
         _tick("QQQ",     f"${last_row['QQQ']:.2f}",            f"{_qqq_vs:+.2f}%",           _qqq_vs>=0)  +
@@ -717,28 +1054,115 @@ if page == "📊 Dashboard":
         _tick("SMH RSI", f"{_rsi_val:.1f}",                    "> 50 target",                _rsi_val>50)
     )
 
-    st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid #111118;padding:12px 0 12px 18px;margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;"><span style="font-family:DM Mono,monospace;font-size:0.65em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;white-space:nowrap;padding-right:16px;border-right:1px solid rgba(0,0,0,0.09);">Live Feed</span>{tickers}<div style="margin-left:auto;padding:0 14px;white-space:nowrap;"><span class="live-pulse" style="font-family:DM Mono,monospace;font-size:0.6em;color:#059669;letter-spacing:0.06em;">{rt_label}</span></div></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
+        f'border-left:3px solid #111118;padding:12px 0 12px 18px;'
+        f'margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;">'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.65em;color:#9494A0;'
+        f'letter-spacing:0.18em;text-transform:uppercase;white-space:nowrap;'
+        f'padding-right:16px;border-right:1px solid rgba(0,0,0,0.09);">Live&nbsp;Feed</span>'
+        f'{tickers}'
+        f'<div style="margin-left:auto;padding:0 14px;white-space:nowrap;">'
+        f'<span class="live-pulse" style="font-family:DM Mono,monospace;font-size:0.6em;'
+        f'color:#059669;letter-spacing:0.06em;">{rt_label}</span>'
+        f'</div></div>',
+        unsafe_allow_html=True
+    )
 
+    # ── ② 메인 레이아웃: 좌(인스트루먼트 패널) + 우(차트 워크벤치) ─
     left_col, right_col = st.columns([1, 2.4])
+
     with left_col:
         r_colors = {1: main_color, 2: "#D97706", 3: "#DC2626", 4: "#7C3AED"}
         regime_accent = r_colors[curr_regime]
-        cond_rows = _lg_row('VIX < 40', f'{vix_close:.2f}', vix_close<=40) + _lg_row('QQQ > 200MA', f'${qqq_close:.2f}', qqq_close>=qqq_ma200) + _lg_row('50MA ≥ 200MA', f'${qqq_ma50:.2f}', qqq_ma50>=qqq_ma200)
-        st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-top:3px solid {regime_accent};padding:20px 18px 16px;margin-bottom:10px;position:relative;overflow:hidden;"><div style="position:absolute;right:-4px;bottom:-16px;font-family:Plus Jakarta Sans,sans-serif;font-size:7em;font-weight:800;color:rgba(0,0,0,0.04);line-height:1;pointer-events:none;user-select:none;">{curr_regime}</div><div style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;">Market Regime</div><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:2em;font-weight:800;letter-spacing:-1px;color:{regime_accent};line-height:1;margin-bottom:4px;">{regime_info[curr_regime][0]}</div><div style="font-family:DM Mono,monospace;font-size:0.72em;color:#6B6B7A;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;">{regime_info[curr_regime][1]}</div>{cond_rows}<div style="margin-top:8px;padding:6px 10px;background:rgba(16,185,129,0.07);border-left:2px solid {main_color};font-family:DM Mono,monospace;font-size:0.76em;color:#059669;">{regime_committee_msg}</div></div>'), unsafe_allow_html=True)
 
-        soxl_rows = _lg_row('SMH > 50MA', f'${smh_close:.2f}', smh_c1) + _lg_row('Momentum 1M >10%', f'{smh_1m*100:.1f}%', smh_c2) + _lg_row('RSI > 50', f'{smh_rsi:.1f}', smh_c3)
-        st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-top:3px solid {soxl_color};padding:18px 18px 14px;margin-bottom:10px;"><div style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:8px;">Semi-Conductor Gate</div><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.6em;font-weight:400;color:{soxl_color};margin-bottom:4px;">{soxl_title}</div><div style="font-family:DM Mono,monospace;font-size:0.7em;color:#6B6B7A;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:12px;">{soxl_strat}</div>{soxl_rows}</div>'), unsafe_allow_html=True)
+        # 레짐 카드 — 워터마크 숫자 포함
+        cond_rows = (
+            _lg_row('VIX < 40',     f'{vix_close:.2f}',  vix_close<=40)       +
+            _lg_row('QQQ > 200MA',  f'${qqq_close:.2f}', qqq_close>=qqq_ma200) +
+            _lg_row('50MA ≥ 200MA', f'${qqq_ma50:.2f}',  qqq_ma50>=qqq_ma200)
+        )
+        st.markdown(apply_theme(
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
+            f'border-top:3px solid {regime_accent};'
+            f'padding:20px 18px 16px;margin-bottom:10px;position:relative;overflow:hidden;">'
+            f'<div style="position:absolute;right:-4px;bottom:-16px;'
+            f'font-family:Plus Jakarta Sans,sans-serif;font-size:7em;font-weight:800;'
+            f'color:rgba(0,0,0,0.04);line-height:1;pointer-events:none;user-select:none;">'
+            f'{curr_regime}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;'
+            f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;">Market Regime</div>'
+            f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:2em;'
+            f'font-weight:800;letter-spacing:-1px;color:{regime_accent};'
+            f'letter-spacing:-0.5px;line-height:1;margin-bottom:4px;">'
+            f'{regime_info[curr_regime][0]}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.72em;color:#6B6B7A;'
+            f'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;">'
+            f'{regime_info[curr_regime][1]}</div>'
+            f'{cond_rows}'
+            f'<div style="margin-top:8px;padding:6px 10px;'
+            f'background:rgba(16,185,129,0.07);border-left:2px solid {main_color};'
+            f'font-family:DM Mono,monospace;font-size:0.76em;color:#059669;">'
+            f'{regime_committee_msg}</div>'
+            f'</div>'
+        ), unsafe_allow_html=True)
 
+        # SOXL 게이트 카드
+        soxl_rows = (
+            _lg_row('SMH > 50MA',       f'${smh_close:.2f}', smh_c1) +
+            _lg_row('Momentum 1M >10%', f'{smh_1m*100:.1f}%', smh_c2) +
+            _lg_row('RSI > 50',         f'{smh_rsi:.1f}',    smh_c3)
+        )
+        st.markdown(apply_theme(
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
+            f'border-top:3px solid {soxl_color};'
+            f'padding:18px 18px 14px;margin-bottom:10px;">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;'
+            f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:8px;">Semi-Conductor Gate</div>'
+            f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.6em;'
+            f'font-weight:400;color:{soxl_color};margin-bottom:4px;">'
+            f'{soxl_title}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.7em;color:#6B6B7A;'
+            f'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:12px;">{soxl_strat}</div>'
+            f'{soxl_rows}'
+            f'</div>'
+        ), unsafe_allow_html=True)
+
+        # 타겟 웨이트 — 프로그레스 바 형식
         weight_bar_rows = ""
         for k, v in target_weights.items():
-            if v <= 0: continue
+            if v <= 0:
+                continue
             pct   = v * 100
             bar_w = int(pct * 2.5)
-            weight_bar_rows += f'<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-family:DM Mono,monospace;font-size:0.84em;color:#2C2C35;min-width:48px;">{k}</span><div style="flex:1;margin:0 9px;height:4px;background:rgba(0,0,0,0.07);overflow:hidden;"><div style="height:4px;width:{bar_w}%;background:{main_color};"></div></div><span style="font-family:DM Mono,monospace;font-size:0.84em;color:{main_color};font-variant-numeric:tabular-nums;min-width:36px;text-align:right;">{pct:.0f}%</span></div>'
-        st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-top:3px solid #111118;padding:18px 18px 14px;"><div style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:12px;">Target Weights · R{curr_regime}</div>{weight_bar_rows}</div>'), unsafe_allow_html=True)
+            weight_bar_rows += (
+                f'<div style="display:flex;align-items:center;'
+                f'justify-content:space-between;padding:7px 0;'
+                f'border-bottom:1px solid rgba(0,0,0,0.05);">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.84em;'
+                f'color:#2C2C35;min-width:48px;">{k}</span>'
+                f'<div style="flex:1;margin:0 9px;height:4px;'
+                f'background:rgba(0,0,0,0.07);overflow:hidden;">'
+                f'<div style="height:4px;width:{bar_w}%;background:{main_color};"></div>'
+                f'</div>'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.84em;'
+                f'color:{main_color};font-variant-numeric:tabular-nums;'
+                f'min-width:36px;text-align:right;">{pct:.0f}%</span>'
+                f'</div>'
+            )
+        st.markdown(apply_theme(
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
+            f'border-top:3px solid #111118;padding:18px 18px 14px;">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;'
+            f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:12px;">'
+            f'Target Weights  ·  R{curr_regime}</div>'
+            f'{weight_bar_rows}'
+            f'</div>'
+        ), unsafe_allow_html=True)
 
     with right_col:
-        r_labels = {1:"R1 BULL", 2:"R2 CORR", 3:"R3 BEAR", 4:"R4 PANIC"}
+        # 레짐 탭 바 (우측 상단)
+        r_labels = {1:"R1  BULL", 2:"R2  CORR", 3:"R3  BEAR", 4:"R4  PANIC"}
         r_clrs   = {1: main_color, 2:"#D97706", 3:"#DC2626", 4:"#7C3AED"}
         tabs_html = ""
         for r in [1, 2, 3, 4]:
@@ -746,70 +1170,213 @@ if page == "📊 Dashboard":
             bg_t     = r_clrs[r] if active else "transparent"
             ft_t     = "#FFFFFF" if active else "#9494A0"
             bdr_t    = f"1px solid {r_clrs[r]}" if active else "1px solid rgba(0,0,0,0.08)"
-            tabs_html += f'<div style="padding:7px 16px;border:{bdr_t};background:{bg_t};"><span style="font-family:DM Mono,monospace;font-size:0.76em;font-weight:500;color:{ft_t};letter-spacing:0.05em;">{r_labels[r]}</span></div>'
-        st.markdown(f'<div style="display:flex;gap:4px;margin-bottom:10px;align-items:center;">{tabs_html}<div style="margin-left:auto;font-family:DM Mono,monospace;font-size:0.7em;color:#9494A0;">⏱ {last_update_time}</div></div>', unsafe_allow_html=True)
+            tabs_html += (
+                f'<div style="padding:7px 16px;border:{bdr_t};background:{bg_t};">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.76em;'
+                f'font-weight:500;color:{ft_t};letter-spacing:0.05em;">{r_labels[r]}</span>'
+                f'</div>'
+            )
+        st.markdown(
+            f'<div style="display:flex;gap:4px;margin-bottom:10px;align-items:center;">'
+            f'{tabs_html}'
+            f'<div style="margin-left:auto;font-family:DM Mono,monospace;font-size:0.7em;'
+            f'color:#9494A0;">⏱ {last_update_time}</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
+        # 차트 2개 세로 스택 (fill 포함)
         df_recent = df.iloc[-500:]
+
         fig_qqq = go.Figure()
-        fig_qqq.add_trace(go.Scatter(x=df_recent.index, y=df_recent['QQQ'], name='QQQ', line=dict(color=line_c, width=2), fill='tozeroy', fillcolor=f'rgba({r_c},{g_c},{b_c},0.06)'))
-        fig_qqq.add_trace(go.Scatter(x=df_recent.index, y=df_recent['QQQ_MA200'], name='200MA', line=dict(color=dash_c, width=1.2, dash='dot')))
-        fig_qqq.update_layout(title=dict(text="QQQ / 200-Day Moving Average", font=dict(family='DM Mono', size=13, color=t_color)), height=330, **chart_layout, legend=dict(orientation='h', yanchor='bottom', y=1.0, xanchor='right', x=1, font=dict(family='DM Mono', size=11, color=t_color)))
-        fig_qqq.update_xaxes(**_ax); fig_qqq.update_yaxes(**_ax)
+        fig_qqq.add_trace(go.Scatter(
+            x=df_recent.index, y=df_recent['QQQ'], name='QQQ',
+            line=dict(color=line_c, width=2),
+            fill='tozeroy', fillcolor=f'rgba({r_c},{g_c},{b_c},0.06)'
+        ))
+        fig_qqq.add_trace(go.Scatter(
+            x=df_recent.index, y=df_recent['QQQ_MA200'], name='200MA',
+            line=dict(color=dash_c, width=1.2, dash='dot')
+        ))
+        fig_qqq.update_layout(
+            title=dict(text="QQQ  /  200-Day Moving Average",
+                       font=dict(family='DM Mono', size=13, color=t_color)),
+            height=330, **chart_layout,
+            legend=dict(orientation='h', yanchor='bottom', y=1.0,
+                        xanchor='right', x=1,
+                        font=dict(family='DM Mono', size=11, color=t_color))
+        )
+        fig_qqq.update_xaxes(**_ax)
+        fig_qqq.update_yaxes(**_ax)
 
         fig_tqqq = go.Figure()
-        fig_tqqq.add_trace(go.Scatter(x=df_recent.index, y=df_recent['TQQQ'], name='TQQQ', line=dict(color=line_c, width=2), fill='tozeroy', fillcolor=f'rgba({r_c},{g_c},{b_c},0.06)'))
-        fig_tqqq.add_trace(go.Scatter(x=df_recent.index, y=df_recent['TQQQ_MA200'], name='200MA', line=dict(color=dash_c, width=1.2, dash='dot')))
-        fig_tqqq.update_layout(title=dict(text="TQQQ / 200-Day Moving Average", font=dict(family='DM Mono', size=13, color=t_color)), height=330, **chart_layout, legend=dict(orientation='h', yanchor='bottom', y=1.0, xanchor='right', x=1, font=dict(family='DM Mono', size=11, color=t_color)))
-        fig_tqqq.update_xaxes(**_ax); fig_tqqq.update_yaxes(**_ax)
+        fig_tqqq.add_trace(go.Scatter(
+            x=df_recent.index, y=df_recent['TQQQ'], name='TQQQ',
+            line=dict(color=line_c, width=2),
+            fill='tozeroy', fillcolor=f'rgba({r_c},{g_c},{b_c},0.06)'
+        ))
+        fig_tqqq.add_trace(go.Scatter(
+            x=df_recent.index, y=df_recent['TQQQ_MA200'], name='200MA',
+            line=dict(color=dash_c, width=1.2, dash='dot')
+        ))
+        fig_tqqq.update_layout(
+            title=dict(text="TQQQ  /  200-Day Moving Average",
+                       font=dict(family='DM Mono', size=13, color=t_color)),
+            height=330, **chart_layout,
+            legend=dict(orientation='h', yanchor='bottom', y=1.0,
+                        xanchor='right', x=1,
+                        font=dict(family='DM Mono', size=11, color=t_color))
+        )
+        fig_tqqq.update_xaxes(**_ax)
+        fig_tqqq.update_yaxes(**_ax)
 
-        with st.container(border=True): st.plotly_chart(fig_qqq, use_container_width=True)
+        with st.container(border=True):
+            st.plotly_chart(fig_qqq, use_container_width=True)
         st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-        with st.container(border=True): st.plotly_chart(fig_tqqq, use_container_width=True)
+        with st.container(border=True):
+            st.plotly_chart(fig_tqqq, use_container_width=True)
 
+    # ══════════════════════════════════════════════════════════════
+    # ── 하단 추가 섹션 ──────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════
     with st.spinner("글로벌 마켓 데이터 로딩..."):
         _gm_data, _gm_tickers, _asset_tickers, _leader_tickers = fetch_global_markets()
 
     def _sec_label(txt):
-        st.markdown(f'<div style="display:flex;align-items:center;gap:12px;margin:24px 0 14px;"><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.1em;font-weight:700;color:{tc_heading};letter-spacing:-0.3px;white-space:nowrap;">{txt}</div><div style="flex:1;height:1px;background:rgba(0,0,0,0.12);"></div></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:12px;margin:24px 0 14px;">'
+            f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.1em;font-weight:700;'
+            f'color:{tc_heading};letter-spacing:-0.3px;white-space:nowrap;">'
+            f'{txt}</div>'
+            f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.12);"></div>'
+            f'</div>',
+            unsafe_allow_html=True)
 
     def _chg_color(v): return "#059669" if v >= 0 else "#DC2626"
     def _chg_arrow(v): return "▲" if v >= 0 else "▼"
 
-    _sec_label("① Nasdaq 100 · Heatmap")
-    _qqq_stocks = {'AAPL': ('Technology', 'Apple'), 'MSFT': ('Technology', 'Microsoft'), 'NVDA': ('Technology', 'Nvidia'), 'AVGO': ('Technology', 'Broadcom'), 'AMD':  ('Technology', 'AMD'), 'INTC': ('Technology', 'Intel'), 'QCOM': ('Technology', 'Qualcomm'), 'TXN':  ('Technology', 'Texas Instr'), 'ORCL': ('Technology', 'Oracle'), 'ADBE': ('Technology', 'Adobe'), 'CRM':  ('Technology', 'Salesforce'), 'NOW':  ('Technology', 'ServiceNow'), 'INTU': ('Technology', 'Intuit'), 'GOOGL':('Communication', 'Alphabet'), 'META': ('Communication', 'Meta'), 'NFLX': ('Communication', 'Netflix'), 'AMZN': ('Consumer', 'Amazon'), 'TSLA': ('Consumer', 'Tesla'), 'BKNG': ('Consumer', 'Booking'), 'MCD':  ('Consumer', "McDonald's"), 'COST': ('Consumer', 'Costco'), 'SBUX': ('Consumer', 'Starbucks'), 'PYPL': ('Financials', 'PayPal'), 'ISRG': ('Healthcare', 'Intuitive Surg'), 'GILD': ('Healthcare', 'Gilead'), 'AMGN': ('Healthcare', 'Amgen'), 'REGN': ('Healthcare', 'Regeneron'), 'HON':  ('Industrials', 'Honeywell'), 'PEP':  ('Staples', 'PepsiCo')}
+    # ── ① 나스닥 100 히트맵 (Treemap) ──────────────────────────
+    _sec_label("① Nasdaq 100  ·  Heatmap")
+
+    # 나스닥 100 주요 구성종목 (섹터별 그룹)
+    _qqq_stocks = {
+        'AAPL': ('Technology', 'Apple'),
+        'MSFT': ('Technology', 'Microsoft'),
+        'NVDA': ('Technology', 'Nvidia'),
+        'AVGO': ('Technology', 'Broadcom'),
+        'AMD':  ('Technology', 'AMD'),
+        'INTC': ('Technology', 'Intel'),
+        'QCOM': ('Technology', 'Qualcomm'),
+        'TXN':  ('Technology', 'Texas Instr'),
+        'ORCL': ('Technology', 'Oracle'),
+        'ADBE': ('Technology', 'Adobe'),
+        'CRM':  ('Technology', 'Salesforce'),
+        'NOW':  ('Technology', 'ServiceNow'),
+        'INTU': ('Technology', 'Intuit'),
+        'GOOGL':('Communication', 'Alphabet'),
+        'META': ('Communication', 'Meta'),
+        'NFLX': ('Communication', 'Netflix'),
+        'AMZN': ('Consumer', 'Amazon'),
+        'TSLA': ('Consumer', 'Tesla'),
+        'BKNG': ('Consumer', 'Booking'),
+        'MCD':  ('Consumer', "McDonald's"),
+        'COST': ('Consumer', 'Costco'),
+        'SBUX': ('Consumer', 'Starbucks'),
+        'PYPL': ('Financials', 'PayPal'),
+        'ISRG': ('Healthcare', 'Intuitive Surg'),
+        'GILD': ('Healthcare', 'Gilead'),
+        'AMGN': ('Healthcare', 'Amgen'),
+        'REGN': ('Healthcare', 'Regeneron'),
+        'HON':  ('Industrials', 'Honeywell'),
+        'PEP':  ('Staples', 'PepsiCo'),
+    }
+
+    # 종목 데이터 수집 (이미 _gm_data에 없으면 fetch)
     _qqq_tlist = list(_qqq_stocks.keys())
     _qqq_missing = [t for t in _qqq_tlist if t not in _gm_data]
     if _qqq_missing:
         try:
             _end_q = datetime.now()
             _start_q = _end_q - timedelta(days=5)
-            _raw_q = yf.download(_qqq_missing, start=_start_q.strftime('%Y-%m-%d'), end=_end_q.strftime('%Y-%m-%d'), progress=False, auto_adjust=True)['Close']
+            _raw_q = yf.download(_qqq_missing,
+                                  start=_start_q.strftime('%Y-%m-%d'),
+                                  end=_end_q.strftime('%Y-%m-%d'),
+                                  progress=False, auto_adjust=True)['Close']
             for _t in _qqq_missing:
                 _col_q = _raw_q[_t] if _t in _raw_q.columns else None
                 if _col_q is not None:
                     _s = _col_q.dropna()
-                    if len(_s) >= 2: _gm_data[_t] = {'price': float(_s.iloc[-1]), 'chg': float((_s.iloc[-1]/_s.iloc[-2]-1)*100)}
-                    elif len(_s) == 1: _gm_data[_t] = {'price': float(_s.iloc[-1]), 'chg': 0.0}
-        except: pass
+                    if len(_s) >= 2:
+                        _gm_data[_t] = {'price': float(_s.iloc[-1]),
+                                         'chg': float((_s.iloc[-1]/_s.iloc[-2]-1)*100)}
+                    elif len(_s) == 1:
+                        _gm_data[_t] = {'price': float(_s.iloc[-1]), 'chg': 0.0}
+        except:
+            pass
 
-    _tm_labels, _tm_parents, _tm_values, _tm_colors, _tm_text = ["Nasdaq 100"], [""], [0], [0], [""]
+    # Treemap 데이터 준비
+    _tm_labels, _tm_parents, _tm_values, _tm_colors, _tm_text = [], [], [], [], []
+    _tm_labels.append("Nasdaq 100"); _tm_parents.append(""); _tm_values.append(0); _tm_colors.append(0); _tm_text.append("")
+
     _sector_set = {}
     for _t, (_sec, _name) in _qqq_stocks.items():
         if _sec not in _sector_set:
             _sector_set[_sec] = True
-            _tm_labels.append(_sec); _tm_parents.append("Nasdaq 100"); _tm_values.append(0); _tm_colors.append(0); _tm_text.append("")
+            _tm_labels.append(_sec); _tm_parents.append("Nasdaq 100")
+            _tm_values.append(0); _tm_colors.append(0); _tm_text.append("")
 
     for _t, (_sec, _name) in _qqq_stocks.items():
         _d   = _gm_data.get(_t, {})
         _chg = _d.get('chg', 0.0)
         _px  = _d.get('price', 0.0)
-        _tm_labels.append(f"{_t}"); _tm_parents.append(_sec); _tm_values.append(max(abs(_px) * 0.1, 1)); _tm_colors.append(_chg); _tm_text.append(f"{_name}<br>{_px:,.1f}<br>{_chg:+.2f}%")
+        _tm_labels.append(f"{_t}")
+        _tm_parents.append(_sec)
+        _tm_values.append(max(abs(_px) * 0.1, 1))   # 크기는 가격 기반
+        _tm_colors.append(_chg)
+        _tm_text.append(f"{_name}<br>{_px:,.1f}<br>{_chg:+.2f}%")
 
-    _tm_fig = go.Figure(go.Treemap(labels=_tm_labels, parents=_tm_parents, values=_tm_values, customdata=_tm_text, hovertemplate='%{customdata}<extra></extra>', texttemplate='<b>%{label}</b><br>%{customdata}', textfont=dict(size=11, family='DM Mono'), marker=dict(colors=_tm_colors, colorscale=[[0.0, '#DC2626'], [0.3, '#FCA5A5'], [0.5, '#F7F6F2'], [0.7, '#6EE7B7'], [1.0, '#059669']], cmid=0, cmin=-3, cmax=3, showscale=True, colorbar=dict(thickness=12, len=0.6, title=dict(text='%', font=dict(size=10, family='DM Mono')), tickfont=dict(size=9, family='DM Mono'), tickformat='+.1f')), branchvalues='total', tiling=dict(packing='squarify')))
-    _tm_fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family='DM Mono', color=t_color), margin=dict(l=0, r=0, t=10, b=0))
-    with st.container(border=True): st.plotly_chart(_tm_fig, use_container_width=True)
+    _tm_fig = go.Figure(go.Treemap(
+        labels=_tm_labels,
+        parents=_tm_parents,
+        values=_tm_values,
+        customdata=_tm_text,
+        hovertemplate='%{customdata}<extra></extra>',
+        texttemplate='<b>%{label}</b><br>%{customdata}',
+        textfont=dict(size=11, family='DM Mono'),
+        marker=dict(
+            colors=_tm_colors,
+            colorscale=[
+                [0.0, '#DC2626'],
+                [0.3, '#FCA5A5'],
+                [0.5, '#F7F6F2'],
+                [0.7, '#6EE7B7'],
+                [1.0, '#059669'],
+            ],
+            cmid=0,
+            cmin=-3, cmax=3,
+            showscale=True,
+            colorbar=dict(
+                thickness=12, len=0.6,
+                title=dict(text='%', font=dict(size=10, family='DM Mono')),
+                tickfont=dict(size=9, family='DM Mono'),
+                tickformat='+.1f',
+            )
+        ),
+        branchvalues='total',
+        tiling=dict(packing='squarify'),
+    ))
+    _tm_fig.update_layout(
+        height=400,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='DM Mono', color=t_color),
+        margin=dict(l=0, r=0, t=10, b=0),
+    )
+    with st.container(border=True):
+        st.plotly_chart(_tm_fig, use_container_width=True)
 
-    _sec_label("② Rates / Commodities / Crypto")
+    # ── ② 금리 / 원자재 / 크립토 ────────────────────────────────
+    _sec_label("② Rates  /  Commodities  /  Crypto")
     _asset_icons = {'^TNX':'📈','GLD':'🥇','SLV':'⚪','USO':'🛢','BTC-USD':'₿','ETH-USD':'Ξ','UUP':'💵'}
     _asset_cols = st.columns(7)
     for _i, (_t, _name) in enumerate(_asset_tickers.items()):
@@ -819,10 +1386,22 @@ if page == "📊 Dashboard":
         _clr = _chg_color(_chg)
         _ico = _asset_icons.get(_t, '')
         with _asset_cols[_i]:
-            st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);border-top:2px solid {_clr};padding:12px 10px;text-align:center;"><div style="font-size:1.1em;margin-bottom:4px;">{_ico}</div><div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;letter-spacing:0.1em;text-transform:uppercase;">{_name}</div><div style="font-family:DM Mono,monospace;font-size:0.88em;color:#111118;font-variant-numeric:tabular-nums;margin:3px 0;">${_px:,.2f}</div><div style="font-family:DM Mono,monospace;font-size:0.8em;color:{_clr};font-weight:600;">{_chg_arrow(_chg)} {_chg:+.2f}%</div></div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
+                f'border-top:2px solid {_clr};padding:12px 10px;text-align:center;">'
+                f'<div style="font-size:1.1em;margin-bottom:4px;">{_ico}</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;'
+                f'letter-spacing:0.1em;text-transform:uppercase;">{_name}</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.88em;color:#111118;'
+                f'font-variant-numeric:tabular-nums;margin:3px 0;">${_px:,.2f}</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.8em;'
+                f'color:{_clr};font-weight:600;">{_chg_arrow(_chg)} {_chg:+.2f}%</div>'
+                f'</div>', unsafe_allow_html=True)
 
-    _sec_label("③ Market Leaders · Magnificent 7 + Semis")
-    _ld_sorted = sorted(_leader_tickers.items(), key=lambda x: _gm_data.get(x[0],{}).get('chg',0), reverse=True)
+    # ── ③ 시장 주도주 ────────────────────────────────────────────
+    _sec_label("③ Market Leaders  ·  Magnificent 7  +  Semis")
+    _ld_sorted = sorted(_leader_tickers.items(),
+                        key=lambda x: _gm_data.get(x[0],{}).get('chg',0), reverse=True)
     _ld_cols = st.columns(5)
     for _i, (_t, _name) in enumerate(_ld_sorted):
         _d   = _gm_data.get(_t, {})
@@ -831,38 +1410,144 @@ if page == "📊 Dashboard":
         _clr = _chg_color(_chg)
         _rank_color = "#D97706" if _i == 0 else ("#9494A0" if _i >= 3 else "#111118")
         with _ld_cols[_i % 5]:
-            st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);border-top:2px solid {_clr};padding:12px 14px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-family:DM Mono,monospace;font-size:0.62em;color:#9494A0;text-transform:uppercase;letter-spacing:0.1em;">{_t}</span><span style="font-family:DM Mono,monospace;font-size:0.62em;color:{_rank_color};font-weight:600;">#{_i+1}</span></div><div style="font-family:DM Sans,sans-serif;font-size:0.82em;color:#2C2C35;margin:3px 0;">{_name}</div><div style="font-family:DM Mono,monospace;font-size:1.0em;color:#111118;font-variant-numeric:tabular-nums;">${_px:,.2f}</div><div style="font-family:DM Mono,monospace;font-size:0.82em;color:{_clr};font-weight:600;">{_chg_arrow(_chg)} {_chg:+.2f}%</div></div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
+                f'border-top:2px solid {_clr};padding:12px 14px;margin-bottom:8px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:baseline;">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.62em;color:#9494A0;'
+                f'text-transform:uppercase;letter-spacing:0.1em;">{_t}</span>'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.62em;'
+                f'color:{_rank_color};font-weight:600;">#{_i+1}</span>'
+                f'</div>'
+                f'<div style="font-family:DM Sans,sans-serif;font-size:0.82em;'
+                f'color:#2C2C35;margin:3px 0;">{_name}</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:1.0em;color:#111118;'
+                f'font-variant-numeric:tabular-nums;">${_px:,.2f}</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.82em;'
+                f'color:{_clr};font-weight:600;">{_chg_arrow(_chg)} {_chg:+.2f}%</div>'
+                f'</div>', unsafe_allow_html=True)
 
-    _sec_label("④ Sector Scanner · 1-Month Performance")
-    _sec_data_full = [{'t': s, 'name': {'XLK':'Technology','XLV':'Health Care','XLF':'Financials','XLY':'Cons. Discret','XLC':'Comm. Svc','XLI':'Industrials','XLP':'Cons. Staples','XLE':'Energy','XLU':'Utilities','XLRE':'Real Estate','XLB':'Materials'}.get(s, s), 'ret1m': last_row.get(f'{s}_1M', 0.0) * 100} for s in SECTOR_TICKERS]
+    # ── ④ 주도 섹터 스캐너 ──────────────────────────────────────
+    _sec_label("④ Sector Scanner  ·  1-Month Performance")
+    _sec_data_full = [
+        {'t': s, 'name': {'XLK':'Technology','XLV':'Health Care','XLF':'Financials',
+            'XLY':'Cons. Discret','XLC':'Comm. Svc','XLI':'Industrials',
+            'XLP':'Cons. Staples','XLE':'Energy','XLU':'Utilities',
+            'XLRE':'Real Estate','XLB':'Materials'}.get(s, s),
+         'ret1m': last_row.get(f'{s}_1M', 0.0) * 100}
+        for s in SECTOR_TICKERS
+    ]
     _sec_sorted_full = sorted(_sec_data_full, key=lambda x: x['ret1m'], reverse=True)
+
+    # 섹터 바 차트
     _sec_fig = go.Figure()
     _sec_names_plot  = [x['name'] for x in _sec_sorted_full]
     _sec_rets_plot   = [x['ret1m'] for x in _sec_sorted_full]
     _sec_colors_plot = [_chg_color(v) for v in _sec_rets_plot]
-    _sec_fig.add_trace(go.Bar(x=_sec_names_plot, y=_sec_rets_plot, marker_color=_sec_colors_plot, marker_line_width=0, text=[f"{v:+.1f}%" for v in _sec_rets_plot], textposition='outside', textfont=dict(size=10, family='DM Mono')))
-    _sec_fig.update_layout(height=260, showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family='DM Mono', color=t_color), margin=dict(l=0, r=0, t=20, b=40))
+    _sec_fig.add_trace(go.Bar(
+        x=_sec_names_plot, y=_sec_rets_plot,
+        marker_color=_sec_colors_plot, marker_line_width=0,
+        text=[f"{v:+.1f}%" for v in _sec_rets_plot],
+        textposition='outside', textfont=dict(size=10, family='DM Mono')
+    ))
+    _sec_fig.update_layout(
+        height=260, showlegend=False,
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='DM Mono', color=t_color),
+        margin=dict(l=0, r=0, t=20, b=40)
+    )
     _sec_fig.update_xaxes(**_ax_r, tickfont=dict(size=10))
     _sec_fig.update_yaxes(tickformat='.1f', ticksuffix='%', **_ax_r)
-    with st.container(border=True): st.plotly_chart(_sec_fig, use_container_width=True)
+    with st.container(border=True):
+        st.plotly_chart(_sec_fig, use_container_width=True)
 
-    _sec_label("⑤ US Economic Calendar · Key Events This Week")
+    # ── ⑤ 미국 경제 캘린더 ──────────────────────────────────────
+    _sec_label("⑤ US Economic Calendar  ·  Key Events This Week")
     _cal_l, _cal_r = st.columns([1.4, 1])
     with _cal_l:
+        # 주요 경제지표 일정 (정기 이벤트 기반 — 실제 날짜는 매달 고정 스케줄)
         from datetime import date
         _today    = date.today()
-        _weekday  = _today.weekday()
+        _weekday  = _today.weekday()   # Mon=0 ... Sun=6
         _mon      = _today - timedelta(days=_weekday)
         def _wd(offset):
             d = _mon + timedelta(days=offset)
             return d.strftime('%m/%d (%a)')
-        _cal_events = [(_wd(0), "월", "ISM 제조업 PMI", "보통", "#D97706"), (_wd(0), "월", "건설 지출", "낮음", "#9494A0"), (_wd(1), "화", "JOLTS 구인 건수", "높음", "#DC2626"), (_wd(1), "화", "공장 수주", "보통", "#D97706"), (_wd(2), "수", "ADP 민간 고용 변화", "높음", "#DC2626"), (_wd(2), "수", "ISM 서비스 PMI", "보통", "#D97706"), (_wd(2), "수", "FOMC 의사록", "높음", "#DC2626"), (_wd(3), "목", "신규 실업수당 청구건수", "보통", "#D97706"), (_wd(3), "목", "무역수지", "보통", "#D97706"), (_wd(4), "금", "비농업 고용 (NFP)", "매우높음", "#DC2626"), (_wd(4), "금", "실업률", "매우높음", "#DC2626"), (_wd(4), "금", "평균 시간당 임금", "보통", "#D97706")]
-        st.markdown('<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);"><table style="width:100%;border-collapse:collapse;font-family:DM Mono,monospace;"><tr style="border-bottom:2px solid #111118;"><th style="padding:8px 10px;font-size:0.6em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;text-align:left;font-weight:400;">날짜</th><th style="padding:8px 10px;font-size:0.6em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;text-align:left;font-weight:400;">지표</th><th style="padding:8px 10px;font-size:0.6em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;text-align:center;font-weight:400;">영향</th></tr>' + "".join([f'<tr style="border-bottom:1px solid rgba(0,0,0,0.05);"><td style="padding:7px 10px;font-size:0.7em;color:#9494A0;white-space:nowrap;">{date_s}</td><td style="padding:7px 10px;font-size:0.82em;color:#2C2C35;font-family:Plus Jakarta Sans,sans-serif;">{evt}</td><td style="padding:7px 10px;text-align:center;"><span style="background:{imp_c}22;color:{imp_c};border:1px solid {imp_c}55;font-size:0.62em;padding:2px 8px;letter-spacing:0.04em;">{imp}</span></td></tr>' for date_s, _, evt, imp, imp_c in _cal_events]) + '</table></div>', unsafe_allow_html=True)
-    with _cal_r:
-        _high_events = [e for e in _cal_events if e[3] in ("높음", "매우높음")]
-        st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);border-top:2px solid #DC2626;padding:16px 18px;"><div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:10px;">High Impact Events</div>' + "".join([f'<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><div style="width:6px;height:6px;border-radius:50%;background:#DC2626;flex-shrink:0;"></div><div><div style="font-family:DM Mono,monospace;font-size:0.62em;color:#9494A0;">{d}</div><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.85em;color:#2C2C35;font-weight:500;">{e}</div></div></div>' for d, _, e, imp, _ in _high_events]) + f'<div style="margin-top:10px;padding:8px;background:rgba(220,38,38,0.05);border-left:2px solid #DC2626;"><span style="font-family:DM Mono,monospace;font-size:0.66em;color:#9494A0;">고영향 이벤트 총 <b style="color:#DC2626;">{len(_high_events)}건</b></span></div></div>', unsafe_allow_html=True)
 
+        _cal_events = [
+            (_wd(0), "월", "ISM 제조업 PMI",           "보통", "#D97706"),
+            (_wd(0), "월", "건설 지출",                 "낮음", "#9494A0"),
+            (_wd(1), "화", "JOLTS 구인 건수",           "높음", "#DC2626"),
+            (_wd(1), "화", "공장 수주",                 "보통", "#D97706"),
+            (_wd(2), "수", "ADP 민간 고용 변화",        "높음", "#DC2626"),
+            (_wd(2), "수", "ISM 서비스 PMI",            "보통", "#D97706"),
+            (_wd(2), "수", "FOMC 의사록",               "높음", "#DC2626"),
+            (_wd(3), "목", "신규 실업수당 청구건수",    "보통", "#D97706"),
+            (_wd(3), "목", "무역수지",                  "보통", "#D97706"),
+            (_wd(4), "금", "비농업 고용 (NFP)",         "매우높음", "#DC2626"),
+            (_wd(4), "금", "실업률",                    "매우높음", "#DC2626"),
+            (_wd(4), "금", "평균 시간당 임금",          "보통", "#D97706"),
+        ]
+        st.markdown(
+            '<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);">'
+            '<table style="width:100%;border-collapse:collapse;font-family:DM Mono,monospace;">'
+            '<tr style="border-bottom:2px solid #111118;">'
+            '<th style="padding:8px 10px;font-size:0.6em;color:#9494A0;letter-spacing:0.14em;'
+            'text-transform:uppercase;text-align:left;font-weight:400;">날짜</th>'
+            '<th style="padding:8px 10px;font-size:0.6em;color:#9494A0;letter-spacing:0.14em;'
+            'text-transform:uppercase;text-align:left;font-weight:400;">지표</th>'
+            '<th style="padding:8px 10px;font-size:0.6em;color:#9494A0;letter-spacing:0.14em;'
+            'text-transform:uppercase;text-align:center;font-weight:400;">영향</th>'
+            '</tr>'
+            + "".join([
+                f'<tr style="border-bottom:1px solid rgba(0,0,0,0.05);">'
+                f'<td style="padding:7px 10px;font-size:0.7em;color:#9494A0;white-space:nowrap;">'
+                f'{date_s}</td>'
+                f'<td style="padding:7px 10px;font-size:0.82em;color:#2C2C35;font-family:Plus Jakarta Sans,sans-serif;">{evt}</td>'
+                f'<td style="padding:7px 10px;text-align:center;">'
+                f'<span style="background:{imp_c}22;color:{imp_c};border:1px solid {imp_c}55;'
+                f'font-size:0.62em;padding:2px 8px;letter-spacing:0.04em;">{imp}</span></td>'
+                f'</tr>'
+                for date_s, _, evt, imp, imp_c in _cal_events
+            ])
+            + '</table></div>',
+            unsafe_allow_html=True
+        )
+    with _cal_r:
+        # 이번 주 요약 카드
+        _high_events = [e for e in _cal_events if e[3] in ("높음", "매우높음")]
+        st.markdown(
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
+            f'border-top:2px solid #DC2626;padding:16px 18px;">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;'
+            f'letter-spacing:0.16em;text-transform:uppercase;margin-bottom:10px;">'
+            f'High Impact Events</div>'
+            + "".join([
+                f'<div style="display:flex;align-items:center;gap:8px;padding:7px 0;'
+                f'border-bottom:1px solid rgba(0,0,0,0.05);">'
+                f'<div style="width:6px;height:6px;border-radius:50%;background:#DC2626;'
+                f'flex-shrink:0;"></div>'
+                f'<div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.62em;color:#9494A0;">'
+                f'{d}</div>'
+                f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.85em;color:#2C2C35;'
+                f'font-weight:500;">{e}</div>'
+                f'</div></div>'
+                for d, _, e, imp, _ in _high_events
+            ])
+            + f'<div style="margin-top:10px;padding:8px;background:rgba(220,38,38,0.05);'
+            f'border-left:2px solid #DC2626;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.66em;color:#9494A0;">'
+            f'고영향 이벤트 총 <b style="color:#DC2626;">{len(_high_events)}건</b></span>'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+# ──────────────────────────────────────────
 elif page == "💼 Portfolio":
+
+    # ── 데이터 준비 ─────────────────────────────────────────────
     current_prices = {}
     for t in ASSET_LIST:
         if t == 'CASH': current_prices[t] = 1.0
@@ -874,25 +1559,64 @@ elif page == "💼 Portfolio":
     curr_vals     = {a: st.session_state.portfolio[a]['shares'] * current_prices[a] for a in ASSET_LIST}
     total_val_usd = sum(curr_vals.values())
     total_val_krw = total_val_usd * cur_fx
-    invested_cost = sum(st.session_state.portfolio[a]['shares'] * st.session_state.portfolio[a]['avg_price'] for a in ASSET_LIST if a != 'CASH')
+    invested_cost = sum(
+        st.session_state.portfolio[a]['shares'] * st.session_state.portfolio[a]['avg_price']
+        for a in ASSET_LIST if a != 'CASH'
+    )
     pnl_usd   = total_val_usd - invested_cost
     pnl_pct   = (pnl_usd / invested_cost * 100) if invested_cost > 0 else 0.0
     pnl_color = "#059669" if pnl_pct >= 0 else "#DC2626"
     pnl_sign  = "▲" if pnl_pct >= 0 else "▼"
+
     diff_vals = {a: (total_val_usd * target_weights.get(a, 0.0)) - curr_vals[a] for a in ASSET_LIST} if total_val_usd > 0 else {a: 0.0 for a in ASSET_LIST}
     C_GREEN = main_color
     C_RED   = "#DC2626"
 
-    def _stat_chip(label, value, sub="", sub_color="#9494A0"): return f'<div style="padding:0 22px;border-right:1px solid rgba(0,0,0,0.08);"><div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:2px;">{label}</div><div style="font-family:DM Mono,monospace;font-size:1.05em;font-weight:400;color:#111118;font-variant-numeric:tabular-nums;">{value}</div><div style="font-family:DM Mono,monospace;font-size:0.65em;color:{sub_color};">{sub}</div></div>'
-    chips = _stat_chip("Total NAV", f"${total_val_usd:,.2f}", f"₩{total_val_krw:,.0f}") + _stat_chip("USD / KRW", f"₩{cur_fx:,.0f}", "환율") + _stat_chip("P & L", f"{pnl_pct:+.2f}%", f"{pnl_sign} ${pnl_usd:,.0f}", pnl_color) + _stat_chip("Regime", f"R{curr_regime}", regime_info[curr_regime][1]) + _stat_chip("투자원금", f"${invested_cost:,.0f}", "원금 합계")
-    st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);border-left:3px solid #111118;padding:10px 0 10px 6px;display:flex;align-items:center;overflow-x:auto;margin-bottom:12px;"><span style="font-family:DM Mono,monospace;font-size:0.55em;color:#9494A0;letter-spacing:0.2em;text-transform:uppercase;padding:0 16px;border-right:1px solid rgba(0,0,0,0.08);white-space:nowrap;">Portfolio</span>{chips}</div>', unsafe_allow_html=True)
+    # ══════════════════════════════════════════════════════════
+    # ROW 1 — 상단 스탯 바
+    # ══════════════════════════════════════════════════════════
+    def _stat_chip(label, value, sub="", sub_color="#9494A0"):
+        return (
+            f'<div style="padding:0 22px;border-right:1px solid rgba(0,0,0,0.08);">' 
+            f'<div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;' 
+            f'letter-spacing:0.15em;text-transform:uppercase;margin-bottom:2px;">{label}</div>' 
+            f'<div style="font-family:DM Mono,monospace;font-size:1.05em;font-weight:400;' 
+            f'color:#111118;font-variant-numeric:tabular-nums;">{value}</div>' 
+            f'<div style="font-family:DM Mono,monospace;font-size:0.65em;color:{sub_color};">{sub}</div>' 
+            f'</div>'
+        )
 
+    chips = (
+        _stat_chip("Total NAV",  f"${total_val_usd:,.2f}",   f"₩{total_val_krw:,.0f}") +
+        _stat_chip("USD / KRW",  f"₩{cur_fx:,.0f}",          "환율") +
+        _stat_chip("P & L",      f"{pnl_pct:+.2f}%",         f"{pnl_sign} ${pnl_usd:,.0f}", pnl_color) +
+        _stat_chip("Regime",     f"R{curr_regime}",           regime_info[curr_regime][1]) +
+        _stat_chip("투자원금",   f"${invested_cost:,.0f}",    "원금 합계")
+    )
+    st.markdown(
+        f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);' 
+        f'border-left:3px solid #111118;padding:10px 0 10px 6px;' 
+        f'display:flex;align-items:center;overflow-x:auto;margin-bottom:12px;">' 
+        f'<span style="font-family:DM Mono,monospace;font-size:0.55em;color:#9494A0;' 
+        f'letter-spacing:0.2em;text-transform:uppercase;padding:0 16px;' 
+        f'border-right:1px solid rgba(0,0,0,0.08);white-space:nowrap;">Portfolio</span>' 
+        f'{chips}</div>',
+        unsafe_allow_html=True
+    )
+
+    # ══════════════════════════════════════════════════════════
+    # ROW 2 — Goal Tracker
+    # ══════════════════════════════════════════════════════════
     gc_left, gc_right = st.columns([1, 3])
     with gc_left:
-        new_goal = st.number_input("🎯 목표 금액 (USD)", min_value=1000.0, max_value=100_000_000.0, value=st.session_state.goal_usd, step=1000.0, format="%.0f", key="goal_input")
+        new_goal = st.number_input(
+            "🎯 목표 금액 (USD)", min_value=1000.0, max_value=100_000_000.0,
+            value=st.session_state.goal_usd, step=1000.0, format="%.0f", key="goal_input"
+        )
         if new_goal != st.session_state.goal_usd:
             st.session_state.goal_usd = new_goal
             st.rerun()
+
     with gc_right:
         _goal    = st.session_state.goal_usd
         _pct_raw = (total_val_usd / _goal * 100) if _goal > 0 else 0.0
@@ -903,69 +1627,226 @@ elif page == "💼 Portfolio":
         elif _pct >= 75:  _bc, _badge = main_color, "⚡ 75% 이상"
         elif _pct >= 50:  _bc, _badge = "#D97706", "📈 순항 중"
         else:             _bc, _badge = "#9494A0", "🌱 시작 단계"
-        _markers_html = "".join([f'<div style="position:absolute;left:{m}%;top:0;bottom:0;width:1px;background:rgba(0,0,0,0.13);"><span style="position:absolute;top:-17px;left:50%;transform:translateX(-50%);font-family:DM Mono,monospace;font-size:0.56em;color:#AAAAAA;white-space:nowrap;">{m}%</span></div>' for m in [25, 50, 75, 100]])
-        _pin_x = min(_pct, 99.0)
-        _pin_html = f'<div style="position:absolute;left:{_pin_x}%;top:-3px;bottom:-3px;width:2px;background:{_bc};transform:translateX(-50%);box-shadow:0 0 5px {_bc};"><div style="position:absolute;top:-6px;left:50%;transform:translateX(-50%);width:9px;height:9px;border-radius:50%;background:{_bc};box-shadow:0 0 6px {_bc};"></div></div>'
-        st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);border-top:3px solid {_bc};padding:14px 20px 12px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"><div style="display:flex;align-items:center;gap:10px;"><span style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;letter-spacing:0.16em;text-transform:uppercase;">Goal Tracker</span><span style="background:{_bc}18;border:1px solid {_bc}55;color:{_bc};font-family:DM Mono,monospace;font-size:0.63em;padding:2px 9px;">{_badge}</span></div><div style="text-align:right;"><span style="font-family:DM Mono,monospace;font-size:1.75em;font-weight:400;color:{_bc};font-variant-numeric:tabular-nums;letter-spacing:-0.5px;">{_pct_raw:.1f}%</span><span style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;margin-left:8px;">{"초과달성!" if _over else f"잔여 ${_remain:,.0f}"}</span></div></div><div style="position:relative;padding-top:20px;">{_markers_html}<div style="position:relative;height:8px;background:rgba(0,0,0,0.07);overflow:visible;"><div style="height:8px;width:{_pct:.2f}%;background:linear-gradient(90deg,{_bc}66,{_bc});"></div>{_pin_html}</div></div><div style="display:flex;justify-content:space-between;margin-top:10px;"><div><div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;text-transform:uppercase;letter-spacing:0.1em;">Current NAV</div><div style="font-family:DM Mono,monospace;font-size:0.95em;color:#111118;font-variant-numeric:tabular-nums;">${total_val_usd:,.2f}</div></div><div style="text-align:center;"><div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;text-transform:uppercase;letter-spacing:0.1em;">Goal (USD)</div><div style="font-family:DM Mono,monospace;font-size:0.95em;color:#111118;font-variant-numeric:tabular-nums;">${_goal:,.0f}</div></div><div style="text-align:right;"><div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;text-transform:uppercase;letter-spacing:0.1em;">Goal (KRW)</div><div style="font-family:DM Mono,monospace;font-size:0.95em;color:#111118;font-variant-numeric:tabular-nums;">₩{_goal*cur_fx:,.0f}</div></div></div></div>', unsafe_allow_html=True)
 
+        _markers_html = "".join([
+            f'<div style="position:absolute;left:{m}%;top:0;bottom:0;width:1px;background:rgba(0,0,0,0.13);">' 
+            f'<span style="position:absolute;top:-17px;left:50%;transform:translateX(-50%);' 
+            f'font-family:DM Mono,monospace;font-size:0.56em;color:#AAAAAA;white-space:nowrap;">{m}%</span>' 
+            f'</div>'
+            for m in [25, 50, 75, 100]
+        ])
+        _pin_x = min(_pct, 99.0)
+        _pin_html = (
+            f'<div style="position:absolute;left:{_pin_x}%;top:-3px;bottom:-3px;' 
+            f'width:2px;background:{_bc};transform:translateX(-50%);' 
+            f'box-shadow:0 0 5px {_bc};">' 
+            f'<div style="position:absolute;top:-6px;left:50%;transform:translateX(-50%);' 
+            f'width:9px;height:9px;border-radius:50%;background:{_bc};box-shadow:0 0 6px {_bc};"></div>' 
+            f'</div>'
+        )
+        st.markdown(
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);' 
+            f'border-top:3px solid {_bc};padding:14px 20px 12px;margin-bottom:12px;">' 
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' 
+            f'<div style="display:flex;align-items:center;gap:10px;">' 
+            f'<span style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;' 
+            f'letter-spacing:0.16em;text-transform:uppercase;">Goal Tracker</span>' 
+            f'<span style="background:{_bc}18;border:1px solid {_bc}55;color:{_bc};' 
+            f'font-family:DM Mono,monospace;font-size:0.63em;padding:2px 9px;">{_badge}</span>' 
+            f'</div>' 
+            f'<div style="text-align:right;">' 
+            f'<span style="font-family:DM Mono,monospace;font-size:1.75em;font-weight:400;' 
+            f'color:{_bc};font-variant-numeric:tabular-nums;letter-spacing:-0.5px;">{_pct_raw:.1f}%</span>' 
+            f'<span style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;margin-left:8px;">' 
+            f'{"초과달성!" if _over else f"잔여 ${_remain:,.0f}"}</span>' 
+            f'</div></div>' 
+            f'<div style="position:relative;padding-top:20px;">' 
+            f'{_markers_html}' 
+            f'<div style="position:relative;height:8px;background:rgba(0,0,0,0.07);overflow:visible;">' 
+            f'<div style="height:8px;width:{_pct:.2f}%;' 
+            f'background:linear-gradient(90deg,{_bc}66,{_bc});"></div>' 
+            f'{_pin_html}</div></div>' 
+            f'<div style="display:flex;justify-content:space-between;margin-top:10px;">' 
+            f'<div><div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;' 
+            f'text-transform:uppercase;letter-spacing:0.1em;">Current NAV</div>' 
+            f'<div style="font-family:DM Mono,monospace;font-size:0.95em;color:#111118;' 
+            f'font-variant-numeric:tabular-nums;">${total_val_usd:,.2f}</div></div>' 
+            f'<div style="text-align:center;"><div style="font-family:DM Mono,monospace;font-size:0.58em;' 
+            f'color:#9494A0;text-transform:uppercase;letter-spacing:0.1em;">Goal (USD)</div>' 
+            f'<div style="font-family:DM Mono,monospace;font-size:0.95em;color:#111118;' 
+            f'font-variant-numeric:tabular-nums;">${_goal:,.0f}</div></div>' 
+            f'<div style="text-align:right;"><div style="font-family:DM Mono,monospace;font-size:0.58em;' 
+            f'color:#9494A0;text-transform:uppercase;letter-spacing:0.1em;">Goal (KRW)</div>' 
+            f'<div style="font-family:DM Mono,monospace;font-size:0.95em;color:#111118;' 
+            f'font-variant-numeric:tabular-nums;">₩{_goal*cur_fx:,.0f}</div></div></div></div>',
+            unsafe_allow_html=True
+        )
+
+    # ══════════════════════════════════════════════════════════
+    # ROW 3+4 — 메인 레이아웃: 좌(입력) + 우(시각화)
+    # ══════════════════════════════════════════════════════════
     col_l, col_r = st.columns([1.1, 2.5])
+
+    # ── 좌: Position Input ───────────────────────────────────
     with col_l:
-        st.markdown('<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;padding-bottom:5px;border-bottom:2px solid #111118;margin-bottom:10px;">Position Input</div>', unsafe_allow_html=True)
-        _edata = [{"Asset": asset, "Shares": float(st.session_state.portfolio.get(asset, {}).get('shares', 0.0)), "Avg Price($)": float(st.session_state.portfolio.get(asset, {}).get('avg_price', 1.0 if asset == 'CASH' else 0.0)), "FX Rate(₩)": float(st.session_state.portfolio.get(asset, {}).get('fx', 1350.0))} for asset in ASSET_LIST]
+        st.markdown(
+            '<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;' 
+            'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;' 
+            'padding-bottom:5px;border-bottom:2px solid #111118;margin-bottom:10px;">' 
+            'Position Input</div>',
+            unsafe_allow_html=True
+        )
+        _edata = []
+        for asset in ASSET_LIST:
+            v = st.session_state.portfolio.get(asset, {})
+            _edata.append({
+                "Asset":        asset,
+                "Shares":       float(v.get('shares', 0.0)),
+                "Avg Price($)": float(v.get('avg_price', 1.0 if asset == 'CASH' else 0.0)),
+                "FX Rate(₩)":  float(v.get('fx', 1350.0))
+            })
         _df_ed = pd.DataFrame(_edata)
         with st.container(border=True):
-            _df_edited = st.data_editor(_df_ed, disabled=["Asset"], hide_index=True, use_container_width=True, key="pf_editor", column_config={"Shares": st.column_config.NumberColumn("Shares", format="%.4f"), "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"), "FX Rate(₩)": st.column_config.NumberColumn("FX(₩)",  format="%.0f")})
+            _df_edited = st.data_editor(
+                _df_ed, disabled=["Asset"], hide_index=True,
+                use_container_width=True, key="pf_editor",
+                column_config={
+                    "Shares":       st.column_config.NumberColumn("Shares", format="%.4f"),
+                    "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"),
+                    "FX Rate(₩)":  st.column_config.NumberColumn("FX(₩)",  format="%.0f"),
+                }
+            )
         if not _df_edited.equals(_df_ed):
-            for _, row in _df_edited.iterrows(): st.session_state.portfolio[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"]), 'fx': float(row["FX Rate(₩)"])}
+            for _, row in _df_edited.iterrows():
+                st.session_state.portfolio[row["Asset"]] = {
+                    'shares':    float(row["Shares"]),
+                    'avg_price': float(row["Avg Price($)"]),
+                    'fx':        float(row["FX Rate(₩)"])
+                }
             save_portfolio_to_disk()
             st.rerun()
 
+        # Quick Orders — 입력 바로 아래
         if total_val_usd > 0:
-            st.markdown('<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;padding-bottom:5px;border-bottom:2px solid #111118;margin:14px 0 10px;">Quick Orders</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;' 
+                'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;' 
+                'padding-bottom:5px;border-bottom:2px solid #111118;margin:14px 0 10px;">' 
+                'Quick Orders</div>',
+                unsafe_allow_html=True
+            )
             _sells, _buys = [], []
             for asset in ASSET_LIST:
                 _cp = current_prices[asset] if current_prices[asset] > 0 else 1.0
                 _dv = diff_vals[asset]
-                if asset != 'CASH' and _dv < -_cp * 0.05: _sells.append((asset, f"{abs(_dv)/_cp:,.2f}주 매도"))
-                elif asset == 'CASH' and _dv < -1.0: _sells.append(("CASH", f"${abs(_dv):,.0f} 사용"))
-                if asset != 'CASH' and _dv > _cp * 0.05: _buys.append((asset, f"{_dv/_cp:,.2f}주 매수"))
-                elif asset == 'CASH' and _dv > 1.0: _buys.append(("CASH", f"${_dv:,.0f} 확보"))
-            def _qo_card(title, items, accent):
-                _rows = "".join([f'<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-family:DM Mono,monospace;font-size:0.8em;font-weight:600;color:#111118;">{a}</span><span style="font-family:DM Mono,monospace;font-size:0.78em;color:{accent};font-variant-numeric:tabular-nums;">{v}</span></div>' for a, v in items]) or '<div style="font-family:DM Mono,monospace;font-size:0.74em;color:#9494A0;padding:6px 0;">— 해당 없음</div>'
-                st.markdown(f'<div style="border:1px solid rgba(0,0,0,0.09);border-top:2px solid {accent};padding:11px 13px;margin-bottom:8px;"><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.82em;font-weight:700;color:{accent};margin-bottom:7px;">{title}</div>{_rows}</div>', unsafe_allow_html=True)
-            _qo_card("🔴 SELL", _sells, "#DC2626")
-            _qo_card("🟢 BUY",  _buys,  "#059669")
+                if asset != 'CASH' and _dv < -_cp * 0.05:
+                    _sells.append((asset, f"{abs(_dv)/_cp:,.2f}주 매도"))
+                elif asset == 'CASH' and _dv < -1.0:
+                    _sells.append(("CASH", f"${abs(_dv):,.0f} 사용"))
+                if asset != 'CASH' and _dv > _cp * 0.05:
+                    _buys.append((asset, f"{_dv/_cp:,.2f}주 매수"))
+                elif asset == 'CASH' and _dv > 1.0:
+                    _buys.append(("CASH", f"${_dv:,.0f} 확보"))
 
+            def _qo_card(title, items, accent):
+                _rows = "".join([
+                    f'<div style="display:flex;justify-content:space-between;' 
+                    f'padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.05);">' 
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.8em;' 
+                    f'font-weight:600;color:#111118;">{a}</span>' 
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.78em;' 
+                    f'color:{accent};font-variant-numeric:tabular-nums;">{v}</span></div>'
+                    for a, v in items
+                ]) or '<div style="font-family:DM Mono,monospace;font-size:0.74em;color:#9494A0;padding:6px 0;">— 해당 없음</div>'
+                st.markdown(
+                    f'<div style="border:1px solid rgba(0,0,0,0.09);border-top:2px solid {accent};' 
+                    f'padding:11px 13px;margin-bottom:8px;">' 
+                    f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.82em;' 
+                    f'font-weight:700;color:{accent};margin-bottom:7px;">{title}</div>' 
+                    f'{_rows}</div>',
+                    unsafe_allow_html=True
+                )
+            _qo_card("🔴  SELL", _sells, "#DC2626")
+            _qo_card("🟢  BUY",  _buys,  "#059669")
+
+    # ── 우: Allocation + Rebalancing ─────────────────────────
     with col_r:
-        _pie_common = dict(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="DM Mono", color=t_color), showlegend=False, margin=dict(l=8, r=8, t=30, b=8))
-        _pie_colors = [line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0','#059669','#047857','#065F46','#D1FAE5']
-        st.markdown('<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;padding-bottom:5px;border-bottom:2px solid #111118;margin-bottom:10px;">Allocation · Visual</div>', unsafe_allow_html=True)
+        _pie_common = dict(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(family="DM Mono", color=t_color),
+            showlegend=False, margin=dict(l=8, r=8, t=30, b=8)
+        )
+        _pie_colors = [line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0',
+                       '#059669','#047857','#065F46','#D1FAE5']
+
+        # ── Allocation Visual (파이 2 + 델타 바) ─────────────
+        st.markdown(
+            '<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;' 
+            'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;' 
+            'padding-bottom:5px;border-bottom:2px solid #111118;margin-bottom:10px;">' 
+            'Allocation  ·  Visual</div>',
+            unsafe_allow_html=True
+        )
         _ca, _cb, _cc = st.columns([1, 1, 1.1])
+
         _lcur = [a for a in ASSET_LIST if curr_vals[a] > 0]
         _vcur = [curr_vals[a] for a in _lcur]
         if sum(_vcur) > 0:
-            _fig_cur = go.Figure(go.Pie(labels=_lcur, values=_vcur, hole=.52, textinfo='label+percent', textfont=dict(size=10), marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))))
+            _fig_cur = go.Figure(go.Pie(
+                labels=_lcur, values=_vcur, hole=.52,
+                textinfo='label+percent', textfont=dict(size=10),
+                marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))
+            ))
             _fig_cur.update_layout(title=dict(text="Current", font=dict(family="DM Mono", size=11, color=t_color)), **_pie_common)
             with _ca:
-                with st.container(border=True): st.plotly_chart(_fig_cur, use_container_width=True)
+                with st.container(border=True):
+                    st.plotly_chart(_fig_cur, use_container_width=True)
+
         _ltgt = [a for a in ASSET_LIST if target_weights.get(a, 0) > 0]
         _vtgt = [target_weights[a] for a in _ltgt]
-        _fig_tgt = go.Figure(go.Pie(labels=_ltgt, values=_vtgt, hole=.52, textinfo='label+percent', textfont=dict(size=10), marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))))
-        _fig_tgt.update_layout(title=dict(text=f"Target R{curr_regime}", font=dict(family="DM Mono", size=11, color=t_color)), **_pie_common)
+        _fig_tgt = go.Figure(go.Pie(
+            labels=_ltgt, values=_vtgt, hole=.52,
+            textinfo='label+percent', textfont=dict(size=10),
+            marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))
+        ))
+        _fig_tgt.update_layout(title=dict(text=f"Target  R{curr_regime}", font=dict(family="DM Mono", size=11, color=t_color)), **_pie_common)
         with _cb:
-            with st.container(border=True): st.plotly_chart(_fig_tgt, use_container_width=True)
+            with st.container(border=True):
+                st.plotly_chart(_fig_tgt, use_container_width=True)
+
         _dlabels = [a for a in ASSET_LIST if abs(diff_vals[a]) >= 1.0]
         _dvals   = [diff_vals[a] for a in _dlabels]
         if _dlabels:
-            _fig_bar = go.Figure(go.Bar(x=_dlabels, y=_dvals, marker_color=[C_GREEN if v > 0 else C_RED for v in _dvals], text=[f"${v:,.0f}" for v in _dvals], textposition='auto', textfont=dict(size=9), marker_line_width=0))
-            _fig_bar.update_layout(title=dict(text="Δ Rebalancing", font=dict(family="DM Mono", size=11, color=t_color)), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color=t_color, family="DM Mono", size=9), showlegend=False, margin=dict(t=30, b=8, l=8, r=8))
-            _fig_bar.update_xaxes(**_ax_r); _fig_bar.update_yaxes(**_ax_r)
+            _fig_bar = go.Figure(go.Bar(
+                x=_dlabels, y=_dvals,
+                marker_color=[C_GREEN if v > 0 else C_RED for v in _dvals],
+                text=[f"${v:,.0f}" for v in _dvals],
+                textposition='auto', textfont=dict(size=9), marker_line_width=0
+            ))
+            _fig_bar.update_layout(
+                title=dict(text="Δ Rebalancing", font=dict(family="DM Mono", size=11, color=t_color)),
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color=t_color, family="DM Mono", size=9),
+                showlegend=False, margin=dict(t=30, b=8, l=8, r=8)
+            )
+            _fig_bar.update_xaxes(**_ax_r)
+            _fig_bar.update_yaxes(**_ax_r)
             with _cc:
-                with st.container(border=True): st.plotly_chart(_fig_bar, use_container_width=True)
+                with st.container(border=True):
+                    st.plotly_chart(_fig_bar, use_container_width=True)
 
-        st.markdown('<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;padding-bottom:5px;border-bottom:2px solid #111118;margin:12px 0 10px;">Rebalancing Matrix</div>', unsafe_allow_html=True)
+        # ── Rebalancing Matrix ────────────────────────────────
+        st.markdown(
+            '<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;' 
+            'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;' 
+            'padding-bottom:5px;border-bottom:2px solid #111118;margin:12px 0 10px;">' 
+            'Rebalancing  Matrix</div>',
+            unsafe_allow_html=True
+        )
         if total_val_usd > 0:
-            _rhtml = '<div style="overflow-x:auto;"><table class="mint-table"><thead><tr><th>Asset</th><th>Avg→Cur</th><th>Ret%</th><th>Value($)</th><th>Tgt%</th><th>Tgt($)</th><th>Δ($)</th><th style="text-align:center;">Action</th></tr></thead><tbody>'
+            _rhtml = '<div style="overflow-x:auto;"><table class="mint-table"><thead><tr>'
+            _rhtml += '<th>Asset</th><th>Avg→Cur</th><th>Ret%</th><th>Value($)</th><th>Tgt%</th><th>Tgt($)</th><th>Δ($)</th><th style="text-align:center;">Action</th>'
+            _rhtml += '</tr></thead><tbody>'
             for asset in ASSET_LIST:
                 _shs  = st.session_state.portfolio[asset]['shares']
                 _avgp = st.session_state.portfolio[asset]['avg_price']
@@ -974,27 +1855,55 @@ elif page == "💼 Portfolio":
                 _tgtw = target_weights.get(asset, 0.0)
                 _tgtv = total_val_usd * _tgtw
                 _diff = diff_vals[asset]
-                if asset == 'CASH': _avgstr, _ret = "—", 0.0
-                else: _avgstr = f"${_avgp:.1f}→${_curp:.1f}"; _ret = (_curp / _avgp - 1) * 100 if _avgp > 0 else 0.0
+                if asset == 'CASH':
+                    _avgstr, _ret = "—", 0.0
+                else:
+                    _avgstr = f"${_avgp:.1f}→${_curp:.1f}"
+                    _ret    = (_curp / _avgp - 1) * 100 if _avgp > 0 else 0.0
                 _retc   = C_GREEN if _ret >= 0 else C_RED
                 _retstr = f"{_ret:+.1f}%" if asset != 'CASH' else "—"
-                if abs(_diff) < _curp * 0.05 and asset != 'CASH': _act, _dstr = "<span style='color:#9494A0;'>HOLD</span>", "—"
-                elif abs(_diff) < 1.0 and asset == 'CASH': _act, _dstr = "<span style='color:#9494A0;'>HOLD</span>", "—"
-                elif _diff > 0: _act, _dstr = "<span style='color:#059669;font-weight:600;background:rgba(5,150,105,0.1);padding:2px 8px;border-left:2px solid #059669;'>BUY</span>", f"<span style='color:#059669;font-weight:500;'>+${_diff:,.0f}</span>"
-                else: _act, _dstr = "<span style='color:#DC2626;font-weight:600;background:rgba(220,38,38,0.1);padding:2px 8px;border-left:2px solid #DC2626;'>SELL</span>", f"<span style='color:#DC2626;font-weight:500;'>-${abs(_diff):,.0f}</span>"
-                if _tgtw > 0 or _curv > 0 or _shs > 0: _rhtml += f'<tr><td style="font-weight:700;color:#059669;">{asset}</td><td style="color:#4A4A57;">{_avgstr}</td><td><span style="color:{_retc};font-weight:500;">{_retstr}</span></td><td>{_curv:,.0f}</td><td style="color:#059669;">{_tgtw*100:.0f}%</td><td>{_tgtv:,.0f}</td><td>{_dstr}</td><td style="text-align:center;">{_act}</td></tr>'
+                if abs(_diff) < _curp * 0.05 and asset != 'CASH':
+                    _act, _dstr = "<span style='color:#9494A0;'>HOLD</span>", "—"
+                elif abs(_diff) < 1.0 and asset == 'CASH':
+                    _act, _dstr = "<span style='color:#9494A0;'>HOLD</span>", "—"
+                elif _diff > 0:
+                    _act  = "<span style='color:#059669;font-weight:600;background:rgba(5,150,105,0.1);padding:2px 8px;border-left:2px solid #059669;'>BUY</span>"
+                    _dstr = f"<span style='color:#059669;font-weight:500;'>+${_diff:,.0f}</span>"
+                else:
+                    _act  = "<span style='color:#DC2626;font-weight:600;background:rgba(220,38,38,0.1);padding:2px 8px;border-left:2px solid #DC2626;'>SELL</span>"
+                    _dstr = f"<span style='color:#DC2626;font-weight:500;'>-${abs(_diff):,.0f}</span>"
+                if _tgtw > 0 or _curv > 0 or _shs > 0:
+                    _rhtml += (
+                        f'<tr><td style="font-weight:700;color:#059669;">{asset}</td>'
+                        f'<td style="color:#4A4A57;">{_avgstr}</td>'
+                        f'<td><span style="color:{_retc};font-weight:500;">{_retstr}</span></td>'
+                        f'<td>{_curv:,.0f}</td>'
+                        f'<td style="color:#059669;">{_tgtw*100:.0f}%</td>'
+                        f'<td>{_tgtv:,.0f}</td>'
+                        f'<td>{_dstr}</td>'
+                        f'<td style="text-align:center;">{_act}</td></tr>'
+                    )
             _rhtml += "</tbody></table></div>"
-            with st.container(border=True): st.markdown(apply_theme(_rhtml), unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown(apply_theme(_rhtml), unsafe_allow_html=True)
+
 
 elif page == "🍫 12-Pack Radar":
+
     df_view  = df.iloc[-120:]
     qqq_rsi  = last_row['QQQ_RSI']
     qqq_dd   = last_row['QQQ_DD']
     cnn_fgi  = fetch_fear_and_greed()
-    if cnn_fgi is not None: fg_score = cnn_fgi
-    else: fg_score = (max(0, min(100, 100-(last_row['^VIX']-12)/28*100)) + max(0, min(100, (qqq_dd+0.20)/0.20*100)) + max(0, min(100, qqq_rsi)))/3
+    if cnn_fgi is not None:
+        fg_score = cnn_fgi
+    else:
+        vix_score = max(0, min(100, 100-(last_row['^VIX']-12)/28*100))
+        dd_score  = max(0, min(100, (qqq_dd+0.20)/0.20*100))
+        rsi_score = max(0, min(100, qqq_rsi))
+        fg_score  = (vix_score+dd_score+rsi_score)/3
 
-    sec_names = {'XLK':'TECH','XLV':'HEALTH','XLF':'FIN','XLY':'CONS','XLC':'COMM','XLI':'IND','XLP':'STAPLE','XLE':'ENGY','XLU':'UTIL','XLRE':'REAL','XLB':'MAT'}
+    sec_names = {'XLK':'TECH','XLV':'HEALTH','XLF':'FIN','XLY':'CONS','XLC':'COMM',
+                 'XLI':'IND','XLP':'STAPLE','XLE':'ENGY','XLU':'UTIL','XLRE':'REAL','XLB':'MAT'}
     sec_data  = [{'섹터':sec_names[s],'수익률':last_row[f'{s}_1M']*100} for s in SECTOR_TICKERS]
     sec_df    = pd.DataFrame(sec_data).sort_values(by='수익률', ascending=True)
     top_sec, bot_sec = sec_df.iloc[-1]['섹터'], sec_df.iloc[0]['섹터']
@@ -1029,23 +1938,81 @@ elif page == "🍫 12-Pack Radar":
     else: warn_cnt+=1
 
     if risk_cnt >= 3:
-        radar_status, radar_msg, radar_color = "극단적 위험 구간 (Risk-Off)", "시장에 극단적인 공포가 덮쳤습니다. 모든 레버리지 포지션을 해제하고 안전 자산 비중을 늘리세요.", "#DC2626"
+        radar_status = "극단적 위험 구간 (Risk-Off)"
+        radar_msg    = "시장에 극단적인 공포가 덮쳤습니다. 현재 복수의 매크로 지표가 시스템 리스크를 강하게 경고하고 있습니다. 단순한 조정을 넘어선 투매 구간일 확률이 높으니, 모든 레버리지 포지션을 해제하고 현금과 달러, 금 등 안전 자산 비중을 최대로 늘려 폭풍우가 지나가기를 기다리셔야 합니다."
+        radar_color  = "#DC2626"
     elif warn_cnt >= 4 or risk_cnt >= 1:
-        radar_status, radar_msg, radar_color = "변동성 주의 (Warning)", "시장 곳곳에서 균열의 조짐이 감지되고 있습니다. 신규 매수는 철저히 보류하시기 바랍니다.", "#D97706"
+        radar_status = "변동성 주의 (Warning)"
+        radar_msg    = "시장 곳곳에서 균열의 조짐이 감지되고 있습니다. 표면적인 지수는 버티고 있을지 몰라도 내부 자금 흐름이나 심리 지표가 점차 악화되고 있습니다. 신규 매수는 철저히 보류하시고, 포트폴리오의 리스크 노출도를 점검하며 보수적인 관망 자세를 유지하는 것이 좋습니다."
+        radar_color  = "#D97706"
     else:
-        radar_status, radar_msg, radar_color = "안정적 순항 (Safe)", "현재 글로벌 매크로 지표가 안정적인 궤도에 있습니다. 자신감 있게 추세를 추종하세요.", main_color
+        radar_status = "안정적 순항 (Safe)"
+        radar_msg    = "현재 글로벌 매크로 지표와 시장 심리가 모두 안정적인 궤도에 올라와 있습니다. 추세를 꺾을 만한 시스템 리스크가 보이지 않으니, AMLS 알고리즘이 제시하는 비중에 맞춰 자신감 있게 추세 추종 전략을 전개하시기 바랍니다."
+        radar_color  = main_color
 
+    # ── 상단 상태 바 ───────────────────────────────────────────────
     total_signals = risk_cnt + warn_cnt + safe_cnt
     risk_pct  = int(risk_cnt  / total_signals * 100) if total_signals else 0
     warn_pct  = int(warn_cnt  / total_signals * 100) if total_signals else 0
     safe_pct  = int(safe_cnt  / total_signals * 100) if total_signals else 0
 
-    st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid {radar_color};padding:14px 20px;margin-bottom:12px;"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;"><div style="flex:3;min-width:260px;"><div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px;">Macro Signal Status</div><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.2em;font-weight:700;letter-spacing:-0.3px;color:{radar_color};line-height:1.1;margin-bottom:8px;">{radar_status}</div><div style="font-family:DM Sans,sans-serif;font-size:0.82em;color:#4A4A57;line-height:1.6;">{radar_msg}</div></div><div style="flex:1;min-width:180px;"><div style="display:flex;gap:6px;margin-bottom:8px;"><div style="flex:1;border-top:2px solid #DC2626;padding:8px 6px;background:rgba(220,38,38,0.04);"><div style="font-family:DM Mono,monospace;font-size:1.5em;color:#DC2626;line-height:1;">{risk_cnt}</div><div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">Risk</div></div><div style="flex:1;border-top:2px solid #D97706;padding:8px 6px;background:rgba(217,119,6,0.04);"><div style="font-family:DM Mono,monospace;font-size:1.5em;color:#D97706;line-height:1;">{warn_cnt}</div><div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">Warn</div></div><div style="flex:1;border-top:2px solid {main_color};padding:8px 6px;background:rgba({r_c},{g_c},{b_c},0.04);"><div style="font-family:DM Mono,monospace;font-size:1.5em;color:{main_color};line-height:1;">{safe_cnt}</div><div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">Safe</div></div></div><div style="height:4px;background:rgba(0,0,0,0.07);display:flex;overflow:hidden;"><div style="width:{risk_pct}%;background:#DC2626;"></div><div style="width:{warn_pct}%;background:#D97706;"></div><div style="width:{safe_pct}%;background:{main_color};"></div></div><div style="display:flex;justify-content:space-between;font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;margin-top:3px;"><span>{risk_pct}% risk</span><span>{warn_pct}% warn</span><span>{safe_pct}% safe</span></div></div></div></div>'), unsafe_allow_html=True)
+    st.markdown(apply_theme(
+        f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
+        f'border-left:3px solid {radar_color};padding:14px 20px;margin-bottom:12px;">'
+        f'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;">'
 
+        # 좌: 상태 텍스트
+        f'<div style="flex:3;min-width:260px;">'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;'
+        f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px;">Macro Signal Status</div>'
+        f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.2em;font-weight:700;letter-spacing:-0.3px;font-style:normal;coloric;'
+        f'color:{radar_color};line-height:1.1;margin-bottom:8px;">{radar_status}</div>'
+        f'<div style="font-family:DM Sans,sans-serif;font-size:0.82em;color:#4A4A57;line-height:1.6;">{radar_msg}</div>'
+        f'</div>'
+
+        # 우: 3개 숫자 카드 + 프로그레스
+        f'<div style="flex:1;min-width:180px;">'
+        f'<div style="display:flex;gap:6px;margin-bottom:8px;">'
+        f'<div style="flex:1;border-top:2px solid #DC2626;padding:8px 6px;background:rgba(220,38,38,0.04);">'
+        f'<div style="font-family:DM Mono,monospace;font-size:1.5em;color:#DC2626;line-height:1;">{risk_cnt}</div>'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">Risk</div>'
+        f'</div>'
+        f'<div style="flex:1;border-top:2px solid #D97706;padding:8px 6px;background:rgba(217,119,6,0.04);">'
+        f'<div style="font-family:DM Mono,monospace;font-size:1.5em;color:#D97706;line-height:1;">{warn_cnt}</div>'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">Warn</div>'
+        f'</div>'
+        f'<div style="flex:1;border-top:2px solid {main_color};padding:8px 6px;background:rgba({r_c},{g_c},{b_c},0.04);">'
+        f'<div style="font-family:DM Mono,monospace;font-size:1.5em;color:{main_color};line-height:1;">{safe_cnt}</div>'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">Safe</div>'
+        f'</div>'
+        f'</div>'
+        # 누적 프로그레스 바
+        f'<div style="height:4px;background:rgba(0,0,0,0.07);display:flex;overflow:hidden;">'
+        f'<div style="width:{risk_pct}%;background:#DC2626;"></div>'
+        f'<div style="width:{warn_pct}%;background:#D97706;"></div>'
+        f'<div style="width:{safe_pct}%;background:{main_color};"></div>'
+        f'</div>'
+        f'<div style="display:flex;justify-content:space-between;font-family:DM Mono,monospace;'
+        f'font-size:0.58em;color:#9494A0;margin-top:3px;">'
+        f'<span>{risk_pct}% risk</span><span>{warn_pct}% warn</span><span>{safe_pct}% safe</span></div>'
+        f'</div>'
+
+        f'</div></div>'
+    ), unsafe_allow_html=True)
+
+    # ── badge / desc / url 정의 ────────────────────────────────────
     def _badge(label, color, icon):
-        p = {'green': (f'rgba({r_c},{g_c},{b_c},0.10)', main_color), 'orange': ('rgba(217,119,6,0.10)', '#D97706'), 'red': ('rgba(220,38,38,0.10)', '#DC2626'), 'blue': ('rgba(59,130,246,0.10)', '#3B82F6')}
+        p = {
+            'green':  (f'rgba({r_c},{g_c},{b_c},0.10)', main_color),
+            'orange': ('rgba(217,119,6,0.10)',           '#D97706'),
+            'red':    ('rgba(220,38,38,0.10)',           '#DC2626'),
+            'blue':   ('rgba(59,130,246,0.10)',          '#3B82F6')
+        }
         bg, fg = p[color]
-        return f'<span style="background:{bg};color:{fg};border:1px solid {fg};padding:2px 7px;font-size:0.68em;font-weight:500;font-family:DM Mono,monospace;letter-spacing:0.05em;white-space:nowrap;">{icon} {label}</span>'
+        return (f'<span style="background:{bg};color:{fg};border:1px solid {fg};'
+                f'padding:2px 7px;font-size:0.68em;font-weight:500;'
+                f'font-family:DM Mono,monospace;letter-spacing:0.05em;white-space:nowrap;">'
+                f'{icon} {label}</span>')
 
     b1  = _badge("BUY","green","▲") if qqq_rsi<40 else (_badge("OVER","red","▼") if qqq_rsi>70 else _badge("NEUTRAL","blue","—"))
     b2  = _badge("BEAR−20%","red","▼") if qqq_dd<-0.20 else (_badge("CORR−10%","orange","▼") if qqq_dd<-0.10 else _badge("SAFE","green","▲"))
@@ -1060,81 +2027,195 @@ elif page == "🍫 12-Pack Radar":
     b11 = _badge("NARROW","orange","⚠") if last_row['IWM_SPY_Ratio'] < last_row['IWM_SPY_MA50'] else _badge("BROAD","green","▲")
     b12 = _badge("EXPAND","red","▼") if last_row['^VIX'] > last_row['VIX_MA50'] else _badge("SHRINK","green","▲")
 
-    gauge_steps = [{'range':[0,25], 'color':"rgba(220,38,38,0.4)"}, {'range':[25,45], 'color':"rgba(217,119,6,0.3)"}, {'range':[45,55], 'color':"rgba(0,0,0,0.04)"}, {'range':[55,75], 'color':f"rgba({r_c},{g_c},{b_c},0.3)"}, {'range':[75,100],'color':f"rgba({r_c},{g_c},{b_c},0.5)"}]
+    gauge_steps = [
+        {'range':[0,25],  'color':"rgba(220,38,38,0.4)"},
+        {'range':[25,45], 'color':"rgba(217,119,6,0.3)"},
+        {'range':[45,55], 'color':"rgba(0,0,0,0.04)"},
+        {'range':[55,75], 'color':f"rgba({r_c},{g_c},{b_c},0.3)"},
+        {'range':[75,100],'color':f"rgba({r_c},{g_c},{b_c},0.5)"}
+    ]
 
-    desc1, desc2, desc3 = "나스닥 100(QQQ)의 단기 과열 및 침체 지표.", "QQQ 52주 고점 대비 하락률.", "CNN Fear & Greed 지수."
-    desc4, desc5, desc6 = "월간 섹터 자금흐름.", "HYG/IEF 비율.", "QQQ(시총가중) vs QQQE(동일가중)."
-    desc7, desc8, desc9 = "GLD/SPY 비율.", "달러지수(UUP).", "미 10년물 금리."
-    desc10, desc11, desc12 = "비트코인 트렌드.", "IWM/SPY 비율.", "VIX 추세."
+    desc1  = "나스닥 100(QQQ)의 단기 과열 및 침체를 나타내는 RSI 지표. 30↓ 투매→매수기회, 70↑ 과열→신규진입중단."
+    desc2  = "QQQ 52주 고점 대비 하락률. -10% 건전한 조정, -20% 돌파시 약세장 진입으로 즉각 방어 필요."
+    desc3  = "CNN Fear & Greed 지수. 극단적 공포 구간이 역사적 매수 기회, 극단적 탐욕 구간은 수익실현 시점."
+    desc4  = "월간 섹터 자금흐름. 방어주(유틸/필수소비/헬스) 강세시 경기침체 대비 시그널."
+    desc5  = "HYG/IEF 비율. 하이일드 채권이 국채 대비 약세면 스마트머니가 선제 이탈 중."
+    desc6  = "QQQ(시총가중) vs QQQE(동일가중). 괴리 발생시 소수 대형주만 끌어올리는 가짜 상승 경고."
+    desc7  = "GLD/SPY 비율. 금이 상대 강세면 기관의 Risk-Off 전환, 구조적 리스크 시그널."
+    desc8  = "달러지수(UUP). 50일선 상향 돌파시 기술주 강한 하방압력, 주식비중 축소 정석."
+    desc9  = "미 10년물 금리. 50일선 상향 돌파시 나스닥 성장주에 강한 역풍, 레버리지 주의."
+    desc10 = "비트코인 트렌드. 50일선 하향시 글로벌 유동성 가뭄 선행 경고."
+    desc11 = "IWM/SPY 비율. 중소형주 상대약세시 시장 내부 균열, TZA 전략 고려 가능."
+    desc12 = "VIX 추세. 50일선 상향 돌파시 변동성 확장 국면 진입, 시스템 패닉 시그널."
 
-    def r_head(num, title, badge, url, desc): return f'<div style="border-bottom:1px solid rgba(0,0,0,0.08);padding-bottom:8px;margin-bottom:8px;"><div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;"><span style="font-family:DM Mono,monospace;font-size:0.62em;color:#9494A0;min-width:18px;">{num:02d}</span><a href="{url}" target="_blank" style="text-decoration:none;flex:1;"><span style="font-family:DM Mono,monospace;font-size:0.66em;font-weight:500;color:#2C2C35;letter-spacing:0.08em;text-transform:uppercase;">{title}&nbsp;↗</span></a>{badge}</div><div style="font-family:DM Sans,sans-serif;font-size:0.73em;color:#6B6B7A;line-height:1.4;letter-spacing:-0.1px;">{desc}</div></div>'
+    # 카드 헤더 생성 함수 — 번호 + 링크 + 배지 + 한줄 설명
+    def r_head(num, title, badge, url, desc):
+        return (
+            f'<div style="border-bottom:1px solid rgba(0,0,0,0.08);padding-bottom:8px;margin-bottom:8px;">'
+            f'<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.62em;color:#9494A0;'
+            f'min-width:18px;">{num:02d}</span>'
+            f'<a href="{url}" target="_blank" style="text-decoration:none;flex:1;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.66em;font-weight:500;'
+            f'color:#2C2C35;letter-spacing:0.08em;text-transform:uppercase;">{title}&nbsp;↗</span>'
+            f'</a>'
+            f'{badge}'
+            f'</div>'
+            f'<div style="font-family:DM Sans,sans-serif;font-size:0.73em;color:#6B6B7A;'
+            f'line-height:1.4;letter-spacing:-0.1px;">{desc}</div>'
+            f'</div>'
+        )
 
-    u1, u2, u3, u4, u5, u6, u7, u8, u9, u10, u11, u12 = "https://kr.tradingview.com/chart/?symbol=NASDAQ:QQQ", "https://kr.tradingview.com/chart/?symbol=NASDAQ:QQQ", "https://edition.cnn.com/markets/fear-and-greed", "https://finviz.com/map.ashx?t=sec", "https://fred.stlouisfed.org/series/BAMLH0A0HYM2", "https://kr.tradingview.com/chart/?symbol=NASDAQ:QQQE", "https://kr.tradingview.com/chart/?symbol=AMEX:GLD", "https://kr.tradingview.com/chart/?symbol=AMEX:UUP", "https://kr.tradingview.com/chart/?symbol=TVC:US10Y", "https://kr.tradingview.com/chart/?symbol=BINANCE:BTCUSD", "https://kr.tradingview.com/chart/?symbol=AMEX:IWM", "https://kr.tradingview.com/chart/?symbol=CBOE:VIX"
+    u1  = "https://kr.tradingview.com/chart/?symbol=NASDAQ:QQQ"
+    u2  = "https://kr.tradingview.com/chart/?symbol=NASDAQ:QQQ"
+    u3  = "https://edition.cnn.com/markets/fear-and-greed"
+    u4  = "https://finviz.com/map.ashx?t=sec"
+    u5  = "https://fred.stlouisfed.org/series/BAMLH0A0HYM2"
+    u6  = "https://kr.tradingview.com/chart/?symbol=NASDAQ:QQQE"
+    u7  = "https://kr.tradingview.com/chart/?symbol=AMEX:GLD"
+    u8  = "https://kr.tradingview.com/chart/?symbol=AMEX:UUP"
+    u9  = "https://kr.tradingview.com/chart/?symbol=TVC:US10Y"
+    u10 = "https://kr.tradingview.com/chart/?symbol=BINANCE:BTCUSD"
+    u11 = "https://kr.tradingview.com/chart/?symbol=AMEX:IWM"
+    u12 = "https://kr.tradingview.com/chart/?symbol=CBOE:VIX"
 
+    # ── 3×4 신호 그리드 ─────────────────────────────────────────
     row1 = st.columns(4)
     with row1[0]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(1, "DCA · RSI", b1, u1, desc1)), unsafe_allow_html=True)
-            fig1=go.Figure(); fig1.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQ_RSI'], line=dict(color=line_c, width=1.8))); fig1.add_hline(y=70, line_dash='dot', line_color='#B0B0BE', line_width=1); fig1.add_hline(y=30, line_dash='dot', line_color=rsi_low_c, line_width=1); fig1.update_layout(**radar_layout, showlegend=False); fig1.update_xaxes(**_ax_r); fig1.update_yaxes(range=[10,90], **_ax_r); st.plotly_chart(fig1, use_container_width=True)
+            fig1=go.Figure()
+            fig1.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQ_RSI'], line=dict(color=line_c, width=1.8)))
+            fig1.add_hline(y=70, line_dash='dot', line_color='#B0B0BE', line_width=1)
+            fig1.add_hline(y=30, line_dash='dot', line_color=rsi_low_c, line_width=1)
+            fig1.update_layout(**radar_layout, showlegend=False)
+            fig1.update_xaxes(**_ax_r)
+            fig1.update_yaxes(range=[10,90], **_ax_r)
+            st.plotly_chart(fig1, use_container_width=True)
     with row1[1]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(2, "Drawdown", b2, u2, desc2)), unsafe_allow_html=True)
-            fig2=go.Figure(); fig2.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQ_DD'], fill='tozeroy', fillcolor='rgba(220,38,38,0.07)', line=dict(color='#DC2626', width=1.8))); fig2.update_layout(**radar_layout, showlegend=False); fig2.update_xaxes(**_ax_r); fig2.update_yaxes(tickformat='.0%', **_ax_r); st.plotly_chart(fig2, use_container_width=True)
+            fig2=go.Figure()
+            fig2.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQ_DD'], fill='tozeroy', fillcolor='rgba(220,38,38,0.07)', line=dict(color='#DC2626', width=1.8)))
+            fig2.update_layout(**radar_layout, showlegend=False)
+            fig2.update_xaxes(**_ax_r)
+            fig2.update_yaxes(tickformat='.0%', **_ax_r)
+            st.plotly_chart(fig2, use_container_width=True)
     with row1[2]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(3, "Fear & Greed", b3, u3, desc3)), unsafe_allow_html=True)
-            fig3=go.Figure(go.Indicator(mode="gauge+number", value=fg_score, domain={'x':[0,1],'y':[0,1]}, gauge={'axis':{'range':[0,100],'tickcolor':t_color},'bar':{'color':line_c,'thickness':0.2},'steps':gauge_steps,'borderwidth':0}))
-            fig3.update_layout(height=200, margin=dict(l=15,r=15,t=10,b=10), paper_bgcolor=b_color, font=dict(family="DM Mono", color=t_color)); st.plotly_chart(fig3, use_container_width=True)
+            fig3=go.Figure(go.Indicator(
+                mode="gauge+number", value=fg_score, domain={'x':[0,1],'y':[0,1]},
+                gauge={'axis':{'range':[0,100],'tickcolor':t_color},'bar':{'color':line_c,'thickness':0.2},'steps':gauge_steps,'borderwidth':0}
+            ))
+            fig3.update_layout(height=200, margin=dict(l=15,r=15,t=10,b=10), paper_bgcolor=b_color, font=dict(family="DM Mono", color=t_color))
+            st.plotly_chart(fig3, use_container_width=True)
     with row1[3]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(4, "Sector 1M", b4, u4, desc4)), unsafe_allow_html=True)
-            fig4=go.Figure(go.Bar(x=sec_df['수익률'], y=sec_df['섹터'], orientation='h', marker_color=[dash_c if v<0 else line_c for v in sec_df['수익률']], marker_line_width=0))
-            fig4.update_layout(**radar_layout, showlegend=False); fig4.update_xaxes(**_ax_r); fig4.update_yaxes(**_ax_r); st.plotly_chart(fig4, use_container_width=True)
+            fig4=go.Figure(go.Bar(
+                x=sec_df['수익률'], y=sec_df['섹터'], orientation='h',
+                marker_color=[dash_c if v<0 else line_c for v in sec_df['수익률']],
+                marker_line_width=0
+            ))
+            fig4.update_layout(**radar_layout, showlegend=False)
+            fig4.update_xaxes(**_ax_r)
+            fig4.update_yaxes(**_ax_r)
+            st.plotly_chart(fig4, use_container_width=True)
 
     row2 = st.columns(4)
     with row2[0]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(5, "Credit Spread", b5, u5, desc5)), unsafe_allow_html=True)
-            fig5=go.Figure(); fig5.add_trace(go.Scatter(x=df_view.index, y=df_view['HYG_IEF_Ratio'], line=dict(color=line_c, width=1.8))); fig5.add_trace(go.Scatter(x=df_view.index, y=df_view['HYG_IEF_MA50'], line=dict(color=dash_c, dash='dot', width=1.1))); fig5.update_layout(**radar_layout, showlegend=False); fig5.update_xaxes(**_ax_r); fig5.update_yaxes(**_ax_r); st.plotly_chart(fig5, use_container_width=True)
+            fig5=go.Figure()
+            fig5.add_trace(go.Scatter(x=df_view.index, y=df_view['HYG_IEF_Ratio'], line=dict(color=line_c, width=1.8)))
+            fig5.add_trace(go.Scatter(x=df_view.index, y=df_view['HYG_IEF_MA50'],  line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig5.update_layout(**radar_layout, showlegend=False)
+            fig5.update_xaxes(**_ax_r); fig5.update_yaxes(**_ax_r)
+            st.plotly_chart(fig5, use_container_width=True)
     with row2[1]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(6, "Mkt Breadth", b6, u6, desc6)), unsafe_allow_html=True)
-            fig6=go.Figure(); fig6.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQ_20d_Ret'], name='QQQ', line=dict(color=line_c, width=1.8))); fig6.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQE_20d_Ret'], name='QQQE', line=dict(color=dash_c, dash='dot', width=1.1))); fig6.update_layout(**radar_layout, showlegend=False); fig6.update_xaxes(**_ax_r); fig6.update_yaxes(tickformat='.0%', **_ax_r); st.plotly_chart(fig6, use_container_width=True)
+            fig6=go.Figure()
+            fig6.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQ_20d_Ret'],  name='QQQ',  line=dict(color=line_c, width=1.8)))
+            fig6.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQE_20d_Ret'], name='QQQE', line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig6.update_layout(**radar_layout, showlegend=False)
+            fig6.update_xaxes(**_ax_r)
+            fig6.update_yaxes(tickformat='.0%', **_ax_r)
+            st.plotly_chart(fig6, use_container_width=True)
     with row2[2]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(7, "Gold / Equity", b7, u7, desc7)), unsafe_allow_html=True)
-            fig7=go.Figure(); fig7.add_trace(go.Scatter(x=df_view.index, y=df_view['GLD_SPY_Ratio'], line=dict(color=line_c, width=1.8))); fig7.add_trace(go.Scatter(x=df_view.index, y=df_view['GLD_SPY_MA50'], line=dict(color=dash_c, dash='dot', width=1.1))); fig7.update_layout(**radar_layout, showlegend=False); fig7.update_xaxes(**_ax_r); fig7.update_yaxes(**_ax_r); st.plotly_chart(fig7, use_container_width=True)
+            fig7=go.Figure()
+            fig7.add_trace(go.Scatter(x=df_view.index, y=df_view['GLD_SPY_Ratio'], line=dict(color=line_c, width=1.8)))
+            fig7.add_trace(go.Scatter(x=df_view.index, y=df_view['GLD_SPY_MA50'],  line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig7.update_layout(**radar_layout, showlegend=False)
+            fig7.update_xaxes(**_ax_r); fig7.update_yaxes(**_ax_r)
+            st.plotly_chart(fig7, use_container_width=True)
     with row2[3]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(8, "USD (UUP)", b8, u8, desc8)), unsafe_allow_html=True)
-            fig8=go.Figure(); fig8.add_trace(go.Scatter(x=df_view.index, y=df_view['UUP'], line=dict(color=line_c, width=1.8))); fig8.add_trace(go.Scatter(x=df_view.index, y=df_view['UUP_MA50'], line=dict(color=dash_c, dash='dot', width=1.1))); fig8.update_layout(**radar_layout, showlegend=False); fig8.update_xaxes(**_ax_r); fig8.update_yaxes(**_ax_r); st.plotly_chart(fig8, use_container_width=True)
+            fig8=go.Figure()
+            fig8.add_trace(go.Scatter(x=df_view.index, y=df_view['UUP'],       line=dict(color=line_c, width=1.8)))
+            fig8.add_trace(go.Scatter(x=df_view.index, y=df_view['UUP_MA50'],  line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig8.update_layout(**radar_layout, showlegend=False)
+            fig8.update_xaxes(**_ax_r); fig8.update_yaxes(**_ax_r)
+            st.plotly_chart(fig8, use_container_width=True)
 
     row3 = st.columns(4)
     with row3[0]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(9, "10Y Yield", b9, u9, desc9)), unsafe_allow_html=True)
-            fig9=go.Figure(); fig9.add_trace(go.Scatter(x=df_view.index, y=df_view['^TNX'], line=dict(color=line_c, width=1.8))); fig9.add_trace(go.Scatter(x=df_view.index, y=df_view['TNX_MA50'], line=dict(color=dash_c, dash='dot', width=1.1))); fig9.update_layout(**radar_layout, showlegend=False); fig9.update_xaxes(**_ax_r); fig9.update_yaxes(**_ax_r); st.plotly_chart(fig9, use_container_width=True)
+            fig9=go.Figure()
+            fig9.add_trace(go.Scatter(x=df_view.index, y=df_view['^TNX'],      line=dict(color=line_c, width=1.8)))
+            fig9.add_trace(go.Scatter(x=df_view.index, y=df_view['TNX_MA50'],  line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig9.update_layout(**radar_layout, showlegend=False)
+            fig9.update_xaxes(**_ax_r); fig9.update_yaxes(**_ax_r)
+            st.plotly_chart(fig9, use_container_width=True)
     with row3[1]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(10, "Bitcoin", b10, u10, desc10)), unsafe_allow_html=True)
-            fig10=go.Figure(); fig10.add_trace(go.Scatter(x=df_view.index, y=df_view['BTC-USD'], line=dict(color=line_c, width=1.8))); fig10.add_trace(go.Scatter(x=df_view.index, y=df_view['BTC_MA50'], line=dict(color=dash_c, dash='dot', width=1.1))); fig10.update_layout(**radar_layout, showlegend=False); fig10.update_xaxes(**_ax_r); fig10.update_yaxes(**_ax_r); st.plotly_chart(fig10, use_container_width=True)
+            fig10=go.Figure()
+            fig10.add_trace(go.Scatter(x=df_view.index, y=df_view['BTC-USD'],  line=dict(color=line_c, width=1.8)))
+            fig10.add_trace(go.Scatter(x=df_view.index, y=df_view['BTC_MA50'], line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig10.update_layout(**radar_layout, showlegend=False)
+            fig10.update_xaxes(**_ax_r); fig10.update_yaxes(**_ax_r)
+            st.plotly_chart(fig10, use_container_width=True)
     with row3[2]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(11, "Russell/SP500", b11, u11, desc11)), unsafe_allow_html=True)
-            fig11=go.Figure(); fig11.add_trace(go.Scatter(x=df_view.index, y=df_view['IWM_SPY_Ratio'], line=dict(color=line_c, width=1.8))); fig11.add_trace(go.Scatter(x=df_view.index, y=df_view['IWM_SPY_MA50'], line=dict(color=dash_c, dash='dot', width=1.1))); fig11.update_layout(**radar_layout, showlegend=False); fig11.update_xaxes(**_ax_r); fig11.update_yaxes(**_ax_r); st.plotly_chart(fig11, use_container_width=True)
+            fig11=go.Figure()
+            fig11.add_trace(go.Scatter(x=df_view.index, y=df_view['IWM_SPY_Ratio'], line=dict(color=line_c, width=1.8)))
+            fig11.add_trace(go.Scatter(x=df_view.index, y=df_view['IWM_SPY_MA50'],  line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig11.update_layout(**radar_layout, showlegend=False)
+            fig11.update_xaxes(**_ax_r); fig11.update_yaxes(**_ax_r)
+            st.plotly_chart(fig11, use_container_width=True)
     with row3[3]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(12, "VIX Trend", b12, u12, desc12)), unsafe_allow_html=True)
-            fig12=go.Figure(); fig12.add_trace(go.Scatter(x=df_view.index, y=df_view['^VIX'], line=dict(color=line_c, width=1.8))); fig12.add_trace(go.Scatter(x=df_view.index, y=df_view['VIX_MA50'], line=dict(color=dash_c, dash='dot', width=1.1))); fig12.update_layout(**radar_layout, showlegend=False); fig12.update_xaxes(**_ax_r); fig12.update_yaxes(**_ax_r); st.plotly_chart(fig12, use_container_width=True)
+            fig12=go.Figure()
+            fig12.add_trace(go.Scatter(x=df_view.index, y=df_view['^VIX'],      line=dict(color=line_c, width=1.8)))
+            fig12.add_trace(go.Scatter(x=df_view.index, y=df_view['VIX_MA50'],  line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig12.update_layout(**radar_layout, showlegend=False)
+            fig12.update_xaxes(**_ax_r); fig12.update_yaxes(**_ax_r)
+            st.plotly_chart(fig12, use_container_width=True)
 
 
 elif page == "📈 Backtest Lab":
-    st.markdown(apply_theme("""<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;"><div><h2 style="font-family:'Plus Jakarta Sans';font-size:1.7em;color:#0F172A;margin:0;">📈 Backtest Lab</h2><div style="font-family:'DM Mono';font-size:0.65em;color:#4A5568;letter-spacing:0.16em;text-transform:uppercase;margin-top:3px;">Strategy Simulator · Historical Analysis</div></div></div>"""), unsafe_allow_html=True)
+    st.markdown(apply_theme("""
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <div>
+            <h2 style="font-family:'Plus Jakarta Sans';font-size:1.7em;color:#0F172A;margin:0;">📈 Backtest Lab</h2>
+            <div style="font-family:'DM Mono';font-size:0.65em;color:#4A5568;letter-spacing:0.16em;text-transform:uppercase;margin-top:3px;">Strategy Simulator  ·  Historical Analysis</div>
+        </div>
+    </div>"""), unsafe_allow_html=True)
+
+    # ── 2패널: 좌(설정) + 우(결과) ────────────────────────────
     panel_cfg, panel_res = st.columns([1, 2.8])
 
     with panel_cfg:
         with st.container(border=True):
-            st.markdown("""<div style="font-family:'DM Mono';font-size:0.62em;color:#4A5568;margin-bottom:14px;letter-spacing:0.2em;text-transform:uppercase;">⚙ Config</div>""", unsafe_allow_html=True)
+            st.markdown("""<div style="font-family:'DM Mono';font-size:0.62em;color:#4A5568;margin-bottom:14px;letter-spacing:0.2em;text-transform:uppercase;">⚙  Config</div>""", unsafe_allow_html=True)
             bt_start = st.date_input("Start Date", datetime(2020, 1, 1), key="bt_start_input")
             bt_end   = st.date_input("End Date",   datetime.today(),     key="bt_end_input")
             monthly_cont = st.number_input("월 적립금 ($)", value=2000, step=500, key="bt_monthly_input")
@@ -1142,27 +2223,36 @@ elif page == "📈 Backtest Lab":
     with panel_res:
         with st.spinner("시뮬레이션 가동 중..."):
             bt_df = load_custom_backtest_data(bt_start, bt_end)
+
             if bt_df.empty:
-                st.error("해당 기간의 데이터가 존재하지 않거나 부족합니다.")
+                st.error("해당 기간의 데이터가 존재하지 않거나 부족합니다. 기간을 조정해주세요.")
             else:
                 daily_ret = bt_df[['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPY','SMH','GLD']].pct_change().fillna(0)
                 w_orig = get_weights_v45(bt_df['Regime'].iloc[0], False)
+
                 val_o, val_q, val_qld, val_tqqq = 10000, 10000, 10000, 10000
-                hist_o, hist_q, hist_qld, hist_tqqq, invested = [val_o], [val_q], [val_qld], [val_tqqq], [10000]
-                curr_inv = 10000
+                hist_o, hist_q, hist_qld, hist_tqqq = [val_o], [val_q], [val_qld], [val_tqqq]
+                invested = [10000]; curr_inv = 10000
 
                 for i in range(1, len(bt_df)):
                     today     = bt_df.index[i]
                     yesterday = bt_df.index[i-1]
                     ret_o = sum(w_orig.get(t,0) * daily_ret[t].iloc[i] for t in w_orig if t in daily_ret.columns)
-                    val_o *= (1 + ret_o); val_q *= (1 + daily_ret['QQQ'].iloc[i]); val_qld *= (1 + daily_ret['QLD'].iloc[i]); val_tqqq *= (1 + daily_ret['TQQQ'].iloc[i])
-                    if today.month != yesterday.month: val_o += monthly_cont; val_q += monthly_cont; val_qld += monthly_cont; val_tqqq += monthly_cont; curr_inv += monthly_cont
-                    hist_o.append(val_o); hist_q.append(val_q); hist_qld.append(val_qld); hist_tqqq.append(val_tqqq); invested.append(curr_inv)
+                    val_o *= (1 + ret_o); val_q *= (1 + daily_ret['QQQ'].iloc[i])
+                    val_qld *= (1 + daily_ret['QLD'].iloc[i]); val_tqqq *= (1 + daily_ret['TQQQ'].iloc[i])
+                    if today.month != yesterday.month:
+                        val_o += monthly_cont; val_q += monthly_cont
+                        val_qld += monthly_cont; val_tqqq += monthly_cont
+                        curr_inv += monthly_cont
+                    hist_o.append(val_o); hist_q.append(val_q)
+                    hist_qld.append(val_qld); hist_tqqq.append(val_tqqq)
+                    invested.append(curr_inv)
                     smh_cond_i = (bt_df['SMH'].iloc[i] > bt_df['SMH_MA50'].iloc[i]) and (bt_df['SMH_3M_Ret'].iloc[i] > 0.05) and (bt_df['SMH_RSI'].iloc[i] > 50)
                     w_orig = get_weights_v45(bt_df['Regime'].iloc[i], smh_cond_i)
 
                 res_df = pd.DataFrame(index=bt_df.index)
-                res_df['V4.5'], res_df['QQQ'], res_df['QLD'], res_df['TQQQ'], res_df['Invested'] = hist_o, hist_q, hist_qld, hist_tqqq, invested
+                res_df['V4.5'], res_df['QQQ'], res_df['QLD'], res_df['TQQQ'] = hist_o, hist_q, hist_qld, hist_tqqq
+                res_df['Invested'] = invested
                 days = (res_df.index[-1] - res_df.index[0]).days
 
                 def calc_metrics(series, inv_series):
@@ -1178,17 +2268,40 @@ elif page == "📈 Backtest Lab":
                 ret_t, cagr_t, mdd_t       = calc_metrics(res_df['TQQQ'], res_df['Invested'])
 
                 mc1, mc2, mc3, mc4 = st.columns(4)
-                def _mc_html(title, ret, cagr, mdd, is_main=False):
-                    border_top = f"rgba({r_c},{g_c},{b_c},0.55)" if is_main else "rgba(0,0,0,0.12)"
-                    bg         = f"rgba({r_c},{g_c},{b_c},0.06)" if is_main else "#FFFFFF"
-                    tag_html   = (f'<span style="background:rgba({r_c},{g_c},{b_c},0.1);color:{main_color};border-radius:5px;padding:2px 8px;font-size:0.6em;font-family:DM Mono,monospace;border:1px solid rgba({r_c},{g_c},{b_c},0.25);letter-spacing:0.1em;">STRATEGY</span>') if is_main else ''
-                    ret_c      = "#059669" if ret >= 0 else "#EF4444"
-                    return f'<div style="background:{bg};border:1px solid rgba(0,0,0,0.08);border-top:2px solid {border_top};border-radius:14px;padding:16px 18px;box-shadow:0 2px 12px rgba(0,0,0,0.05);min-height:100px;"><div style="font-family:DM Mono,monospace;font-size:0.62em;color:#4A5568;letter-spacing:0.14em;text-transform:uppercase;margin-bottom:6px;">{title}&nbsp;&nbsp;{tag_html}</div><div style="font-family:DM Mono,monospace;font-size:1.6em;font-weight:400;color:#0F172A;letter-spacing:-0.5px;margin-bottom:6px;">CAGR {cagr*100:.1f}%</div><div style="font-family:DM Mono,monospace;font-size:0.72em;color:#4A5568;">누적&nbsp;<b style="color:{ret_c};">{ret*100:.1f}%</b>&nbsp;&nbsp;MDD&nbsp;<b style="color:#EF4444;">{mdd*100:.1f}%</b></div></div>'
 
-                with mc1: st.markdown(_mc_html("✦ AMLS V4.5", ret_o, cagr_o, mdd_o, True), unsafe_allow_html=True)
-                with mc2: st.markdown(_mc_html("QQQ", ret_q, cagr_q, mdd_q), unsafe_allow_html=True)
-                with mc3: st.markdown(_mc_html("QLD", ret_qld, cagr_qld, mdd_qld), unsafe_allow_html=True)
-                with mc4: st.markdown(_mc_html("TQQQ", ret_t, cagr_t, mdd_t), unsafe_allow_html=True)
+                def _mc_html(title, ret, cagr, mdd, is_main=False):
+                    """HTML 메트릭 카드 문자열 생성 (unsafe_allow_html 전용)"""
+                    border_top = f"rgba({r_c},{g_c},{b_c},0.55)" if is_main else "rgba(0,0,0,0.12)"
+                    bg        = f"rgba({r_c},{g_c},{b_c},0.06)" if is_main else "#FFFFFF"
+                    tag_html  = (f'<span style="background:rgba({r_c},{g_c},{b_c},0.1);'
+                                 f'color:{main_color};border-radius:5px;padding:2px 8px;'
+                                 f'font-size:0.6em;font-family:DM Mono,monospace;'
+                                 f'border:1px solid rgba({r_c},{g_c},{b_c},0.25);'
+                                 f'letter-spacing:0.1em;">STRATEGY</span>') if is_main else ''
+                    ret_c     = "#059669" if ret >= 0 else "#EF4444"
+                    # display:flex을 쓰지 않고 inline-block으로 대체 (Streamlit 파서 안전)
+                    return (
+                        f'<div style="background:{bg};border:1px solid rgba(0,0,0,0.08);'
+                        f'border-top:2px solid {border_top};border-radius:14px;'
+                        f'padding:16px 18px;box-shadow:0 2px 12px rgba(0,0,0,0.05);'
+                        f'min-height:100px;">'
+                        f'<div style="font-family:DM Mono,monospace;font-size:0.62em;'
+                        f'color:#4A5568;letter-spacing:0.14em;text-transform:uppercase;'
+                        f'margin-bottom:6px;">{title}&nbsp;&nbsp;{tag_html}</div>'
+                        f'<div style="font-family:DM Mono,monospace;font-size:1.6em;'
+                        f'font-weight:400;color:#0F172A;letter-spacing:-0.5px;'
+                        f'margin-bottom:6px;">CAGR {cagr*100:.1f}%</div>'
+                        f'<div style="font-family:DM Mono,monospace;font-size:0.72em;'
+                        f'color:#4A5568;">'
+                        f'누적&nbsp;<b style="color:{ret_c};">{ret*100:.1f}%</b>'
+                        f'&nbsp;&nbsp;MDD&nbsp;<b style="color:#EF4444;">{mdd*100:.1f}%</b>'
+                        f'</div></div>'
+                    )
+
+                with mc1: st.markdown(_mc_html("✦ AMLS V4.5", ret_o,   cagr_o,   mdd_o,   True), unsafe_allow_html=True)
+                with mc2: st.markdown(_mc_html("QQQ",          ret_q,   cagr_q,   mdd_q),         unsafe_allow_html=True)
+                with mc3: st.markdown(_mc_html("QLD",          ret_qld, cagr_qld, mdd_qld),        unsafe_allow_html=True)
+                with mc4: st.markdown(_mc_html("TQQQ",         ret_t,   cagr_t,   mdd_t),          unsafe_allow_html=True)
 
                 st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
@@ -1197,22 +2310,35 @@ elif page == "📈 Backtest Lab":
                 fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['QLD'],  name='QLD',  line=dict(color='#3B82F6', width=1.2, dash='dash')))
                 fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['TQQQ'], name='TQQQ', line=dict(color='#EF4444', width=1.2, dash='dash')))
                 fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['V4.5'], name='AMLS', line=dict(color=main_color, width=3)))
-                fig_eq.update_layout(title=dict(text="Equity Curve · Log Scale", font=dict(family='DM Mono', size=13, color=t_color)), height=380, yaxis_type='log', **chart_layout)
-                fig_eq.update_xaxes(**_ax); fig_eq.update_yaxes(**_ax)
-                with st.container(border=True): st.plotly_chart(fig_eq, use_container_width=True)
+                fig_eq.update_layout(
+                    title=dict(text="Equity Curve  ·  Log Scale", font=dict(family='DM Mono', size=13, color=t_color)),
+                    height=380, yaxis_type='log', **chart_layout
+                )
+                fig_eq.update_xaxes(**_ax)
+                fig_eq.update_yaxes(**_ax)
+                with st.container(border=True):
+                    st.plotly_chart(fig_eq, use_container_width=True)
 
                 st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+
                 def get_dd_series(s): return (s / s.cummax()) - 1
                 fig_dd = go.Figure()
                 fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['QQQ']),  name='QQQ',  line=dict(color='#CBD5E1', width=1)))
                 fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['QLD']),  name='QLD',  line=dict(color='#3B82F6', width=1)))
                 fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['TQQQ']), name='TQQQ', line=dict(color='#EF4444', width=1)))
-                fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['V4.5']), name='AMLS', fill='tozeroy', fillcolor=f'rgba({r_c},{g_c},{b_c},0.1)', line=dict(color=main_color, width=2.2)))
-                fig_dd.update_layout(title=dict(text="Drawdown Curve", font=dict(family='DM Mono', size=13, color=t_color)), height=260, **chart_layout)
-                fig_dd.update_xaxes(**_ax); fig_dd.update_yaxes(tickformat='.0%', **_ax)
-                with st.container(border=True): st.plotly_chart(fig_dd, use_container_width=True)
-                st.divider()
+                fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['V4.5']), name='AMLS',
+                                             fill='tozeroy', fillcolor=f'rgba({r_c},{g_c},{b_c},0.1)',
+                                             line=dict(color=main_color, width=2.2)))
+                fig_dd.update_layout(
+                    title=dict(text="Drawdown Curve", font=dict(family='DM Mono', size=13, color=t_color)),
+                    height=260, **chart_layout
+                )
+                fig_dd.update_xaxes(**_ax)
+                fig_dd.update_yaxes(tickformat='.0%', **_ax)
+                with st.container(border=True):
+                    st.plotly_chart(fig_dd, use_container_width=True)
 
+                st.divider()
             if st.button("✦ AI 추론 요약 실행", use_container_width=True):
                 try:
                     import google.generativeai as genai
@@ -1220,44 +2346,169 @@ elif page == "📈 Backtest Lab":
                     genai.configure(api_key=api_key)
                     models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
                     model  = genai.GenerativeModel(models[0].replace('models/',''))
-                    prompt = f"너는 최고 퀀트 애널리스트야. AMLS V4.5 전략 백테스트 결과를 분석해.\n[AMLS] 누적수익률: {ret_o*100:.1f}%, CAGR: {cagr_o*100:.1f}%, MDD: {mdd_o*100:.1f}%\n[TQQQ] 누적수익률: {ret_t*100:.1f}%, CAGR: {cagr_t*100:.1f}%, MDD: {mdd_t*100:.1f}%\nAMLS 전략이 레버리지 MDD를 어떻게 회피하면서 수익을 냈는지 3단락으로 분석해."
+                    prompt = f"""너는 최고 퀀트 애널리스트야. AMLS V4.5 전략 백테스트 결과를 분석해.
+[AMLS] 누적수익률: {ret_o*100:.1f}%, CAGR: {cagr_o*100:.1f}%, MDD: {mdd_o*100:.1f}%
+[TQQQ] 누적수익률: {ret_t*100:.1f}%, CAGR: {cagr_t*100:.1f}%, MDD: {mdd_t*100:.1f}%
+AMLS 전략이 레버리지 MDD를 어떻게 회피하면서 수익을 냈는지 3단락으로 분석해."""
                     with st.spinner("AI 분석 중..."):
                         response = model.generate_content(prompt)
-                        st.markdown(apply_theme(f'<div class="glass-card" style="height:auto !important; padding:28px !important; color:#CBD5E1; font-weight:400; line-height:1.75; font-size:0.95em;">{response.text}</div>'), unsafe_allow_html=True)
-                except KeyError: st.error("🚨 GEMINI_API_KEY 누락")
+                        st.markdown(apply_theme(f"""<div class="glass-card" style="height:auto !important; padding:28px !important; color:#CBD5E1; font-weight:400; line-height:1.75; font-size:0.95em;">{response.text}</div>"""), unsafe_allow_html=True)
+                except KeyError:
+                    st.error("🚨 GEMINI_API_KEY 누락")
 
+# ──────────────────────────────────────────
 elif page == "📰 Macro News":
     headlines_for_ai, news_items = fetch_macro_news()
-    st.markdown(apply_theme(f'<div style="border-top:3px solid #111118;border-bottom:1px solid rgba(0,0,0,0.12);padding:18px 0 14px;margin-bottom:24px;"><div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:10px;"><div><div style="font-family:\'DM Mono\',monospace;font-size:0.6em;color:#9494A0;letter-spacing:0.22em;text-transform:uppercase;margin-bottom:6px;">Global Macro · Wall Street Analysis Engine</div><div style="font-family:\'Plus Jakarta Sans\',sans-serif;font-size:2.2em;font-weight:800;color:{tc_heading};letter-spacing:-1.5px;line-height:1;">Market Briefing</div></div><div style="display:flex;align-items:center;gap:12px;padding-bottom:4px;"><div class="live-pulse" style="font-family:\'DM Mono\',monospace;font-size:0.65em;color:#059669;padding:4px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);letter-spacing:0.06em;">{rt_label}</div><div style="font-family:\'DM Mono\',monospace;font-size:0.62em;color:#9494A0;letter-spacing:0.05em;">{last_update_time}</div></div></div></div>'), unsafe_allow_html=True)
 
+    # ── 상단 마스트헤드 ────────────────────────────────────────
+    st.markdown(apply_theme(f"""
+    <div style="border-top:3px solid #111118;border-bottom:1px solid rgba(0,0,0,0.12);
+        padding:18px 0 14px;margin-bottom:24px;">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+            <div>
+                <div style="font-family:'DM Mono',monospace;font-size:0.6em;color:#9494A0;
+                    letter-spacing:0.22em;text-transform:uppercase;margin-bottom:6px;">
+                    Global Macro  ·  Wall Street Analysis Engine
+                </div>
+                <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:2.2em;
+                    font-weight:800;color:{tc_heading};
+                    letter-spacing:-1.5px;line-height:1;">
+                    Market Briefing
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;padding-bottom:4px;">
+                <div class="live-pulse" style="font-family:'DM Mono',monospace;font-size:0.65em;
+                    color:#059669;padding:4px 12px;
+                    background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);
+                    letter-spacing:0.06em;">{rt_label}</div>
+                <div style="font-family:'DM Mono',monospace;font-size:0.62em;color:#9494A0;
+                    letter-spacing:0.05em;">{last_update_time}</div>
+            </div>
+        </div>
+    </div>
+    """), unsafe_allow_html=True)
+
+    # ── 2패널: 좌(AI 분석) + 우(헤드라인) ─────────────────────
     news_left, news_right = st.columns([1, 1.6])
+
     with news_left:
-        st.markdown('<div style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:500;color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;padding-bottom:6px;border-bottom:2px solid #111118;margin-bottom:14px;">AI Analyst · System-2 Reasoning</div>', unsafe_allow_html=True)
-        if st.button("↻ 심층 추론 요약 실행", use_container_width=True):
+        st.markdown(
+            f'<div style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:500;'
+            f'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;'
+            f'padding-bottom:6px;border-bottom:2px solid #111118;margin-bottom:14px;">'
+            f'AI  Analyst  ·  System-2 Reasoning</div>',
+            unsafe_allow_html=True
+        )
+
+        if st.button("↻  심층 추론 요약 실행", use_container_width=True):
             try:
                 import google.generativeai as genai
                 api_key = st.secrets["GEMINI_API_KEY"]
-                if not headlines_for_ai: st.warning("분석할 뉴스가 없습니다.")
+                if not headlines_for_ai:
+                    st.warning("분석할 뉴스가 없습니다.")
                 else:
                     with st.spinner("AI 분석 중..."):
                         genai.configure(api_key=api_key)
-                        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                        models = [m.name for m in genai.list_models()
+                                  if 'generateContent' in m.supported_generation_methods]
                         model  = genai.GenerativeModel(models[0].replace('models/',''))
-                        prompt = ("너는 퀀트 애널리스트야. 다음 뉴스를 섹터별, 리스크 요소, 최종 투자 스탠스로 나누어 3문단으로 요약해.\n" + "\n".join(headlines_for_ai))
+                        prompt = ("너는 퀀트 애널리스트야. 다음 뉴스를 섹터별, 리스크 요소, "
+                                  "최종 투자 스탠스로 나누어 3문단으로 요약해.\n"
+                                  + "\n".join(headlines_for_ai))
                         response = model.generate_content(prompt)
-                        st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid {main_color};padding:20px 22px;margin-top:12px;"><div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:10px;">AI Summary</div><div style="font-family:DM Sans,sans-serif;font-size:0.9em;color:{tc_body};line-height:1.75;">{response.text}</div></div>', unsafe_allow_html=True)
-            except KeyError: st.error("🚨 GEMINI_API_KEY 누락")
+                        # AI 응답 박스
+                        st.markdown(
+                            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
+                            f'border-left:3px solid {main_color};padding:20px 22px;'
+                            f'margin-top:12px;">'
+                            f'<div style="font-family:DM Mono,monospace;font-size:0.58em;'
+                            f'color:#9494A0;letter-spacing:0.16em;text-transform:uppercase;'
+                            f'margin-bottom:10px;">AI Summary</div>'
+                            f'<div style="font-family:DM Sans,sans-serif;font-size:0.9em;'
+                            f'color:{tc_body};line-height:1.75;">{response.text}</div>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+            except KeyError:
+                st.error("🚨 GEMINI_API_KEY 누락")
         else:
-            st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);border-left:3px solid rgba(0,0,0,0.15);padding:20px 22px;margin-top:12px;"><div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;margin-bottom:10px;">How It Works</div><div style="font-family:DM Sans,sans-serif;font-size:0.85em;color:{tc_muted};line-height:1.7;">버튼을 누르면 Google Gemini AI가 최신 뉴스 헤드라인을<br><b style="color:{tc_body};">① 섹터별 분류</b> → <b style="color:{tc_body};">② 리스크 요소 추출</b> → <b style="color:{tc_body};">③ 최종 투자 스탠스</b><br>3단계로 구조화해서 요약해 드립니다.</div></div>', unsafe_allow_html=True)
+            # 버튼 미클릭 상태 — 안내 카드
+            st.markdown(
+                f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
+                f'border-left:3px solid rgba(0,0,0,0.15);padding:20px 22px;margin-top:12px;">'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;'
+                f'letter-spacing:0.14em;text-transform:uppercase;margin-bottom:10px;">How It Works</div>'
+                f'<div style="font-family:DM Sans,sans-serif;font-size:0.85em;color:{tc_muted};'
+                f'line-height:1.7;">'
+                f'버튼을 누르면 Google Gemini AI가 최신 뉴스 헤드라인을<br>'
+                f'<b style="color:{tc_body};">① 섹터별 분류</b> → '
+                f'<b style="color:{tc_body};">② 리스크 요소 추출</b> → '
+                f'<b style="color:{tc_body};">③ 최종 투자 스탠스</b><br>'
+                f'3단계로 구조화해서 요약해 드립니다.'
+                f'</div></div>',
+                unsafe_allow_html=True
+            )
+
+        # 뉴스 소스 카운트
         if news_items:
-            st.markdown(f'<div style="margin-top:16px;padding:10px 14px;background:rgba(0,0,0,0.03);border-left:2px solid rgba(0,0,0,0.15);"><span style="font-family:DM Mono,monospace;font-size:0.7em;color:#9494A0;">수집된 헤드라인 <b style="color:{tc_data};">{len(news_items)}건</b> · Google News RSS</span></div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="margin-top:16px;padding:10px 14px;'
+                f'background:rgba(0,0,0,0.03);border-left:2px solid rgba(0,0,0,0.15);">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.7em;color:#9494A0;">'
+                f'수집된 헤드라인  <b style="color:{tc_data};">{len(news_items)}건</b>'
+                f'  ·  Google News RSS</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
     with news_right:
-        st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:500;color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;padding-bottom:6px;border-bottom:2px solid #111118;margin-bottom:14px;">Latest Headlines · {len(news_items) if news_items else 0} items</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:500;'
+            f'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;'
+            f'padding-bottom:6px;border-bottom:2px solid #111118;margin-bottom:14px;">'
+            f'Latest Headlines  ·  {len(news_items) if news_items else 0} items</div>',
+            unsafe_allow_html=True
+        )
+
         if news_items:
             for idx, item in enumerate(news_items):
+                # 번호 + 제목 + 날짜 — 룰드 리스트 형식
                 _num_color  = main_color if idx < 3 else "#9494A0"
                 _top_border = f"2px solid {main_color}" if idx == 0 else "1px solid rgba(0,0,0,0.10)"
-                st.markdown(f'<div style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid rgba(0,0,0,0.07);border-top:{_top_border if idx == 0 else "none"};"><div style="font-family:DM Mono,monospace;font-size:0.75em;color:{_num_color};font-weight:600;min-width:22px;padding-top:2px;font-variant-numeric:tabular-nums;">{idx+1:02d}</div><div style="flex:1;"><a href="{item["link"]}" target="_blank" style="text-decoration:none;"><div style="font-family:DM Sans,sans-serif;font-size:0.88em;color:{tc_body};line-height:1.5;font-weight:{"500" if idx < 3 else "400"};transition:color 0.15s;" onmouseover="this.style.color=\'{main_color}\'" onmouseout="this.style.color=\'{tc_body}\'">{item["title"]}</div></a><div style="font-family:DM Mono,monospace;font-size:0.65em;color:#9494A0;margin-top:4px;letter-spacing:0.04em;">{item["date"]}</div></div></div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div style="display:flex;gap:14px;padding:12px 0;'
+                    f'border-bottom:1px solid rgba(0,0,0,0.07);'
+                    f'border-top:{_top_border if idx == 0 else "none"};">'
+
+                    # 번호
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.75em;'
+                    f'color:{_num_color};font-weight:600;min-width:22px;'
+                    f'padding-top:2px;font-variant-numeric:tabular-nums;">'
+                    f'{idx+1:02d}</div>'
+
+                    # 내용
+                    f'<div style="flex:1;">'
+                    f'<a href="{item["link"]}" target="_blank" style="text-decoration:none;">'
+                    f'<div style="font-family:DM Sans,sans-serif;font-size:0.88em;'
+                    f'color:{tc_body};line-height:1.5;font-weight:{"500" if idx < 3 else "400"};'
+                    f'transition:color 0.15s;"'
+                    f' onmouseover="this.style.color=\'{main_color}\'"'
+                    f' onmouseout="this.style.color=\'{tc_body}\'">'
+                    f'{item["title"]}'
+                    f'</div>'
+                    f'</a>'
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.65em;'
+                    f'color:#9494A0;margin-top:4px;letter-spacing:0.04em;">'
+                    f'{item["date"]}</div>'
+                    f'</div>'
+
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
         else:
-            st.markdown('<div style="padding:20px;background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);"><span style="font-family:DM Mono,monospace;font-size:0.8em;color:#9494A0;">뉴스를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.</span></div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="padding:20px;background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.8em;color:#9494A0;">'
+                f'뉴스를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.</span></div>',
+                unsafe_allow_html=True
+            )
