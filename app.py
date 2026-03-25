@@ -72,7 +72,7 @@ def sanitize_portfolio():
             st.session_state.portfolio[a] = {'shares': 0.0, 'avg_price': 0.0, 'fx': 1350.0}
 
 if 'goal_usd' not in st.session_state:
-    st.session_state.goal_usd = 100000.0   # 기본 목표: $100,000
+    st.session_state.goal_usd = 100000.0
 
 if 'portfolio' not in st.session_state:
     st.session_state.portfolio = {asset: {'shares':0.0, 'avg_price':0.0, 'fx':1350.0} for asset in ASSET_LIST}
@@ -251,20 +251,16 @@ def fetch_macro_news():
 
 @st.cache_data(ttl=300)
 def fetch_global_markets():
-    """글로벌 증시 + 금리/원자재/크립토 + 주도주 데이터"""
-    # 글로벌 주요 지수 ETF
     global_tickers = {
         'SPY':'S&P 500','QQQ':'Nasdaq 100','DIA':'Dow Jones','IWM':'Russell 2000',
         'EWJ':'Japan','EWT':'Taiwan','EWY':'Korea','FXI':'China','EWH':'HongKong',
         'VGK':'Europe','EWG':'Germany','EWU':'UK','EWQ':'France','EWC':'Canada',
         'EEM':'Emg Mkt','EWZ':'Brazil','EWA':'Australia',
     }
-    # 금리/원자재/크립토
     asset_tickers = {
         '^TNX':'US 10Y','GLD':'Gold','SLV':'Silver','USO':'Oil',
         'BTC-USD':'Bitcoin','ETH-USD':'Ethereum','UUP':'DXY',
     }
-    # 주도주 (Magnificent 7 + 반도체 주요주)
     leader_tickers = {
         'AAPL':'Apple','MSFT':'Microsoft','NVDA':'Nvidia','AMZN':'Amazon',
         'GOOGL':'Alphabet','META':'Meta','TSLA':'Tesla',
@@ -290,7 +286,6 @@ def fetch_global_markets():
 
 with st.spinner('시장 데이터 수집 중...'):
     df = load_data()
-    # 세션 캐시: 성공하면 저장, 실패하면 이전 값 사용
     if df is not None and not df.empty:
         st.session_state['_df_cache'] = df
     elif '_df_cache' in st.session_state:
@@ -370,12 +365,11 @@ else: regime_committee_msg = f"🟡 R{live_regime} 승급 대기 (5일)"
 # 2. 라이트 테마 색상 변수 (차트용)
 # ==========================================
 b_color   = 'rgba(0,0,0,0)'
-t_color   = '#4A4A57'        # 차트 축 텍스트
+t_color   = '#4A4A57'
 line_c    = main_color
 dash_c    = '#B0B0BE'
 rsi_low_c = main_color
 
-# ⚠️ xaxis/yaxis를 여기서 제외 → 각 차트에서 개별 지정 (중복 키 TypeError 방지)
 chart_layout = dict(
     paper_bgcolor=b_color,
     plot_bgcolor=b_color,
@@ -390,57 +384,44 @@ radar_layout = dict(
     font=dict(family="DM Mono, DM Sans, monospace", color=t_color),
 )
 
-# 공통 축 스타일 (라이트 테마)
 _ax = dict(gridcolor='rgba(0,0,0,0.07)', linecolor='rgba(0,0,0,0.12)', showgrid=True, zeroline=False)
 _ax_r = dict(gridcolor='rgba(0,0,0,0.07)', zeroline=False, showgrid=True)
 
 regime_info = {1:("R1  BULL","풀 가동"),2:("R2  CORR","방어 진입"), 3:("R3  BEAR","대피"),4:("R4  PANIC","최대 방어")}
 
 # ==========================================
-# 3. CSS  —  Refined Institutional  (2026)
-#    Concept: Bloomberg × Swiss Grid × Monocle
-#    → Ruled structure, tabular precision, zero decoration
+# 3. CSS
 # ==========================================
 css_block = f"""<style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
 
-    /* ── DESIGN TOKENS ──────────────────────────────── */
     :root {{
-        /* Paper — user-customizable */
         --paper:      {bg_color};
         --paper-2:    {bg_color}dd;
         --paper-3:    {bg_color}bb;
-        /* Ink — user-customizable per role */
         --ink:        {tc_heading};
         --ink-2:      {tc_body};
         --ink-3:      {tc_body};
         --ink-4:      {tc_muted};
         --ink-5:      {tc_label};
-        /* Rule lines */
         --rule:       rgba(0,0,0,0.10);
         --rule-strong:rgba(0,0,0,0.18);
-        /* Accent — single color, surgical use */
         --acc:        #10B981;
         --acc-pale:   rgba(16,185,129,0.08);
         --acc-mid:    rgba(16,185,129,0.18);
         --acc-line:   rgba(16,185,129,0.40);
-        /* State colors */
         --bull:       #059669;
         --bear:       #DC2626;
         --warn:       #D97706;
-        /* Spacing unit */
         --u:          8px;
     }}
 
-    /* ── RESET / BASE ───────────────────────────────── */
     *, *::before, *::after {{ box-sizing: border-box; }}
 
     .stApp, [data-testid="stAppViewContainer"] {{
         background-color: {bg_color} !important;
         background-image:
-            /* Subtle dot grid — institutional graph paper */
             radial-gradient(circle, rgba(0,0,0,0.055) 1px, transparent 1px),
-            /* Accent corner wash */
             radial-gradient(ellipse 70% 40% at 5% 0%, rgba(16,185,129,0.055) 0%, transparent 55%) !important;
         background-size: 24px 24px, 100% 100% !important;
         color: {tc_body} !important;
@@ -460,13 +441,11 @@ css_block = f"""<style>
         padding-bottom: 3rem;
     }}
 
-    /* ── SIDEBAR ────────────────────────────────────── */
     [data-testid="stSidebar"] {{
         background: var(--paper-2) !important;
         border-right: 1px solid var(--rule-strong) !important;
         box-shadow: none !important;
     }}
-    /* Vertical accent rule on right edge */
     [data-testid="stSidebar"]::after {{
         content:'';
         position:absolute; top:15%; right:0; width:2px; height:70%;
@@ -474,7 +453,6 @@ css_block = f"""<style>
         pointer-events:none;
     }}
 
-    /* Sidebar radio → ruled nav rows */
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] > div:first-child {{ display:none !important; }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {{
         gap:0px !important; padding:0 !important; background:transparent !important;
@@ -502,7 +480,6 @@ css_block = f"""<style>
         background:var(--paper) !important;
         border-bottom:1px solid var(--rule) !important;
     }}
-    /* Active indicator — left border bar */
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked)::before {{
         content:'';
         position:absolute; left:0; top:0; bottom:0; width:3px;
@@ -528,8 +505,6 @@ css_block = f"""<style>
         color:var(--ink) !important;
     }}
 
-    /* ── INSTITUTIONAL PANEL (replaces glass-card) ──── */
-    /* Ruled panels — no floating, no shadows, just structure */
     .glass-card {{
         background: #FAFAF7 !important;
         border: 1px solid var(--rule-strong) !important;
@@ -556,7 +531,6 @@ css_block = f"""<style>
         border-bottom: 1px solid var(--rule); padding-bottom: 9px;
     }}
 
-    /* Inset — subtle ruled box */
     .glass-inset {{
         background: var(--paper-2) !important;
         border: 1px solid var(--rule) !important;
@@ -567,7 +541,6 @@ css_block = f"""<style>
         box-shadow: none !important;
     }}
 
-    /* Streamlit container(border=True) */
     div[data-testid="stVerticalBlockBorderWrapper"] > div {{
         background: #FAFAF7 !important;
         border: 1px solid var(--rule-strong) !important;
@@ -584,7 +557,6 @@ css_block = f"""<style>
         transform: none !important;
     }}
 
-    /* ── METRIC CARDS ───────────────────────────────── */
     [data-testid="stMetric"] {{
         background: #FAFAF7 !important;
         border: 1px solid var(--rule-strong) !important;
@@ -617,7 +589,6 @@ css_block = f"""<style>
         font-variant-numeric: tabular-nums;
     }}
 
-    /* ── BUTTONS ────────────────────────────────────── */
     [data-testid="stButton"] > button {{
         background: transparent !important;
         border: 1px solid var(--rule-strong) !important;
@@ -635,7 +606,6 @@ css_block = f"""<style>
         color: var(--bull) !important;
     }}
 
-    /* ── TYPOGRAPHY ─────────────────────────────────── */
     h1 {{
         font-family: 'Plus Jakarta Sans', sans-serif !important;
         font-size: 2.2em !important; font-weight: 800 !important;
@@ -651,11 +621,9 @@ css_block = f"""<style>
     p  {{ color: {tc_body} !important; line-height: 1.65; }}
     strong {{ color: {tc_heading} !important; }}
 
-    /* All numbers — tabular figures */
     [data-testid="stMetricValue"],
     .cval, .mint-table td {{ font-variant-numeric: tabular-nums; }}
 
-    /* ── DATA ROWS ──────────────────────────────────── */
     .crow {{
         display:flex; justify-content:space-between; align-items:center;
         padding: 10px 0;
@@ -673,7 +641,6 @@ css_block = f"""<style>
         letter-spacing:0.02em; font-variant-numeric:tabular-nums;
     }}
 
-    /* ── METRIC CARD TEXT ───────────────────────────── */
     [data-testid="stMetricLabel"] > div > div > p {{
         font-size: 0.65em !important; font-weight: 500;
         color: {tc_label} !important;
@@ -687,7 +654,6 @@ css_block = f"""<style>
         font-variant-numeric: tabular-nums;
     }}
 
-    /* ── SIDEBAR TEXT ───────────────────────────────── */
     [data-testid="stSidebar"] p      {{ color:{tc_sidebar} !important; }}
     [data-testid="stSidebar"] strong {{ color:{tc_heading}   !important; }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] p {{
@@ -697,7 +663,6 @@ css_block = f"""<style>
         color:{tc_heading} !important; font-weight:700 !important;
     }}
 
-    /* ── RADAR LINKS ────────────────────────────────── */
     .radar-link {{ text-decoration:none !important; display:block; }}
     .radar-link-title {{
         font-size:0.62em; font-weight:500; color:{tc_label};
@@ -706,7 +671,6 @@ css_block = f"""<style>
     }}
     .radar-link:hover .radar-link-title {{ color:var(--acc) !important; }}
 
-    /* ── TABLES ─────────────────────────────────────── */
     .mint-table {{
         width:100%; border-collapse:collapse;
         font-family:'DM Mono', monospace;
@@ -737,7 +701,6 @@ css_block = f"""<style>
     .mint-table tr:hover td:first-child {{ border-left-color:var(--acc); }}
     .mint-table th:first-child {{ text-align:left; }}
 
-    /* ── INPUTS ─────────────────────────────────────── */
     [data-testid="stNumberInput"] > div > div,
     [data-testid="stTextInput"] > div > div {{
         background:#FAFAF7 !important;
@@ -757,30 +720,25 @@ css_block = f"""<style>
         border-radius:0 !important;
     }}
 
-    /* ── FILE UPLOADER ──────────────────────────────── */
     [data-testid="stFileUploader"] {{
         background:var(--paper-2) !important;
         border:1px dashed var(--rule-strong) !important;
         border-radius:0 !important;
     }}
 
-    /* ── EXPANDERS ──────────────────────────────────── */
     [data-testid="stExpander"] {{
         background:#FAFAF7 !important;
         border:1px solid var(--rule-strong) !important;
         border-radius:0 !important;
     }}
 
-    /* ── DIVIDERS ───────────────────────────────────── */
     hr {{ border-color:var(--rule-strong) !important; }}
 
-    /* ── SCROLLBAR ──────────────────────────────────── */
     ::-webkit-scrollbar {{ width:3px; height:3px; }}
     ::-webkit-scrollbar-track {{ background:var(--paper-2); }}
     ::-webkit-scrollbar-thumb {{ background:var(--ink-5); }}
     ::-webkit-scrollbar-thumb:hover {{ background:var(--ink-3); }}
 
-    /* ── ANIMATIONS ─────────────────────────────────── */
     @keyframes pulseGlow {{
         0%,100% {{ opacity:1; }}
         50% {{ opacity:0.7; }}
@@ -797,28 +755,73 @@ css_block = f"""<style>
     .main .block-container > div > div:nth-child(4) {{ animation:fadeUp 0.35s ease 0.20s both; }}
     .main .block-container > div > div:nth-child(5) {{ animation:fadeUp 0.35s ease 0.25s both; }}
 
-    /* ── DATA EDITOR (portfolio table) ─────────────── */
     [data-testid="stDataEditor"] {{
         border:1px solid var(--rule-strong) !important;
         border-radius:0 !important;
     }}
 
-    /* ── DATA TABLE (stDataFrame) ───────────────────── */
     [data-testid="stDataFrame"] {{
         border:1px solid var(--rule-strong) !important;
         border-radius:0 !important;
     }}
 
-    /* ── MINT TABLE BODY TEXT ───────────────────────── */
     .mint-table td {{ color:{tc_body} !important; }}
     .mint-table th {{ color:{tc_label} !important; }}
-</style>"""
 
+    /* ── PORTFOLIO SPECIFIC ─────────────────────────── */
+    .pf-kpi-card {{
+        background: #FAFAF7;
+        border: 1px solid rgba(0,0,0,0.11);
+        padding: 16px 20px 14px;
+        position: relative;
+        overflow: hidden;
+        transition: box-shadow 0.2s ease, transform 0.15s ease;
+    }}
+    .pf-kpi-card:hover {{
+        box-shadow: 0 6px 28px rgba(0,0,0,0.08);
+        transform: translateY(-1px);
+    }}
+    .pf-kpi-card::after {{
+        content: '';
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 2px;
+        background: rgba(0,0,0,0.06);
+    }}
+    .pf-section-label {{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 20px 0 12px;
+    }}
+    .pf-section-label-text {{
+        font-family: 'DM Mono', monospace;
+        font-size: 0.6em;
+        font-weight: 500;
+        color: {tc_label};
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }}
+    .pf-section-label-line {{
+        flex: 1;
+        height: 1px;
+        background: rgba(0,0,0,0.10);
+    }}
+    .pf-order-row {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+    }}
+    .pf-order-row:last-child {{ border-bottom: none; }}
+</style>"""
 
 st.markdown(apply_theme(css_block), unsafe_allow_html=True)
 
 # ==========================================
-# 4. 사이드바 UI  —  Dark Glass Terminal
+# 4. 사이드바 UI
 # ==========================================
 sidebar_top = st.sidebar.container()
 sidebar_top.markdown(apply_theme(f"""
@@ -846,7 +849,6 @@ with col2:
         st.session_state.main_color = new_color
         st.rerun()
 
-# ── 배경색 설정 ────────────────────────────────────────
 st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 15px 4px; border-top:1px solid rgba(0,0,0,0.08);">배경 색상</div>""", unsafe_allow_html=True)
 _bg_c1, _bg_c2, _bg_c3 = st.sidebar.columns([0.1, 1, 0.1])
 with _bg_c2:
@@ -855,8 +857,6 @@ with _bg_c2:
         st.session_state.bg_color = _new_bg
         st.rerun()
 
-
-# ── 글씨 색상 개별 설정 (접기/펼치기) ───────────────
 with st.sidebar.expander("🎨  글씨 색상 설정", expanded=False):
     _tc_defs = [
         ("heading",  "헤딩  (제목·큰 숫자)",    "tc_heading",  "cp_tc_heading"),
@@ -902,7 +902,6 @@ st.sidebar.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── 사이드바 포트폴리오 백업/복구 ──────────────────
 st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 20px 6px; border-top:1px solid rgba(0,0,0,0.08);">Portfolio Data</div>""", unsafe_allow_html=True)
 
 import json as _json2
@@ -935,10 +934,8 @@ if _sidebar_upload is not None:
         st.sidebar.error("❌ 파일 형식 오류")
 
 # ==========================================
-# 5. 메인 헤더  —  Editorial Bento Style
+# 5. 메인 헤더
 # ==========================================
-
-# ① 풀 너비 상단 인트로 스트립 (타이틀 + 컨트롤 인라인)
 _qqq_chg  = (last_row['QQQ'] / last_row['QQQ_MA200'] - 1) * 100
 _vix_now  = last_row['^VIX']
 _smh_chg  = last_row['SMH_1M_Ret'] * 100
@@ -1024,7 +1021,6 @@ if page == "📊 Dashboard":
     soxl_strat = "3× Leverage Active" if smh_cond else "2× Defense Mode"
     soxl_color = main_color if smh_cond else "#9494A0"
 
-    # ── ① 상단 Live Feed 티커 바 ───────────────────────────────
     _qqq_vs  = (last_row['QQQ']  / last_row['QQQ_MA200']  - 1) * 100
     _tqqq_vs = (last_row['TQQQ'] / last_row['TQQQ_MA200'] - 1) * 100
     _smh_vs  = (last_row['SMH']  / last_row['SMH_MA50']   - 1) * 100
@@ -1069,14 +1065,12 @@ if page == "📊 Dashboard":
         unsafe_allow_html=True
     )
 
-    # ── ② 메인 레이아웃: 좌(인스트루먼트 패널) + 우(차트 워크벤치) ─
     left_col, right_col = st.columns([1, 2.4])
 
     with left_col:
         r_colors = {1: main_color, 2: "#D97706", 3: "#DC2626", 4: "#7C3AED"}
         regime_accent = r_colors[curr_regime]
 
-        # 레짐 카드 — 워터마크 숫자 포함
         cond_rows = (
             _lg_row('VIX < 40',     f'{vix_close:.2f}',  vix_close<=40)       +
             _lg_row('QQQ > 200MA',  f'${qqq_close:.2f}', qqq_close>=qqq_ma200) +
@@ -1107,7 +1101,6 @@ if page == "📊 Dashboard":
             f'</div>'
         ), unsafe_allow_html=True)
 
-        # SOXL 게이트 카드
         soxl_rows = (
             _lg_row('SMH > 50MA',       f'${smh_close:.2f}', smh_c1) +
             _lg_row('Momentum 1M >10%', f'{smh_1m*100:.1f}%', smh_c2) +
@@ -1128,7 +1121,6 @@ if page == "📊 Dashboard":
             f'</div>'
         ), unsafe_allow_html=True)
 
-        # 타겟 웨이트 — 프로그레스 바 형식
         weight_bar_rows = ""
         for k, v in target_weights.items():
             if v <= 0:
@@ -1161,7 +1153,6 @@ if page == "📊 Dashboard":
         ), unsafe_allow_html=True)
 
     with right_col:
-        # 레짐 탭 바 (우측 상단)
         r_labels = {1:"R1  BULL", 2:"R2  CORR", 3:"R3  BEAR", 4:"R4  PANIC"}
         r_clrs   = {1: main_color, 2:"#D97706", 3:"#DC2626", 4:"#7C3AED"}
         tabs_html = ""
@@ -1185,7 +1176,6 @@ if page == "📊 Dashboard":
             unsafe_allow_html=True
         )
 
-        # 차트 2개 세로 스택 (fill 포함)
         df_recent = df.iloc[-500:]
 
         fig_qqq = go.Figure()
@@ -1236,9 +1226,6 @@ if page == "📊 Dashboard":
         with st.container(border=True):
             st.plotly_chart(fig_tqqq, use_container_width=True)
 
-    # ══════════════════════════════════════════════════════════════
-    # ── 하단 추가 섹션 ──────────────────────────────────────────
-    # ══════════════════════════════════════════════════════════════
     with st.spinner("글로벌 마켓 데이터 로딩..."):
         _gm_data, _gm_tickers, _asset_tickers, _leader_tickers = fetch_global_markets()
 
@@ -1255,10 +1242,8 @@ if page == "📊 Dashboard":
     def _chg_color(v): return "#059669" if v >= 0 else "#DC2626"
     def _chg_arrow(v): return "▲" if v >= 0 else "▼"
 
-    # ── ① 나스닥 100 히트맵 (Treemap) ──────────────────────────
     _sec_label("① Nasdaq 100  ·  Heatmap")
 
-    # 나스닥 100 주요 구성종목 (섹터별 그룹)
     _qqq_stocks = {
         'AAPL': ('Technology', 'Apple'),
         'MSFT': ('Technology', 'Microsoft'),
@@ -1291,7 +1276,6 @@ if page == "📊 Dashboard":
         'PEP':  ('Staples', 'PepsiCo'),
     }
 
-    # 종목 데이터 수집 (이미 _gm_data에 없으면 fetch)
     _qqq_tlist = list(_qqq_stocks.keys())
     _qqq_missing = [t for t in _qqq_tlist if t not in _gm_data]
     if _qqq_missing:
@@ -1314,7 +1298,6 @@ if page == "📊 Dashboard":
         except:
             pass
 
-    # Treemap 데이터 준비
     _tm_labels, _tm_parents, _tm_values, _tm_colors, _tm_text = [], [], [], [], []
     _tm_labels.append("Nasdaq 100"); _tm_parents.append(""); _tm_values.append(0); _tm_colors.append(0); _tm_text.append("")
 
@@ -1331,7 +1314,7 @@ if page == "📊 Dashboard":
         _px  = _d.get('price', 0.0)
         _tm_labels.append(f"{_t}")
         _tm_parents.append(_sec)
-        _tm_values.append(max(abs(_px) * 0.1, 1))   # 크기는 가격 기반
+        _tm_values.append(max(abs(_px) * 0.1, 1))
         _tm_colors.append(_chg)
         _tm_text.append(f"{_name}<br>{_px:,.1f}<br>{_chg:+.2f}%")
 
@@ -1375,7 +1358,6 @@ if page == "📊 Dashboard":
     with st.container(border=True):
         st.plotly_chart(_tm_fig, use_container_width=True)
 
-    # ── ② 금리 / 원자재 / 크립토 ────────────────────────────────
     _sec_label("② Rates  /  Commodities  /  Crypto")
     _asset_icons = {'^TNX':'📈','GLD':'🥇','SLV':'⚪','USO':'🛢','BTC-USD':'₿','ETH-USD':'Ξ','UUP':'💵'}
     _asset_cols = st.columns(7)
@@ -1398,7 +1380,6 @@ if page == "📊 Dashboard":
                 f'color:{_clr};font-weight:600;">{_chg_arrow(_chg)} {_chg:+.2f}%</div>'
                 f'</div>', unsafe_allow_html=True)
 
-    # ── ③ 시장 주도주 ────────────────────────────────────────────
     _sec_label("③ Market Leaders  ·  Magnificent 7  +  Semis")
     _ld_sorted = sorted(_leader_tickers.items(),
                         key=lambda x: _gm_data.get(x[0],{}).get('chg',0), reverse=True)
@@ -1427,7 +1408,6 @@ if page == "📊 Dashboard":
                 f'color:{_clr};font-weight:600;">{_chg_arrow(_chg)} {_chg:+.2f}%</div>'
                 f'</div>', unsafe_allow_html=True)
 
-    # ── ④ 주도 섹터 스캐너 ──────────────────────────────────────
     _sec_label("④ Sector Scanner  ·  1-Month Performance")
     _sec_data_full = [
         {'t': s, 'name': {'XLK':'Technology','XLV':'Health Care','XLF':'Financials',
@@ -1439,7 +1419,6 @@ if page == "📊 Dashboard":
     ]
     _sec_sorted_full = sorted(_sec_data_full, key=lambda x: x['ret1m'], reverse=True)
 
-    # 섹터 바 차트
     _sec_fig = go.Figure()
     _sec_names_plot  = [x['name'] for x in _sec_sorted_full]
     _sec_rets_plot   = [x['ret1m'] for x in _sec_sorted_full]
@@ -1461,14 +1440,12 @@ if page == "📊 Dashboard":
     with st.container(border=True):
         st.plotly_chart(_sec_fig, use_container_width=True)
 
-    # ── ⑤ 미국 경제 캘린더 ──────────────────────────────────────
     _sec_label("⑤ US Economic Calendar  ·  Key Events This Week")
     _cal_l, _cal_r = st.columns([1.4, 1])
     with _cal_l:
-        # 주요 경제지표 일정 (정기 이벤트 기반 — 실제 날짜는 매달 고정 스케줄)
         from datetime import date
         _today    = date.today()
-        _weekday  = _today.weekday()   # Mon=0 ... Sun=6
+        _weekday  = _today.weekday()
         _mon      = _today - timedelta(days=_weekday)
         def _wd(offset):
             d = _mon + timedelta(days=offset)
@@ -1514,7 +1491,6 @@ if page == "📊 Dashboard":
             unsafe_allow_html=True
         )
     with _cal_r:
-        # 이번 주 요약 카드
         _high_events = [e for e in _cal_events if e[3] in ("높음", "매우높음")]
         st.markdown(
             f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
@@ -1572,43 +1548,43 @@ elif page == "💼 Portfolio":
     C_GREEN = main_color
     C_RED   = "#DC2626"
 
+    r_accent_map = {1: main_color, 2: "#D97706", 3: "#DC2626", 4: "#7C3AED"}
+    regime_accent_pf = r_accent_map[curr_regime]
+
     # ══════════════════════════════════════════════════════════
-    # ROW 1 — 상단 스탯 바
+    # ROW 1 — 5-KPI 카드 그리드
     # ══════════════════════════════════════════════════════════
-    def _stat_chip(label, value, sub="", sub_color="#9494A0"):
-        return (
-            f'<div style="padding:0 22px;border-right:1px solid rgba(0,0,0,0.08);">' 
-            f'<div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;' 
-            f'letter-spacing:0.15em;text-transform:uppercase;margin-bottom:2px;">{label}</div>' 
-            f'<div style="font-family:DM Mono,monospace;font-size:1.05em;font-weight:400;' 
-            f'color:#111118;font-variant-numeric:tabular-nums;">{value}</div>' 
-            f'<div style="font-family:DM Mono,monospace;font-size:0.65em;color:{sub_color};">{sub}</div>' 
-            f'</div>'
+    kpi_c1, kpi_c2, kpi_c3, kpi_c4, kpi_c5 = st.columns(5)
+
+    def _kpi_card(col, top_color, eyebrow, main_val, sub_val, sub_color="#6B6B7A", watermark=""):
+        wm_html = f'<div style="position:absolute;right:12px;bottom:8px;font-family:Plus Jakarta Sans,sans-serif;font-size:2.8em;font-weight:800;color:rgba(0,0,0,0.04);line-height:1;pointer-events:none;user-select:none;">{watermark}</div>' if watermark else ''
+        col.markdown(
+            f'<div class="pf-kpi-card" style="border-top:3px solid {top_color};min-height:96px;">'
+            f'{wm_html}'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;'
+            f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:6px;">{eyebrow}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:1.18em;font-weight:500;'
+            f'color:#111118;font-variant-numeric:tabular-nums;line-height:1.2;margin-bottom:5px;">{main_val}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.7em;color:{sub_color};'
+            f'font-variant-numeric:tabular-nums;">{sub_val}</div>'
+            f'</div>',
+            unsafe_allow_html=True
         )
 
-    chips = (
-        _stat_chip("Total NAV",  f"${total_val_usd:,.2f}",   f"₩{total_val_krw:,.0f}") +
-        _stat_chip("USD / KRW",  f"₩{cur_fx:,.0f}",          "환율") +
-        _stat_chip("P & L",      f"{pnl_pct:+.2f}%",         f"{pnl_sign} ${pnl_usd:,.0f}", pnl_color) +
-        _stat_chip("Regime",     f"R{curr_regime}",           regime_info[curr_regime][1]) +
-        _stat_chip("투자원금",   f"${invested_cost:,.0f}",    "원금 합계")
-    )
-    st.markdown(
-        f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);' 
-        f'border-left:3px solid #111118;padding:10px 0 10px 6px;' 
-        f'display:flex;align-items:center;overflow-x:auto;margin-bottom:12px;">' 
-        f'<span style="font-family:DM Mono,monospace;font-size:0.55em;color:#9494A0;' 
-        f'letter-spacing:0.2em;text-transform:uppercase;padding:0 16px;' 
-        f'border-right:1px solid rgba(0,0,0,0.08);white-space:nowrap;">Portfolio</span>' 
-        f'{chips}</div>',
-        unsafe_allow_html=True
-    )
+    _kpi_card(kpi_c1, main_color,        "Total NAV",  f"${total_val_usd:,.2f}",   f"₩{total_val_krw:,.0f}")
+    _kpi_card(kpi_c2, "#9494A0",         "USD / KRW",  f"₩{cur_fx:,.0f}",          "환율 실시간")
+    _kpi_card(kpi_c3, pnl_color,         "P & L",      f"{pnl_pct:+.2f}%",         f"{pnl_sign} ${pnl_usd:,.0f}", pnl_color)
+    _kpi_card(kpi_c4, regime_accent_pf,  "Regime",     f"R{curr_regime}",           regime_info[curr_regime][1], regime_accent_pf, str(curr_regime))
+    _kpi_card(kpi_c5, "#4A4A57",         "투자 원금",  f"${invested_cost:,.0f}",    "취득원가 합계")
+
+    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
     # ══════════════════════════════════════════════════════════
-    # ROW 2 — Goal Tracker
+    # ROW 2 — Goal Tracker (전체 너비)
     # ══════════════════════════════════════════════════════════
-    gc_left, gc_right = st.columns([1, 3])
-    with gc_left:
+    _goal_col_a, _goal_col_b = st.columns([1, 3])
+
+    with _goal_col_a:
         new_goal = st.number_input(
             "🎯 목표 금액 (USD)", min_value=1000.0, max_value=100_000_000.0,
             value=st.session_state.goal_usd, step=1000.0, format="%.0f", key="goal_input"
@@ -1617,85 +1593,118 @@ elif page == "💼 Portfolio":
             st.session_state.goal_usd = new_goal
             st.rerun()
 
-    with gc_right:
+    with _goal_col_b:
         _goal    = st.session_state.goal_usd
         _pct_raw = (total_val_usd / _goal * 100) if _goal > 0 else 0.0
         _pct     = min(_pct_raw, 100.0)
         _over    = _pct_raw > 100.0
         _remain  = max(_goal - total_val_usd, 0.0)
+
         if _over:         _bc, _badge = "#059669", "🏆 목표 달성!"
         elif _pct >= 75:  _bc, _badge = main_color, "⚡ 75% 이상"
-        elif _pct >= 50:  _bc, _badge = "#D97706", "📈 순항 중"
-        else:             _bc, _badge = "#9494A0", "🌱 시작 단계"
+        elif _pct >= 50:  _bc, _badge = "#D97706",  "📈 순항 중"
+        else:             _bc, _badge = "#9494A0",  "🌱 시작 단계"
 
+        _r_bc, _g_bc, _b_bc = hex_to_rgb(_bc)
+
+        # 마일스톤 마커
         _markers_html = "".join([
-            f'<div style="position:absolute;left:{m}%;top:0;bottom:0;width:1px;background:rgba(0,0,0,0.13);">' 
-            f'<span style="position:absolute;top:-17px;left:50%;transform:translateX(-50%);' 
-            f'font-family:DM Mono,monospace;font-size:0.56em;color:#AAAAAA;white-space:nowrap;">{m}%</span>' 
+            f'<div style="position:absolute;left:{m}%;top:0;bottom:0;width:1px;background:rgba(0,0,0,0.12);">'
+            f'<span style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);"'
+            f' style="font-family:DM Mono,monospace;font-size:0.54em;color:#BBBBBB;white-space:nowrap;">{m}%</span>'
             f'</div>'
             for m in [25, 50, 75, 100]
         ])
         _pin_x = min(_pct, 99.0)
         _pin_html = (
-            f'<div style="position:absolute;left:{_pin_x}%;top:-3px;bottom:-3px;' 
-            f'width:2px;background:{_bc};transform:translateX(-50%);' 
-            f'box-shadow:0 0 5px {_bc};">' 
-            f'<div style="position:absolute;top:-6px;left:50%;transform:translateX(-50%);' 
-            f'width:9px;height:9px;border-radius:50%;background:{_bc};box-shadow:0 0 6px {_bc};"></div>' 
-            f'</div>'
-        )
-        st.markdown(
-            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);' 
-            f'border-top:3px solid {_bc};padding:14px 20px 12px;margin-bottom:12px;">' 
-            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' 
-            f'<div style="display:flex;align-items:center;gap:10px;">' 
-            f'<span style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;' 
-            f'letter-spacing:0.16em;text-transform:uppercase;">Goal Tracker</span>' 
-            f'<span style="background:{_bc}18;border:1px solid {_bc}55;color:{_bc};' 
-            f'font-family:DM Mono,monospace;font-size:0.63em;padding:2px 9px;">{_badge}</span>' 
-            f'</div>' 
-            f'<div style="text-align:right;">' 
-            f'<span style="font-family:DM Mono,monospace;font-size:1.75em;font-weight:400;' 
-            f'color:{_bc};font-variant-numeric:tabular-nums;letter-spacing:-0.5px;">{_pct_raw:.1f}%</span>' 
-            f'<span style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;margin-left:8px;">' 
-            f'{"초과달성!" if _over else f"잔여 ${_remain:,.0f}"}</span>' 
-            f'</div></div>' 
-            f'<div style="position:relative;padding-top:20px;">' 
-            f'{_markers_html}' 
-            f'<div style="position:relative;height:8px;background:rgba(0,0,0,0.07);overflow:visible;">' 
-            f'<div style="height:8px;width:{_pct:.2f}%;' 
-            f'background:linear-gradient(90deg,{_bc}66,{_bc});"></div>' 
-            f'{_pin_html}</div></div>' 
-            f'<div style="display:flex;justify-content:space-between;margin-top:10px;">' 
-            f'<div><div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;' 
-            f'text-transform:uppercase;letter-spacing:0.1em;">Current NAV</div>' 
-            f'<div style="font-family:DM Mono,monospace;font-size:0.95em;color:#111118;' 
-            f'font-variant-numeric:tabular-nums;">${total_val_usd:,.2f}</div></div>' 
-            f'<div style="text-align:center;"><div style="font-family:DM Mono,monospace;font-size:0.58em;' 
-            f'color:#9494A0;text-transform:uppercase;letter-spacing:0.1em;">Goal (USD)</div>' 
-            f'<div style="font-family:DM Mono,monospace;font-size:0.95em;color:#111118;' 
-            f'font-variant-numeric:tabular-nums;">${_goal:,.0f}</div></div>' 
-            f'<div style="text-align:right;"><div style="font-family:DM Mono,monospace;font-size:0.58em;' 
-            f'color:#9494A0;text-transform:uppercase;letter-spacing:0.1em;">Goal (KRW)</div>' 
-            f'<div style="font-family:DM Mono,monospace;font-size:0.95em;color:#111118;' 
-            f'font-variant-numeric:tabular-nums;">₩{_goal*cur_fx:,.0f}</div></div></div></div>',
-            unsafe_allow_html=True
+            f'<div style="position:absolute;left:{_pin_x}%;top:-4px;bottom:-4px;'
+            f'width:2px;background:{_bc};transform:translateX(-50%);">'
+            f'<div style="position:absolute;top:-7px;left:50%;transform:translateX(-50%);">'
+            f'<div style="width:10px;height:10px;border-radius:50%;background:{_bc};">'
+            f'</div></div></div>'
         )
 
+        st.markdown(apply_theme(
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);'
+            f'border-top:3px solid {_bc};padding:16px 22px 14px;">'
+
+            # 상단 헤더행
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">'
+            f'<div style="display:flex;align-items:center;gap:10px;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;'
+            f'letter-spacing:0.18em;text-transform:uppercase;">Goal Tracker</span>'
+            f'<span style="background:rgba({_r_bc},{_g_bc},{_b_bc},0.10);border:1px solid rgba({_r_bc},{_g_bc},{_b_bc},0.35);'
+            f'color:{_bc};font-family:DM Mono,monospace;font-size:0.62em;padding:2px 10px;'
+            f'letter-spacing:0.06em;">{_badge}</span>'
+            f'</div>'
+            f'<div style="display:flex;align-items:baseline;gap:8px;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:2em;font-weight:400;'
+            f'color:{_bc};font-variant-numeric:tabular-nums;letter-spacing:-1px;line-height:1;">'
+            f'{_pct_raw:.1f}%</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.7em;color:#9494A0;">'
+            f'{"초과달성!" if _over else f"잔여 ${_remain:,.0f}"}</span>'
+            f'</div>'
+            f'</div>'
+
+            # 프로그레스 바
+            f'<div style="position:relative;padding-top:22px;margin-bottom:14px;">'
+            f'<div style="position:absolute;left:0;right:0;top:4px;">'
+            + "".join([
+                f'<div style="position:absolute;left:{m}%;top:0;bottom:-22px;width:1px;background:rgba(0,0,0,0.10);">'
+                f'<span style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);'
+                f'font-family:DM Mono,monospace;font-size:0.52em;color:#BBBBBB;white-space:nowrap;">{m}%</span>'
+                f'</div>'
+                for m in [25, 50, 75, 100]
+            ])
+            + f'</div>'
+            f'<div style="position:relative;height:10px;background:rgba(0,0,0,0.07);">'
+            f'<div style="height:10px;width:{_pct:.2f}%;'
+            f'background:linear-gradient(90deg,rgba({_r_bc},{_g_bc},{_b_bc},0.5),{_bc});'
+            f'transition:width 0.6s ease;"></div>'
+            f'{_pin_html}'
+            f'</div>'
+            f'</div>'
+
+            # 하단 3개 수치
+            f'<div style="display:flex;justify-content:space-between;padding-top:6px;">'
+            f'<div><div style="font-family:DM Mono,monospace;font-size:0.56em;color:#9494A0;'
+            f'text-transform:uppercase;letter-spacing:0.12em;margin-bottom:2px;">Current NAV</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.92em;color:#111118;'
+            f'font-variant-numeric:tabular-nums;">${total_val_usd:,.2f}</div></div>'
+            f'<div style="text-align:center;">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.56em;color:#9494A0;'
+            f'text-transform:uppercase;letter-spacing:0.12em;margin-bottom:2px;">Goal (USD)</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.92em;color:#111118;'
+            f'font-variant-numeric:tabular-nums;">${_goal:,.0f}</div></div>'
+            f'<div style="text-align:right;">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.56em;color:#9494A0;'
+            f'text-transform:uppercase;letter-spacing:0.12em;margin-bottom:2px;">Goal (KRW)</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.92em;color:#111118;'
+            f'font-variant-numeric:tabular-nums;">₩{_goal*cur_fx:,.0f}</div></div>'
+            f'</div>'
+            f'</div>'
+        ), unsafe_allow_html=True)
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
     # ══════════════════════════════════════════════════════════
-    # ROW 3+4 — 메인 레이아웃: 좌(입력) + 우(시각화)
+    # ROW 3 — 메인 레이아웃: 좌(입력+주문) + 우(시각화+매트릭스)
     # ══════════════════════════════════════════════════════════
     col_l, col_r = st.columns([1.1, 2.5])
 
-    # ── 좌: Position Input ───────────────────────────────────
+    # ── 좌: Position Input + Quick Orders ───────────────────
     with col_l:
-        st.markdown(
-            '<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;' 
-            'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;' 
-            'padding-bottom:5px;border-bottom:2px solid #111118;margin-bottom:10px;">' 
-            'Position Input</div>',
-            unsafe_allow_html=True
-        )
+
+        # ── Section Label: Position Input ──────────────────
+        st.markdown(apply_theme(
+            f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
+            f'<div style="width:3px;height:16px;background:#111118;flex-shrink:0;"></div>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:500;'
+            f'color:#111118;letter-spacing:0.2em;text-transform:uppercase;">Position Input</span>'
+            f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.10);"></div>'
+            f'</div>'
+        ), unsafe_allow_html=True)
+
         _edata = []
         for asset in ASSET_LIST:
             v = st.session_state.portfolio.get(asset, {})
@@ -1726,15 +1735,18 @@ elif page == "💼 Portfolio":
             save_portfolio_to_disk()
             st.rerun()
 
-        # Quick Orders — 입력 바로 아래
+        # ── Section Label: Quick Orders ─────────────────────
         if total_val_usd > 0:
-            st.markdown(
-                '<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;' 
-                'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;' 
-                'padding-bottom:5px;border-bottom:2px solid #111118;margin:14px 0 10px;">' 
-                'Quick Orders</div>',
-                unsafe_allow_html=True
-            )
+            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+            st.markdown(apply_theme(
+                f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
+                f'<div style="width:3px;height:16px;background:#111118;flex-shrink:0;"></div>'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:500;'
+                f'color:#111118;letter-spacing:0.2em;text-transform:uppercase;">Quick Orders</span>'
+                f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.10);"></div>'
+                f'</div>'
+            ), unsafe_allow_html=True)
+
             _sells, _buys = [], []
             for asset in ASSET_LIST:
                 _cp = current_prices[asset] if current_prices[asset] > 0 else 1.0
@@ -1748,45 +1760,60 @@ elif page == "💼 Portfolio":
                 elif asset == 'CASH' and _dv > 1.0:
                     _buys.append(("CASH", f"${_dv:,.0f} 확보"))
 
-            def _qo_card(title, items, accent):
+            _qo_cols = st.columns(2)
+
+            def _qo_panel(col, title, items, accent, icon):
                 _rows = "".join([
-                    f'<div style="display:flex;justify-content:space-between;' 
-                    f'padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.05);">' 
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.8em;' 
-                    f'font-weight:600;color:#111118;">{a}</span>' 
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.78em;' 
-                    f'color:{accent};font-variant-numeric:tabular-nums;">{v}</span></div>'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                    f'padding:7px 0;border-bottom:1px solid rgba(0,0,0,0.05);">'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.78em;'
+                    f'font-weight:600;color:#111118;letter-spacing:0.02em;">{a}</span>'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.76em;'
+                    f'color:{accent};font-variant-numeric:tabular-nums;font-weight:500;">{v}</span>'
+                    f'</div>'
                     for a, v in items
-                ]) or '<div style="font-family:DM Mono,monospace;font-size:0.74em;color:#9494A0;padding:6px 0;">— 해당 없음</div>'
-                st.markdown(
-                    f'<div style="border:1px solid rgba(0,0,0,0.09);border-top:2px solid {accent};' 
-                    f'padding:11px 13px;margin-bottom:8px;">' 
-                    f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.82em;' 
-                    f'font-weight:700;color:{accent};margin-bottom:7px;">{title}</div>' 
+                ]) or (
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.72em;'
+                    f'color:#BBBBBB;padding:8px 0;text-align:center;">— 해당 없음</div>'
+                )
+                col.markdown(
+                    f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
+                    f'border-top:2px solid {accent};padding:12px 14px;">'
+                    f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">'
+                    f'<span style="font-size:0.85em;">{icon}</span>'
+                    f'<span style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.8em;'
+                    f'font-weight:700;color:{accent};letter-spacing:0.02em;">{title}</span>'
+                    f'</div>'
                     f'{_rows}</div>',
                     unsafe_allow_html=True
                 )
-            _qo_card("🔴  SELL", _sells, "#DC2626")
-            _qo_card("🟢  BUY",  _buys,  "#059669")
 
-    # ── 우: Allocation + Rebalancing ─────────────────────────
+            with _qo_cols[0]:
+                _qo_panel(_qo_cols[0], "SELL", _sells, "#DC2626", "🔴")
+            with _qo_cols[1]:
+                _qo_panel(_qo_cols[1], "BUY",  _buys,  "#059669", "🟢")
+
+    # ── 우: Allocation Visual + Rebalancing Matrix ───────────
     with col_r:
+
+        # ── Section Label: Allocation Visual ───────────────
+        st.markdown(apply_theme(
+            f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
+            f'<div style="width:3px;height:16px;background:#111118;flex-shrink:0;"></div>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:500;'
+            f'color:#111118;letter-spacing:0.2em;text-transform:uppercase;">Allocation  ·  Visual</span>'
+            f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.10);"></div>'
+            f'</div>'
+        ), unsafe_allow_html=True)
+
         _pie_common = dict(
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             font=dict(family="DM Mono", color=t_color),
-            showlegend=False, margin=dict(l=8, r=8, t=30, b=8)
+            showlegend=False, margin=dict(l=8, r=8, t=36, b=8)
         )
         _pie_colors = [line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0',
                        '#059669','#047857','#065F46','#D1FAE5']
 
-        # ── Allocation Visual (파이 2 + 델타 바) ─────────────
-        st.markdown(
-            '<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;' 
-            'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;' 
-            'padding-bottom:5px;border-bottom:2px solid #111118;margin-bottom:10px;">' 
-            'Allocation  ·  Visual</div>',
-            unsafe_allow_html=True
-        )
         _ca, _cb, _cc = st.columns([1, 1, 1.1])
 
         _lcur = [a for a in ASSET_LIST if curr_vals[a] > 0]
@@ -1797,7 +1824,10 @@ elif page == "💼 Portfolio":
                 textinfo='label+percent', textfont=dict(size=10),
                 marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))
             ))
-            _fig_cur.update_layout(title=dict(text="Current", font=dict(family="DM Mono", size=11, color=t_color)), **_pie_common)
+            _fig_cur.update_layout(
+                title=dict(text="Current", font=dict(family="DM Mono", size=11, color=t_color)),
+                **_pie_common
+            )
             with _ca:
                 with st.container(border=True):
                     st.plotly_chart(_fig_cur, use_container_width=True)
@@ -1809,7 +1839,10 @@ elif page == "💼 Portfolio":
             textinfo='label+percent', textfont=dict(size=10),
             marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))
         ))
-        _fig_tgt.update_layout(title=dict(text=f"Target  R{curr_regime}", font=dict(family="DM Mono", size=11, color=t_color)), **_pie_common)
+        _fig_tgt.update_layout(
+            title=dict(text=f"Target  R{curr_regime}", font=dict(family="DM Mono", size=11, color=t_color)),
+            **_pie_common
+        )
         with _cb:
             with st.container(border=True):
                 st.plotly_chart(_fig_tgt, use_container_width=True)
@@ -1827,7 +1860,7 @@ elif page == "💼 Portfolio":
                 title=dict(text="Δ Rebalancing", font=dict(family="DM Mono", size=11, color=t_color)),
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                 font=dict(color=t_color, family="DM Mono", size=9),
-                showlegend=False, margin=dict(t=30, b=8, l=8, r=8)
+                showlegend=False, margin=dict(t=36, b=8, l=8, r=8)
             )
             _fig_bar.update_xaxes(**_ax_r)
             _fig_bar.update_yaxes(**_ax_r)
@@ -1835,18 +1868,37 @@ elif page == "💼 Portfolio":
                 with st.container(border=True):
                     st.plotly_chart(_fig_bar, use_container_width=True)
 
-        # ── Rebalancing Matrix ────────────────────────────────
-        st.markdown(
-            '<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;' 
-            'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;' 
-            'padding-bottom:5px;border-bottom:2px solid #111118;margin:12px 0 10px;">' 
-            'Rebalancing  Matrix</div>',
-            unsafe_allow_html=True
-        )
+        # ── Section Label: Rebalancing Matrix ──────────────
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        st.markdown(apply_theme(
+            f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
+            f'<div style="width:3px;height:16px;background:#111118;flex-shrink:0;"></div>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:500;'
+            f'color:#111118;letter-spacing:0.2em;text-transform:uppercase;">Rebalancing  Matrix</span>'
+            f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.10);"></div>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;'
+            f'letter-spacing:0.08em;">R{curr_regime}  ·  {regime_info[curr_regime][1]}</span>'
+            f'</div>'
+        ), unsafe_allow_html=True)
+
         if total_val_usd > 0:
-            _rhtml = '<div style="overflow-x:auto;"><table class="mint-table"><thead><tr>'
-            _rhtml += '<th>Asset</th><th>Avg→Cur</th><th>Ret%</th><th>Value($)</th><th>Tgt%</th><th>Tgt($)</th><th>Δ($)</th><th style="text-align:center;">Action</th>'
-            _rhtml += '</tr></thead><tbody>'
+            _rhtml = (
+                '<div style="overflow-x:auto;">'
+                '<table class="mint-table">'
+                '<thead>'
+                '<tr>'
+                '<th style="text-align:left;padding-left:16px;">Asset</th>'
+                '<th>Avg → Cur</th>'
+                '<th>Ret %</th>'
+                '<th>Value ($)</th>'
+                '<th>Tgt %</th>'
+                '<th>Tgt ($)</th>'
+                '<th>Δ ($)</th>'
+                '<th style="text-align:center;">Action</th>'
+                '</tr>'
+                '</thead>'
+                '<tbody>'
+            )
             for asset in ASSET_LIST:
                 _shs  = st.session_state.portfolio[asset]['shares']
                 _avgp = st.session_state.portfolio[asset]['avg_price']
@@ -1855,33 +1907,60 @@ elif page == "💼 Portfolio":
                 _tgtw = target_weights.get(asset, 0.0)
                 _tgtv = total_val_usd * _tgtw
                 _diff = diff_vals[asset]
+
                 if asset == 'CASH':
                     _avgstr, _ret = "—", 0.0
                 else:
-                    _avgstr = f"${_avgp:.1f}→${_curp:.1f}"
+                    _avgstr = f"${_avgp:.1f} → ${_curp:.1f}"
                     _ret    = (_curp / _avgp - 1) * 100 if _avgp > 0 else 0.0
+
                 _retc   = C_GREEN if _ret >= 0 else C_RED
                 _retstr = f"{_ret:+.1f}%" if asset != 'CASH' else "—"
+
                 if abs(_diff) < _curp * 0.05 and asset != 'CASH':
-                    _act, _dstr = "<span style='color:#9494A0;'>HOLD</span>", "—"
+                    _act  = "<span style='font-family:DM Mono,monospace;font-size:0.78em;color:#9494A0;letter-spacing:0.08em;'>HOLD</span>"
+                    _dstr = "<span style='color:#9494A0;'>—</span>"
                 elif abs(_diff) < 1.0 and asset == 'CASH':
-                    _act, _dstr = "<span style='color:#9494A0;'>HOLD</span>", "—"
+                    _act  = "<span style='font-family:DM Mono,monospace;font-size:0.78em;color:#9494A0;letter-spacing:0.08em;'>HOLD</span>"
+                    _dstr = "<span style='color:#9494A0;'>—</span>"
                 elif _diff > 0:
-                    _act  = "<span style='color:#059669;font-weight:600;background:rgba(5,150,105,0.1);padding:2px 8px;border-left:2px solid #059669;'>BUY</span>"
-                    _dstr = f"<span style='color:#059669;font-weight:500;'>+${_diff:,.0f}</span>"
+                    _act  = (
+                        f"<span style='font-family:DM Mono,monospace;font-size:0.76em;"
+                        f"font-weight:700;color:#059669;letter-spacing:0.1em;"
+                        f"background:rgba(5,150,105,0.08);padding:3px 10px;"
+                        f"border-left:2px solid #059669;'>BUY</span>"
+                    )
+                    _dstr = f"<span style='color:#059669;font-weight:600;'>+${_diff:,.0f}</span>"
                 else:
-                    _act  = "<span style='color:#DC2626;font-weight:600;background:rgba(220,38,38,0.1);padding:2px 8px;border-left:2px solid #DC2626;'>SELL</span>"
-                    _dstr = f"<span style='color:#DC2626;font-weight:500;'>-${abs(_diff):,.0f}</span>"
+                    _act  = (
+                        f"<span style='font-family:DM Mono,monospace;font-size:0.76em;"
+                        f"font-weight:700;color:#DC2626;letter-spacing:0.1em;"
+                        f"background:rgba(220,38,38,0.08);padding:3px 10px;"
+                        f"border-left:2px solid #DC2626;'>SELL</span>"
+                    )
+                    _dstr = f"<span style='color:#DC2626;font-weight:600;'>-${abs(_diff):,.0f}</span>"
+
                 if _tgtw > 0 or _curv > 0 or _shs > 0:
+                    # 행 배경: BUY/SELL에 따라 미묘한 틴트
+                    if _diff > 1.0 and abs(_diff) >= _curp * 0.05:
+                        _row_bg = "rgba(5,150,105,0.03)"
+                    elif _diff < -1.0 and abs(_diff) >= _curp * 0.05:
+                        _row_bg = "rgba(220,38,38,0.03)"
+                    else:
+                        _row_bg = "#FAFAF7"
+
                     _rhtml += (
-                        f'<tr><td style="font-weight:700;color:#059669;">{asset}</td>'
-                        f'<td style="color:#4A4A57;">{_avgstr}</td>'
-                        f'<td><span style="color:{_retc};font-weight:500;">{_retstr}</span></td>'
-                        f'<td>{_curv:,.0f}</td>'
-                        f'<td style="color:#059669;">{_tgtw*100:.0f}%</td>'
+                        f'<tr style="background:{_row_bg};">'
+                        f'<td style="font-weight:700;color:#059669;font-family:DM Mono,monospace;'
+                        f'font-size:0.84em;padding-left:16px;border-left:3px solid transparent;">{asset}</td>'
+                        f'<td style="color:#6B6B7A;font-size:0.76em;">{_avgstr}</td>'
+                        f'<td><span style="color:{_retc};font-weight:600;">{_retstr}</span></td>'
+                        f'<td style="font-weight:500;">{_curv:,.0f}</td>'
+                        f'<td style="color:{main_color};font-weight:600;">{_tgtw*100:.0f}%</td>'
                         f'<td>{_tgtv:,.0f}</td>'
                         f'<td>{_dstr}</td>'
-                        f'<td style="text-align:center;">{_act}</td></tr>'
+                        f'<td style="text-align:center;padding:8px 12px;">{_act}</td>'
+                        f'</tr>'
                     )
             _rhtml += "</tbody></table></div>"
             with st.container(border=True):
@@ -1950,7 +2029,6 @@ elif page == "🍫 12-Pack Radar":
         radar_msg    = "현재 글로벌 매크로 지표와 시장 심리가 모두 안정적인 궤도에 올라와 있습니다. 추세를 꺾을 만한 시스템 리스크가 보이지 않으니, AMLS 알고리즘이 제시하는 비중에 맞춰 자신감 있게 추세 추종 전략을 전개하시기 바랍니다."
         radar_color  = main_color
 
-    # ── 상단 상태 바 ───────────────────────────────────────────────
     total_signals = risk_cnt + warn_cnt + safe_cnt
     risk_pct  = int(risk_cnt  / total_signals * 100) if total_signals else 0
     warn_pct  = int(warn_cnt  / total_signals * 100) if total_signals else 0
@@ -1960,8 +2038,6 @@ elif page == "🍫 12-Pack Radar":
         f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
         f'border-left:3px solid {radar_color};padding:14px 20px;margin-bottom:12px;">'
         f'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;">'
-
-        # 좌: 상태 텍스트
         f'<div style="flex:3;min-width:260px;">'
         f'<div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;'
         f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px;">Macro Signal Status</div>'
@@ -1969,8 +2045,6 @@ elif page == "🍫 12-Pack Radar":
         f'color:{radar_color};line-height:1.1;margin-bottom:8px;">{radar_status}</div>'
         f'<div style="font-family:DM Sans,sans-serif;font-size:0.82em;color:#4A4A57;line-height:1.6;">{radar_msg}</div>'
         f'</div>'
-
-        # 우: 3개 숫자 카드 + 프로그레스
         f'<div style="flex:1;min-width:180px;">'
         f'<div style="display:flex;gap:6px;margin-bottom:8px;">'
         f'<div style="flex:1;border-top:2px solid #DC2626;padding:8px 6px;background:rgba(220,38,38,0.04);">'
@@ -1986,7 +2060,6 @@ elif page == "🍫 12-Pack Radar":
         f'<div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">Safe</div>'
         f'</div>'
         f'</div>'
-        # 누적 프로그레스 바
         f'<div style="height:4px;background:rgba(0,0,0,0.07);display:flex;overflow:hidden;">'
         f'<div style="width:{risk_pct}%;background:#DC2626;"></div>'
         f'<div style="width:{warn_pct}%;background:#D97706;"></div>'
@@ -1996,11 +2069,9 @@ elif page == "🍫 12-Pack Radar":
         f'font-size:0.58em;color:#9494A0;margin-top:3px;">'
         f'<span>{risk_pct}% risk</span><span>{warn_pct}% warn</span><span>{safe_pct}% safe</span></div>'
         f'</div>'
-
         f'</div></div>'
     ), unsafe_allow_html=True)
 
-    # ── badge / desc / url 정의 ────────────────────────────────────
     def _badge(label, color, icon):
         p = {
             'green':  (f'rgba({r_c},{g_c},{b_c},0.10)', main_color),
@@ -2048,7 +2119,6 @@ elif page == "🍫 12-Pack Radar":
     desc11 = "IWM/SPY 비율. 중소형주 상대약세시 시장 내부 균열, TZA 전략 고려 가능."
     desc12 = "VIX 추세. 50일선 상향 돌파시 변동성 확장 국면 진입, 시스템 패닉 시그널."
 
-    # 카드 헤더 생성 함수 — 번호 + 링크 + 배지 + 한줄 설명
     def r_head(num, title, badge, url, desc):
         return (
             f'<div style="border-bottom:1px solid rgba(0,0,0,0.08);padding-bottom:8px;margin-bottom:8px;">'
@@ -2079,7 +2149,6 @@ elif page == "🍫 12-Pack Radar":
     u11 = "https://kr.tradingview.com/chart/?symbol=AMEX:IWM"
     u12 = "https://kr.tradingview.com/chart/?symbol=CBOE:VIX"
 
-    # ── 3×4 신호 그리드 ─────────────────────────────────────────
     row1 = st.columns(4)
     with row1[0]:
         with st.container(border=True):
@@ -2210,7 +2279,6 @@ elif page == "📈 Backtest Lab":
         </div>
     </div>"""), unsafe_allow_html=True)
 
-    # ── 2패널: 좌(설정) + 우(결과) ────────────────────────────
     panel_cfg, panel_res = st.columns([1, 2.8])
 
     with panel_cfg:
@@ -2270,7 +2338,6 @@ elif page == "📈 Backtest Lab":
                 mc1, mc2, mc3, mc4 = st.columns(4)
 
                 def _mc_html(title, ret, cagr, mdd, is_main=False):
-                    """HTML 메트릭 카드 문자열 생성 (unsafe_allow_html 전용)"""
                     border_top = f"rgba({r_c},{g_c},{b_c},0.55)" if is_main else "rgba(0,0,0,0.12)"
                     bg        = f"rgba({r_c},{g_c},{b_c},0.06)" if is_main else "#FFFFFF"
                     tag_html  = (f'<span style="background:rgba({r_c},{g_c},{b_c},0.1);'
@@ -2279,7 +2346,6 @@ elif page == "📈 Backtest Lab":
                                  f'border:1px solid rgba({r_c},{g_c},{b_c},0.25);'
                                  f'letter-spacing:0.1em;">STRATEGY</span>') if is_main else ''
                     ret_c     = "#059669" if ret >= 0 else "#EF4444"
-                    # display:flex을 쓰지 않고 inline-block으로 대체 (Streamlit 파서 안전)
                     return (
                         f'<div style="background:{bg};border:1px solid rgba(0,0,0,0.08);'
                         f'border-top:2px solid {border_top};border-radius:14px;'
@@ -2360,7 +2426,6 @@ AMLS 전략이 레버리지 MDD를 어떻게 회피하면서 수익을 냈는지
 elif page == "📰 Macro News":
     headlines_for_ai, news_items = fetch_macro_news()
 
-    # ── 상단 마스트헤드 ────────────────────────────────────────
     st.markdown(apply_theme(f"""
     <div style="border-top:3px solid #111118;border-bottom:1px solid rgba(0,0,0,0.12);
         padding:18px 0 14px;margin-bottom:24px;">
@@ -2388,7 +2453,6 @@ elif page == "📰 Macro News":
     </div>
     """), unsafe_allow_html=True)
 
-    # ── 2패널: 좌(AI 분석) + 우(헤드라인) ─────────────────────
     news_left, news_right = st.columns([1, 1.6])
 
     with news_left:
@@ -2416,7 +2480,6 @@ elif page == "📰 Macro News":
                                   "최종 투자 스탠스로 나누어 3문단으로 요약해.\n"
                                   + "\n".join(headlines_for_ai))
                         response = model.generate_content(prompt)
-                        # AI 응답 박스
                         st.markdown(
                             f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
                             f'border-left:3px solid {main_color};padding:20px 22px;'
@@ -2432,7 +2495,6 @@ elif page == "📰 Macro News":
             except KeyError:
                 st.error("🚨 GEMINI_API_KEY 누락")
         else:
-            # 버튼 미클릭 상태 — 안내 카드
             st.markdown(
                 f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
                 f'border-left:3px solid rgba(0,0,0,0.15);padding:20px 22px;margin-top:12px;">'
@@ -2449,7 +2511,6 @@ elif page == "📰 Macro News":
                 unsafe_allow_html=True
             )
 
-        # 뉴스 소스 카운트
         if news_items:
             st.markdown(
                 f'<div style="margin-top:16px;padding:10px 14px;'
@@ -2472,21 +2533,16 @@ elif page == "📰 Macro News":
 
         if news_items:
             for idx, item in enumerate(news_items):
-                # 번호 + 제목 + 날짜 — 룰드 리스트 형식
                 _num_color  = main_color if idx < 3 else "#9494A0"
                 _top_border = f"2px solid {main_color}" if idx == 0 else "1px solid rgba(0,0,0,0.10)"
                 st.markdown(
                     f'<div style="display:flex;gap:14px;padding:12px 0;'
                     f'border-bottom:1px solid rgba(0,0,0,0.07);'
                     f'border-top:{_top_border if idx == 0 else "none"};">'
-
-                    # 번호
                     f'<div style="font-family:DM Mono,monospace;font-size:0.75em;'
                     f'color:{_num_color};font-weight:600;min-width:22px;'
                     f'padding-top:2px;font-variant-numeric:tabular-nums;">'
                     f'{idx+1:02d}</div>'
-
-                    # 내용
                     f'<div style="flex:1;">'
                     f'<a href="{item["link"]}" target="_blank" style="text-decoration:none;">'
                     f'<div style="font-family:DM Sans,sans-serif;font-size:0.88em;'
@@ -2501,7 +2557,6 @@ elif page == "📰 Macro News":
                     f'color:#9494A0;margin-top:4px;letter-spacing:0.04em;">'
                     f'{item["date"]}</div>'
                     f'</div>'
-
                     f'</div>',
                     unsafe_allow_html=True
                 )
