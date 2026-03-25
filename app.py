@@ -5,1422 +5,2510 @@ import pandas as pd
 import pandas_ta as ta
 import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import urllib.request
+import urllib.parse
+import xml.etree.ElementTree as ET
 import warnings
 import json
 import os
 
 warnings.filterwarnings('ignore')
 
-# =====================================================================
-# [0] 시스템 설정
-# =====================================================================
-st.set_page_config(page_title="AMLS 퀀트 포트폴리오", layout="wide", initial_sidebar_state="expanded")
+# ==========================================
+# 1. 설정 및 데이터
+# ==========================================
+st.set_page_config(page_title="AMLS V4.5 FINANCE STRATEGY", layout="wide", page_icon="🌿", initial_sidebar_state="expanded")
 
-SETTINGS_FILE = "amls_settings_v11.json"
-ACCOUNTS_FILE = "amls_multi_accounts.json"
-REQUIRED_TICKERS = ["TQQQ", "QLD", "QQQ", "SOXL", "USD", "SSO", "GLD", "SPY", "CASH"] 
+# --- 🎨 테마 커스텀 시스템 ---
+if 'main_color'   not in st.session_state: st.session_state.main_color   = '#10B981'
+if 'bg_color'     not in st.session_state: st.session_state.bg_color     = '#F7F6F2'
+if 'tc_heading'   not in st.session_state: st.session_state.tc_heading   = '#111118'
+if 'tc_body'      not in st.session_state: st.session_state.tc_body      = '#2D2D2D'
+if 'tc_muted'     not in st.session_state: st.session_state.tc_muted     = '#6B6B7A'
+if 'tc_label'     not in st.session_state: st.session_state.tc_label     = '#9494A0'
+if 'tc_data'      not in st.session_state: st.session_state.tc_data      = '#111118'
+if 'tc_sidebar'   not in st.session_state: st.session_state.tc_sidebar   = '#2D2D2D'
 
-def load_settings():
-    if os.path.exists(SETTINGS_FILE):
+main_color = st.session_state.main_color
+bg_color   = st.session_state.bg_color
+tc_heading = st.session_state.tc_heading
+tc_body    = st.session_state.tc_body
+tc_muted   = st.session_state.tc_muted
+tc_label   = st.session_state.tc_label
+tc_data    = st.session_state.tc_data
+tc_sidebar = st.session_state.tc_sidebar
+
+def hex_to_rgb(hex_col):
+    h = hex_col.lstrip('#')
+    return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+r_c, g_c, b_c = hex_to_rgb(main_color)
+
+def apply_theme(text):
+    if not isinstance(text, str): return text
+    text = text.replace("#10B981", main_color)
+    text = text.replace("#10b981", main_color)
+    text = text.replace("16, 185, 129", f"{r_c}, {g_c}, {b_c}")
+    text = text.replace("16,185,129", f"{r_c},{g_c},{b_c}")
+    return text
+
+SECTOR_TICKERS = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','XLB']
+CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPY','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
+TICKERS        = CORE_TICKERS + SECTOR_TICKERS
+ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPY','QQQ','GLD','CASH']
+
+PORTFOLIO_FILE = 'portfolio_autosave.json'
+
+def sanitize_portfolio():
+    for a in ASSET_LIST:
+        val = st.session_state.portfolio.get(a)
+        if isinstance(val, (int, float)) or val is None:
+            st.session_state.portfolio[a] = {'shares': float(val or 0.0), 'avg_price': 1.0 if a == 'CASH' else 0.0, 'fx': 1350.0}
+        elif isinstance(val, dict):
+            if 'shares' not in val: val['shares'] = 0.0
+            if 'avg_price' not in val: val['avg_price'] = 1.0 if a == 'CASH' else 0.0
+            if 'fx' not in val: val['fx'] = 1350.0
+        else:
+            st.session_state.portfolio[a] = {'shares': 0.0, 'avg_price': 0.0, 'fx': 1350.0}
+
+if 'goal_usd' not in st.session_state:
+    st.session_state.goal_usd = 100000.0   # 기본 목표: $100,000
+
+if 'portfolio' not in st.session_state:
+    st.session_state.portfolio = {asset: {'shares':0.0, 'avg_price':0.0, 'fx':1350.0} for asset in ASSET_LIST}
+    if os.path.exists(PORTFOLIO_FILE):
         try:
-            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+            with open(PORTFOLIO_FILE, 'r') as f:
+                loaded = json.load(f)
+                for k, v in loaded.items():
+                    st.session_state.portfolio[k] = v
         except: pass
-    return {"theme": "카드뉴스 테마"}
 
-def save_settings(settings_data):
-    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump(settings_data, f, ensure_ascii=False, indent=4)
+sanitize_portfolio()
 
-def load_accounts_data():
-    if os.path.exists(ACCOUNTS_FILE):
+def save_portfolio_to_disk():
+    try:
+        with open(PORTFOLIO_FILE, 'w') as f:
+            json.dump(st.session_state.portfolio, f)
+    except: pass
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_data():
+    end_date   = datetime.now()
+    start_date = end_date - timedelta(days=900)
+    for attempt in range(3):
         try:
-            with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except: return None
+            data = yf.download(TICKERS, start=start_date.strftime("%Y-%m-%d"),
+                               end=end_date.strftime("%Y-%m-%d"),
+                               progress=False, auto_adjust=True)['Close']
+            if data.empty:
+                continue
+            df = pd.DataFrame(index=data.index)
+            for t in TICKERS:
+                if t in data.columns: df[t] = data[t]
+            df = df.ffill().bfill()
+            df['QQQ_MA20']      = df['QQQ'].rolling(20).mean()
+            df['QQQ_MA50']      = df['QQQ'].rolling(50).mean()
+            df['QQQ_MA200']     = df['QQQ'].rolling(200).mean()
+            df['TQQQ_MA200']    = df['TQQQ'].rolling(200).mean()
+            df['SMH_MA50']      = df['SMH'].rolling(50).mean()
+            df['VIX_MA5']       = df['^VIX'].rolling(5).mean()
+            df['VIX_MA20']      = df['^VIX'].rolling(20).mean()
+            df['VIX_MA50']      = df['^VIX'].rolling(50).mean()
+            df['SMH_3M_Ret']    = df['SMH'].pct_change(63)
+            df['SMH_1M_Ret']    = df['SMH'].pct_change(21)
+            df['SMH_RSI']       = ta.rsi(df['SMH'], length=14)
+            df['HYG_IEF_Ratio'] = df['HYG'] / df['IEF']
+            df['HYG_IEF_MA20']  = df['HYG_IEF_Ratio'].rolling(20).mean()
+            df['HYG_IEF_MA50']  = df['HYG_IEF_Ratio'].rolling(50).mean()
+            df['QQQ_20d_Ret']   = df['QQQ'].pct_change(20)
+            df['QQQE_20d_Ret']  = df['QQQE'].pct_change(20)
+            df['QQQ_RSI']       = ta.rsi(df['QQQ'], length=14)
+            df['GLD_SPY_Ratio'] = df['GLD'] / df['SPY']
+            df['GLD_SPY_MA50']  = df['GLD_SPY_Ratio'].rolling(50).mean()
+            df['QQQ_High52']    = df['QQQ'].rolling(252).max()
+            df['QQQ_DD']        = (df['QQQ'] / df['QQQ_High52']) - 1
+            df['UUP_MA50']      = df['UUP'].rolling(50).mean()
+            df['TNX_MA50']      = df['^TNX'].rolling(50).mean()
+            df['BTC_MA50']      = df['BTC-USD'].rolling(50).mean()
+            df['IWM_SPY_Ratio'] = df['IWM'] / df['SPY']
+            df['IWM_SPY_MA50']  = df['IWM_SPY_Ratio'].rolling(50).mean()
+            for sec in SECTOR_TICKERS: df[f'{sec}_1M'] = df[sec].pct_change(21)
+            result = df.dropna()
+            if not result.empty:
+                return result
+        except Exception:
+            import time
+            time.sleep(1)
     return None
 
-def save_accounts_data(data_dict):
-    with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data_dict, f, ensure_ascii=False, indent=4)
+def get_target_v45(row):
+    if row['^VIX'] > 40: return 4
+    credit_stress = row['HYG_IEF_Ratio'] < row['HYG_IEF_MA20']
+    if row['QQQ'] < row['QQQ_MA200']: return 3
+    if row['QQQ_DD'] < -0.10 and credit_stress: return 3
+    bull_trend = row['QQQ'] >= row['QQQ_MA200'] and row['QQQ_MA50'] >= row['QQQ_MA200']
+    low_vix    = row['VIX_MA20'] < 22
+    credit_ok  = row['HYG_IEF_Ratio'] >= row['HYG_IEF_MA50']
+    if bull_trend and low_vix and credit_ok: return 1
+    return 2
 
-# =====================================================================
-# [1] 세션 스테이트
-# =====================================================================
-if 'settings' not in st.session_state:
-    st.session_state['settings'] = load_settings()
+def apply_asymmetric_delay(targets):
+    res = []; hist_curr = 3; pend = None; cnt = 0
+    for t in targets:
+        if t > hist_curr: hist_curr = t; pend = None; cnt = 0
+        elif t < hist_curr:
+            if t == pend:
+                cnt += 1
+                if cnt >= 5: hist_curr = t; pend = None; cnt = 0
+            else: pend = t; cnt = 1
+        else: pend = None; cnt = 0
+        res.append(hist_curr)
+    return pd.Series(res, index=targets.index).shift(1).bfill()
 
-if 'accounts' not in st.session_state:
-    loaded = load_accounts_data()
-    if not loaded:
-        loaded = {
-            "AMLS v4.4": {  
-                "portfolio": [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0, "매입 환율": 0.0, "태그": "코어"} for t in REQUIRED_TICKERS],
-                "history": [], "first_entry_date": None, "journal_text": "", "target_seed": 10000.0, "seed_history": {}, "target_portfolio_value": 100000.0,
-                "layout_order": ["🎯 목표 달성률", "📊 실시간 요약", "⚡ 시스템 분석관", "🚀 실전 퀀트 무기", "💼 포트폴리오 & 리밸런싱", "🧩 자산 상관관계 히트맵", "🔮 10년 은퇴 시뮬레이션", "📈 성장 곡선", "📈 목표 달성률 추이", "📝 매매 일지"]
-            }
-        }
-    st.session_state['accounts'] = loaded
+@st.cache_data(ttl=3600)
+def load_custom_backtest_data(start_date, end_date):
+    fetch_start = pd.to_datetime(start_date) - timedelta(days=400)
+    f_start_str = fetch_start.strftime("%Y-%m-%d")
+    f_end_str = (pd.to_datetime(end_date) + timedelta(days=1)).strftime("%Y-%m-%d")
+    data = yf.download(TICKERS, start=f_start_str, end=f_end_str, progress=False, auto_adjust=True)['Close']
+    bt_df = pd.DataFrame(index=data.index)
+    for t in TICKERS: bt_df[t] = data[t]
+    bt_df = bt_df.ffill().bfill()
+    bt_df['QQQ_MA20']      = bt_df['QQQ'].rolling(20).mean()
+    bt_df['QQQ_MA50']      = bt_df['QQQ'].rolling(50).mean()
+    bt_df['QQQ_MA200']     = bt_df['QQQ'].rolling(200).mean()
+    bt_df['TQQQ_MA200']    = bt_df['TQQQ'].rolling(200).mean()
+    bt_df['SMH_MA50']      = bt_df['SMH'].rolling(50).mean()
+    bt_df['VIX_MA5']       = bt_df['^VIX'].rolling(5).mean()
+    bt_df['VIX_MA20']      = bt_df['^VIX'].rolling(20).mean()
+    bt_df['VIX_MA50']      = bt_df['^VIX'].rolling(50).mean()
+    bt_df['SMH_3M_Ret']    = bt_df['SMH'].pct_change(63)
+    bt_df['SMH_1M_Ret']    = bt_df['SMH'].pct_change(21)
+    bt_df['SMH_RSI']       = ta.rsi(bt_df['SMH'], length=14)
+    bt_df['HYG_IEF_Ratio'] = bt_df['HYG'] / bt_df['IEF']
+    bt_df['HYG_IEF_MA20']  = bt_df['HYG_IEF_Ratio'].rolling(20).mean()
+    bt_df['HYG_IEF_MA50']  = bt_df['HYG_IEF_Ratio'].rolling(50).mean()
+    bt_df['QQQ_20d_Ret']   = bt_df['QQQ'].pct_change(20)
+    bt_df['QQQE_20d_Ret']  = bt_df['QQQE'].pct_change(20)
+    bt_df['QQQ_RSI']       = ta.rsi(bt_df['QQQ'], length=14)
+    bt_df['GLD_SPY_Ratio'] = bt_df['GLD'] / bt_df['SPY']
+    bt_df['GLD_SPY_MA50']  = bt_df['GLD_SPY_Ratio'].rolling(50).mean()
+    bt_df['QQQ_High52']    = bt_df['QQQ'].rolling(252).max()
+    bt_df['QQQ_DD']        = (bt_df['QQQ'] / bt_df['QQQ_High52']) - 1
+    bt_df['UUP_MA50']      = bt_df['UUP'].rolling(50).mean()
+    bt_df['TNX_MA50']      = bt_df['^TNX'].rolling(50).mean()
+    bt_df['BTC_MA50']      = bt_df['BTC-USD'].rolling(50).mean()
+    bt_df['IWM_SPY_Ratio'] = bt_df['IWM'] / bt_df['SPY']
+    bt_df['IWM_SPY_MA50']  = bt_df['IWM_SPY_Ratio'].rolling(50).mean()
+    bt_df = bt_df.dropna()
+    if bt_df.empty: return bt_df
+    bt_df['Target'] = bt_df.apply(get_target_v45, axis=1)
+    bt_df['Regime'] = apply_asymmetric_delay(bt_df['Target'])
+    bt_df = bt_df.loc[pd.to_datetime(start_date):pd.to_datetime(end_date)]
+    return bt_df
 
-needs_save = False
-if "기본 계좌 (AMLS)" in st.session_state['accounts']:
-    st.session_state['accounts']["AMLS v4.4"] = st.session_state['accounts'].pop("기본 계좌 (AMLS)")
-    needs_save = True
-if "AMLS v4.3" in st.session_state['accounts']:
-    st.session_state['accounts']["AMLS v4.4"] = st.session_state['accounts'].pop("AMLS v4.3")
-    needs_save = True
+REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPY','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
 
-for acc_name, acc_data in st.session_state['accounts'].items():
-    if "seed_history" not in acc_data: acc_data["seed_history"] = {}; needs_save = True
-    if "target_portfolio_value" not in acc_data: acc_data["target_portfolio_value"] = 100000.0; needs_save = True
-    if "layout_order" not in acc_data: 
-        acc_data["layout_order"] = ["🎯 목표 달성률", "📊 실시간 요약", "⚡ 시스템 분석관", "🚀 실전 퀀트 무기", "💼 포트폴리오 & 리밸런싱", "🧩 자산 상관관계 히트맵", "🔮 10년 은퇴 시뮬레이션", "📈 성장 곡선", "📈 목표 달성률 추이", "📝 매매 일지"]
-        needs_save = True
+@st.cache_data(ttl=60)
+def fetch_realtime_prices():
+    prices = {}
+    for ticker in REALTIME_TICKERS:
+        try:
+            info  = yf.Ticker(ticker).fast_info
+            price = info.get('last_price') or info.get('lastPrice')
+            if price and price > 0: prices[ticker] = float(price)
+        except: pass
+    now_utc = datetime.now(timezone.utc)
+    now_kst = now_utc + timedelta(hours=9)
+    fetch_time = now_kst.strftime("%Y-%m-%d %H:%M:%S")
+    return prices, fetch_time
 
-    existing_tickers = [item["티커 (Ticker)"] for item in acc_data["portfolio"]]
-    port_dict = {item["티커 (Ticker)"]: item for item in acc_data["portfolio"]}
-    new_port = []
-    for req_t in REQUIRED_TICKERS:
-        if req_t in port_dict: 
-            item = port_dict[req_t]
-            if "매입 환율" not in item: item["매입 환율"] = 0.0; needs_save = True
-            if "태그" not in item: item["태그"] = "코어" if req_t != "CASH" else "현금"; needs_save = True
-            new_port.append(item)
-        else: 
-            new_port.append({"티커 (Ticker)": req_t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0, "매입 환율": 0.0, "태그": "코어" if req_t != "CASH" else "현금"})
-            needs_save = True
-    acc_data["portfolio"] = new_port
+@st.cache_data(ttl=1800)
+def fetch_fear_and_greed():
+    try:
+        url = "https://production.api.cnn.io/data/ext/fear_and_greed/latest"
+        headers = {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'}
+        req = urllib.request.Request(url, headers=headers)
+        res = urllib.request.urlopen(req, timeout=5)
+        data = json.loads(res.read().decode('utf-8'))
+        return float(data['fear_and_greed']['score'])
+    except: return None
 
-if needs_save: save_accounts_data(st.session_state['accounts'])
+@st.cache_data(ttl=900)
+def fetch_macro_news():
+    headlines_for_ai, news_items = [], []
+    try:
+        search_query = urllib.parse.quote("미국증시 OR 연준 OR 나스닥 OR 금리")
+        url  = f"https://news.google.com/rss/search?q={search_query}&hl=ko&gl=KR&ceid=KR:ko"
+        req  = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        root = ET.fromstring(urllib.request.urlopen(req).read())
+        for item in root.findall('.//item')[:12]:
+            t, l, d = item.find('title').text, item.find('link').text, item.find('pubDate').text
+            headlines_for_ai.append(t); news_items.append({"title":t,"link":l,"date":d[:-4]})
+    except: pass
+    return headlines_for_ai, news_items
 
+@st.cache_data(ttl=300)
+def fetch_global_markets():
+    """글로벌 증시 + 금리/원자재/크립토 + 주도주 데이터"""
+    # 글로벌 주요 지수 ETF
+    global_tickers = {
+        'SPY':'S&P 500','QQQ':'Nasdaq 100','DIA':'Dow Jones','IWM':'Russell 2000',
+        'EWJ':'Japan','EWT':'Taiwan','EWY':'Korea','FXI':'China','EWH':'HongKong',
+        'VGK':'Europe','EWG':'Germany','EWU':'UK','EWQ':'France','EWC':'Canada',
+        'EEM':'Emg Mkt','EWZ':'Brazil','EWA':'Australia',
+    }
+    # 금리/원자재/크립토
+    asset_tickers = {
+        '^TNX':'US 10Y','GLD':'Gold','SLV':'Silver','USO':'Oil',
+        'BTC-USD':'Bitcoin','ETH-USD':'Ethereum','UUP':'DXY',
+    }
+    # 주도주 (Magnificent 7 + 반도체 주요주)
+    leader_tickers = {
+        'AAPL':'Apple','MSFT':'Microsoft','NVDA':'Nvidia','AMZN':'Amazon',
+        'GOOGL':'Alphabet','META':'Meta','TSLA':'Tesla',
+        'AVGO':'Broadcom','AMD':'AMD','TSM':'TSMC',
+    }
+    all_t = list(global_tickers.keys()) + list(asset_tickers.keys()) + list(leader_tickers.keys())
+    results = {}
+    try:
+        end = datetime.now()
+        start = end - timedelta(days=5)
+        raw = yf.download(all_t, start=start.strftime('%Y-%m-%d'),
+                          end=end.strftime('%Y-%m-%d'), progress=False, auto_adjust=True)['Close']
+        for t in all_t:
+            if t in raw.columns:
+                s = raw[t].dropna()
+                if len(s) >= 2:
+                    chg = (s.iloc[-1] / s.iloc[-2] - 1) * 100
+                    results[t] = {'price': float(s.iloc[-1]), 'chg': float(chg)}
+                elif len(s) == 1:
+                    results[t] = {'price': float(s.iloc[-1]), 'chg': 0.0}
+    except: pass
+    return results, global_tickers, asset_tickers, leader_tickers
 
-# =====================================================================
-# [2] 색상 변수 및 전역 CSS 설정 (다크모드 무력화 코드 추가)
-# =====================================================================
-MAIN_GREEN = "#00C060"
-C_UP = "#00C060"
-C_DOWN = "#FF3B30"  
-C_WARN = "#FF9500"
-C_SAFE = "#1a1a1a"
-TEXT_COLOR = "#1a1a1a"
-TEXT_SUB = "#444444"
-WIDGET_THEME = "light"
+with st.spinner('시장 데이터 수집 중...'):
+    df = load_data()
+    # 세션 캐시: 성공하면 저장, 실패하면 이전 값 사용
+    if df is not None and not df.empty:
+        st.session_state['_df_cache'] = df
+    elif '_df_cache' in st.session_state:
+        df = st.session_state['_df_cache']
+    rt_prices, last_update_time = fetch_realtime_prices()
 
-BASE_CHART_COLORS = {'TQQQ':'#1a1a1a', 'SOXL':'#00C060', 'USD':'#2ecc71', 'QLD':'#27ae60', 'SSO':'#1abc9c', 'QQQ':'#16a085', 'SPY':'#444444', 'GLD':'#f1c40f', 'CASH':'#bdc3c7'}
-COLOR_PALETTE = BASE_CHART_COLORS
+if df is None or df.empty:
+    st.markdown("""
+    <div style="background:#FEF2F2;border:1px solid #FCA5A5;border-left:4px solid #DC2626;
+        padding:20px 24px;margin:20px 0;font-family:'Plus Jakarta Sans',sans-serif;">
+        <div style="font-size:1.1em;font-weight:700;color:#DC2626;margin-bottom:6px;">
+            📡 야후 파이낸스(Yahoo Finance) 연결 실패
+        </div>
+        <div style="font-size:0.9em;color:#7F1D1D;line-height:1.6;">
+            Streamlit Cloud에서 야후 파이낸스 서버에 일시적으로 연결하지 못했습니다.<br>
+            보통 30초~2분 내에 자동 복구됩니다.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("🔄  다시 시도", type="primary", use_container_width=False):
+        st.cache_data.clear()
+        st.rerun()
+    st.stop()
 
-THEME_LAYOUT = dict(
-    template="plotly_white", 
-    paper_bgcolor="rgba(0,0,0,0)", 
-    plot_bgcolor="rgba(0,0,0,0)", 
-    font=dict(color=TEXT_COLOR, size=13, family='Pretendard, sans-serif'), 
-    margin=dict(l=0, r=0, t=30, b=0), 
-    xaxis=dict(showgrid=True, gridcolor='rgba(0,0,0,0.05)', zeroline=False), 
-    yaxis=dict(showgrid=True, gridcolor='rgba(0,0,0,0.05)', zeroline=False)
+last_index = df.index[-1]
+rt_injected = []
+for ticker, price in rt_prices.items():
+    if ticker in df.columns and price > 0:
+        df.at[last_index, ticker] = price
+        rt_injected.append(ticker)
+
+if 'QQQ' in rt_injected:
+    df.at[last_index, 'QQQ_DD'] = (df.at[last_index, 'QQQ'] / df['QQQ_High52'].iloc[-1]) - 1
+if 'HYG' in rt_injected and 'IEF' in rt_injected:
+    df.at[last_index, 'HYG_IEF_Ratio'] = df.at[last_index, 'HYG'] / df.at[last_index, 'IEF']
+if 'IWM' in rt_injected and 'SPY' in rt_injected:
+    df.at[last_index, 'IWM_SPY_Ratio'] = df.at[last_index, 'IWM'] / df.at[last_index, 'SPY']
+
+last_row = df.iloc[-1].copy()
+
+rt_ok    = len(rt_injected) >= 3
+rt_label = f"⬤ LIVE  {len(rt_injected)} feeds" if rt_ok else "⬤ DELAYED"
+
+vix_close, vix_ma5, vix_ma20 = last_row['^VIX'], last_row['VIX_MA5'], last_row['VIX_MA20']
+qqq_close, qqq_ma50, qqq_ma200 = last_row['QQQ'], last_row['QQQ_MA50'], last_row['QQQ_MA200']
+smh_close, smh_ma50, smh_3m, smh_1m, smh_rsi = (last_row['SMH'], last_row['SMH_MA50'],
+    last_row['SMH_3M_Ret'], last_row['SMH_1M_Ret'], last_row['SMH_RSI'])
+
+df['Target'] = df.apply(get_target_v45, axis=1)
+df['Regime'] = apply_asymmetric_delay(df['Target'])
+
+live_regime   = get_target_v45(last_row)
+hist_regime   = int(df.iloc[-2]['Regime'])
+curr_regime   = live_regime if live_regime > hist_regime else hist_regime
+target_regime = live_regime
+
+smh_c1 = smh_close > smh_ma50
+smh_c2 = (smh_3m > 0.05 or smh_1m > 0.10)
+smh_c3 = smh_rsi > 50
+smh_cond = smh_c1 and smh_c2 and smh_c3
+
+def get_weights_v45(reg, smh_ok):
+    w = {t: 0.0 for t in ASSET_LIST}
+    semi = 'SOXL' if smh_ok else 'USD'
+    if reg == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'], w['SPY'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
+    elif reg == 2: w['TQQQ'], w['QLD'], w['SSO'], w['USD'], w['GLD'], w['SPY'] = 0.15, 0.30, 0.25, 0.10, 0.15, 0.05
+    elif reg == 3: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.35, 0.15
+    elif reg == 4: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.40, 0.10
+    return w
+target_weights = get_weights_v45(curr_regime, smh_cond)
+
+if curr_regime == live_regime: regime_committee_msg = "🟢 조건 부합 (안정)"
+elif live_regime > curr_regime: regime_committee_msg = f"🔴 R{live_regime} 하향 즉시 반영"
+else: regime_committee_msg = f"🟡 R{live_regime} 승급 대기 (5일)"
+
+# ==========================================
+# 2. 라이트 테마 색상 변수 (차트용)
+# ==========================================
+b_color   = 'rgba(0,0,0,0)'
+t_color   = '#4A4A57'        # 차트 축 텍스트
+line_c    = main_color
+dash_c    = '#B0B0BE'
+rsi_low_c = main_color
+
+# ⚠️ xaxis/yaxis를 여기서 제외 → 각 차트에서 개별 지정 (중복 키 TypeError 방지)
+chart_layout = dict(
+    paper_bgcolor=b_color,
+    plot_bgcolor=b_color,
+    font=dict(family="DM Mono, DM Sans, monospace", color=t_color),
+    margin=dict(l=0, r=0, t=40, b=0),
+)
+radar_layout = dict(
+    height=200,
+    margin=dict(l=10, r=10, t=15, b=15),
+    paper_bgcolor=b_color,
+    plot_bgcolor=b_color,
+    font=dict(family="DM Mono, DM Sans, monospace", color=t_color),
 )
 
-def apply_custom_css():
-    css_base = """
-    @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
-    
-    /* 🔴 모바일 다크모드 무력화 (흰색 글씨 방지) 🔴 */
-    :root { color-scheme: light !important; }
-    
-    .stApp {
-        background-color: #f5f5f0 !important;
+# 공통 축 스타일 (라이트 테마)
+_ax = dict(gridcolor='rgba(0,0,0,0.07)', linecolor='rgba(0,0,0,0.12)', showgrid=True, zeroline=False)
+_ax_r = dict(gridcolor='rgba(0,0,0,0.07)', zeroline=False, showgrid=True)
+
+regime_info = {1:("R1  BULL","풀 가동"),2:("R2  CORR","방어 진입"), 3:("R3  BEAR","대피"),4:("R4  PANIC","최대 방어")}
+
+# ==========================================
+# 3. CSS  —  Refined Institutional  (2026)
+#    Concept: Bloomberg × Swiss Grid × Monocle
+#    → Ruled structure, tabular precision, zero decoration
+# ==========================================
+css_block = f"""<style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+    /* ── DESIGN TOKENS ──────────────────────────────── */
+    :root {{
+        /* Paper — user-customizable */
+        --paper:      {bg_color};
+        --paper-2:    {bg_color}dd;
+        --paper-3:    {bg_color}bb;
+        /* Ink — user-customizable per role */
+        --ink:        {tc_heading};
+        --ink-2:      {tc_body};
+        --ink-3:      {tc_body};
+        --ink-4:      {tc_muted};
+        --ink-5:      {tc_label};
+        /* Rule lines */
+        --rule:       rgba(0,0,0,0.10);
+        --rule-strong:rgba(0,0,0,0.18);
+        /* Accent — single color, surgical use */
+        --acc:        #10B981;
+        --acc-pale:   rgba(16,185,129,0.08);
+        --acc-mid:    rgba(16,185,129,0.18);
+        --acc-line:   rgba(16,185,129,0.40);
+        /* State colors */
+        --bull:       #059669;
+        --bear:       #DC2626;
+        --warn:       #D97706;
+        /* Spacing unit */
+        --u:          8px;
+    }}
+
+    /* ── RESET / BASE ───────────────────────────────── */
+    *, *::before, *::after {{ box-sizing: border-box; }}
+
+    .stApp, [data-testid="stAppViewContainer"] {{
+        background-color: {bg_color} !important;
         background-image:
-            linear-gradient(rgba(0,0,0,0.06) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0,0,0,0.06) 1px, transparent 1px) !important;
-        background-size: 28px 28px !important;
-        font-family: 'Pretendard', sans-serif !important;
-        color: #1a1a1a !important;
-    }
+            /* Subtle dot grid — institutional graph paper */
+            radial-gradient(circle, rgba(0,0,0,0.055) 1px, transparent 1px),
+            /* Accent corner wash */
+            radial-gradient(ellipse 70% 40% at 5% 0%, rgba(16,185,129,0.055) 0%, transparent 55%) !important;
+        background-size: 24px 24px, 100% 100% !important;
+        color: {tc_body} !important;
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 14px;
+    }}
 
-    /* 모든 텍스트 강제 다크그레이 적용 */
-    h1, h2, h3, h4, h5, h6 { color: #1a1a1a !important; font-weight: 900 !important; letter-spacing: -0.03em !important; }
-    .stMarkdown p, .stMarkdown li, label { color: #444444 !important; font-weight: bold; }
-    div[data-testid="stMetricValue"] > div { color: #1a1a1a !important; font-weight: 900 !important; }
-    div[data-testid="stMetricLabel"] > label > div > p { color: #444444 !important; font-weight: 900 !important; }
-    .stCaptionContainer p { color: #444444 !important; font-weight: bold; }
+    [data-testid="stHeader"] {{
+        background: rgba(247,246,242,0.92) !important;
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--rule-strong);
+    }}
+    #MainMenu {{ visibility:hidden; }} footer {{ visibility:hidden; }}
+    .main .block-container {{
+        max-width: 1540px;
+        padding-top: 1.5rem;
+        padding-bottom: 3rem;
+    }}
 
-    /* 사이드바 */
-    [data-testid="stSidebar"] {
-        background: #f0f0e8 !important;
-        border-right: 2.5px solid #1a1a1a !important;
-    }
+    /* ── SIDEBAR ────────────────────────────────────── */
+    [data-testid="stSidebar"] {{
+        background: var(--paper-2) !important;
+        border-right: 1px solid var(--rule-strong) !important;
+        box-shadow: none !important;
+    }}
+    /* Vertical accent rule on right edge */
+    [data-testid="stSidebar"]::after {{
+        content:'';
+        position:absolute; top:15%; right:0; width:2px; height:70%;
+        background:linear-gradient(180deg, transparent, var(--acc-line), transparent);
+        pointer-events:none;
+    }}
 
-    /* 메트릭 카드 */
-    [data-testid="stMetric"] {
-        background: #ffffff !important;
-        border: 2px solid #1a1a1a !important;
-        border-radius: 12px !important;
-        padding: 12px 16px !important;
-        box-shadow: 3px 3px 0px #1a1a1a !important;
-    }
+    /* Sidebar radio → ruled nav rows */
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] > div:first-child {{ display:none !important; }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {{
+        gap:0px !important; padding:0 !important; background:transparent !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] {{
+        display:flex !important; align-items:center !important;
+        padding:10px 20px !important; margin:0 !important;
+        border-radius:0 !important;
+        border:none !important;
+        border-bottom:1px solid var(--rule) !important;
+        background:transparent !important;
+        cursor:pointer !important; width:100% !important;
+        transition:background 0.15s ease !important;
+        position:relative;
+    }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] p {{
+        color:var(--ink-3) !important; font-weight:500 !important;
+        font-size:0.82rem !important; margin:0 !important;
+        font-family:'DM Sans' !important; letter-spacing:0.01em !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:hover {{
+        background:var(--paper-3) !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {{
+        background:var(--paper) !important;
+        border-bottom:1px solid var(--rule) !important;
+    }}
+    /* Active indicator — left border bar */
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked)::before {{
+        content:'';
+        position:absolute; left:0; top:0; bottom:0; width:3px;
+        background:var(--acc);
+    }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) p {{
+        color:var(--ink) !important; font-weight:700 !important;
+    }}
 
-    /* st.container(border=True) 튜닝 */
-    div[data-testid="stVerticalBlockBorderWrapper"] > div {
-        background: #ffffff !important;
-        border: 2.5px solid #1a1a1a !important;
-        border-radius: 16px !important;
-        box-shadow: 4px 4px 0px #1a1a1a !important;
-        padding: 24px !important; 
-        overflow: visible !important;
-        margin-bottom: 10px !important;
-    }
+    .sidebar-link {{
+        display:flex; align-items:center; gap:10px;
+        padding:10px 20px; margin:0;
+        border-bottom:1px solid var(--rule);
+        text-decoration:none !important;
+        color:var(--ink-3) !important;
+        font-weight:500; font-size:0.82rem;
+        transition:background 0.15s; background:transparent;
+        font-family:'DM Sans';
+        position:relative;
+    }}
+    .sidebar-link:hover {{
+        background:var(--paper-3) !important;
+        color:var(--ink) !important;
+    }}
 
-    /* 버튼 스타일 */
-    .stButton > button {
-        background: #4A4A4A !important;
-        color: #ffffff !important;
-        border: 2px solid #1a1a1a !important;
-        border-radius: 10px !important;
-        font-weight: 800 !important;
-        box-shadow: 3px 3px 0px #1a1a1a !important;
-        transition: all 0.1s !important;
-    }
-    .stButton > button:active {
-        transform: translate(3px, 3px) !important;
-        box-shadow: 0px 0px 0px #1a1a1a !important;
-    }
+    /* ── INSTITUTIONAL PANEL (replaces glass-card) ──── */
+    /* Ruled panels — no floating, no shadows, just structure */
+    .glass-card {{
+        background: #FAFAF7 !important;
+        border: 1px solid var(--rule-strong) !important;
+        border-top: 2px solid var(--ink-2) !important;
+        border-radius: 0 !important;
+        padding: 20px 22px !important;
+        box-shadow: none !important;
+        height: 100%; display:flex; flex-direction:column;
+        justify-content:space-between;
+        transition: border-top-color 0.2s ease;
+        position:relative;
+    }}
+    .glass-card:hover {{
+        border-top-color: var(--acc) !important;
+        transform: none !important;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.06) !important;
+    }}
+    .glass-card h3 {{
+        font-family: 'DM Mono', monospace !important;
+        font-size: 0.6em !important; font-weight: 400 !important;
+        color: var(--ink-4) !important;
+        margin-bottom: 14px !important;
+        letter-spacing: 0.20em; text-transform: uppercase;
+        border-bottom: 1px solid var(--rule); padding-bottom: 9px;
+    }}
 
-    /* 스타일창(Expander) 가시성 확보 */
-    [data-testid="stExpander"] details summary {
-        background-color: #E2E2DC !important;
-        border-radius: 8px !important;
-        padding: 10px !important;
-        border: 2px solid #1a1a1a !important;
-        color: #1a1a1a !important;
-    }
-    [data-testid="stExpander"] details summary p {
-        color: #1a1a1a !important;
-        font-weight: 900 !important;
-    }
-    [data-testid="stExpander"] details {
-        border-radius: 10px !important;
-    }
+    /* Inset — subtle ruled box */
+    .glass-inset {{
+        background: var(--paper-2) !important;
+        border: 1px solid var(--rule) !important;
+        border-left: 3px solid var(--acc) !important;
+        border-radius: 0 !important;
+        padding: 14px 16px 12px !important;
+        text-align: left; margin-bottom: 14px;
+        box-shadow: none !important;
+    }}
 
-    /* 입력 폼 및 표 */
-    input, textarea, select, div[data-baseweb="select"] > div {
-        background-color: #ffffff !important;
-        color: #1a1a1a !important;
-        border: 2px solid #1a1a1a !important;
-        border-radius: 8px !important;
-        font-weight: bold !important;
-    }
-    [data-testid="stDataFrame"] {
-        border-radius: 12px !important;
-        border: 2px solid #1a1a1a !important;
-        background: #ffffff !important;
-    }
-    
-    /* 탭 메뉴 */
-    button[data-baseweb="tab"] { color: #1a1a1a !important; }
-    button[data-baseweb="tab"][aria-selected="true"] { 
-        color: #00C060 !important; 
-        border-bottom-color: #00C060 !important; 
-        border-bottom-width: 3px !important; 
-        font-weight: 900 !important; 
-    }
-    
-    /* 사이드바 링크 메뉴 */
-    .sidebar-link { display: flex; align-items: center; padding: 8px 12px; margin-bottom: 4px; border-radius: 10px; border: 2.5px solid transparent; text-decoration: none !important; color: #1a1a1a !important; font-weight: 800; font-size: 0.95rem; transition: all 0.2s; background: rgba(0,0,0,0.03); }
-    .sidebar-link:hover { border: 2.5px solid #1a1a1a; background-color: #ffffff; transform: translateX(3px); box-shadow: 2px 2px 0px #1a1a1a; }
-    """
-    st.markdown(f"<style>{css_base}</style>", unsafe_allow_html=True)
+    /* Streamlit container(border=True) */
+    div[data-testid="stVerticalBlockBorderWrapper"] > div {{
+        background: #FAFAF7 !important;
+        border: 1px solid var(--rule-strong) !important;
+        border-top: 2px solid var(--ink-2) !important;
+        border-radius: 0 !important;
+        padding: 20px 22px !important;
+        box-shadow: none !important;
+        transition: border-top-color 0.2s ease;
+        position:relative;
+    }}
+    div[data-testid="stVerticalBlockBorderWrapper"] > div:hover {{
+        border-top-color: var(--acc) !important;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.06) !important;
+        transform: none !important;
+    }}
 
-apply_custom_css()
+    /* ── METRIC CARDS ───────────────────────────────── */
+    [data-testid="stMetric"] {{
+        background: #FAFAF7 !important;
+        border: 1px solid var(--rule-strong) !important;
+        border-top: 2px solid var(--ink-2) !important;
+        border-radius: 0 !important;
+        padding: 16px 18px !important;
+        box-shadow: none !important;
+        margin-bottom: 8px;
+        transition: border-top-color 0.2s;
+        position:relative;
+    }}
+    [data-testid="stMetric"]:hover {{
+        border-top-color: var(--acc) !important;
+        transform: none !important;
+    }}
+    [data-testid="stMetricLabel"] > div > div > p {{
+        font-size: 0.65em !important; font-weight: 500; color: var(--ink-4) !important;
+        white-space:normal !important; letter-spacing: 0.14em; text-transform:uppercase;
+        font-family:'DM Mono', monospace !important;
+    }}
+    [data-testid="stMetricValue"] > div {{
+        font-family:'DM Mono', monospace !important;
+        font-size:1.4em !important; font-weight:400;
+        color:var(--ink) !important;
+        font-variant-numeric: tabular-nums;
+    }}
+    div[data-testid="stMetricDelta"] > div {{
+        font-size:0.8em !important; font-weight:500;
+        font-family:'DM Mono', monospace !important;
+        font-variant-numeric: tabular-nums;
+    }}
 
-# =====================================================================
-# [3] 카드 헤더 렌더기
-# =====================================================================
-def render_card_header(title: str, chapter: str = ""):
-    chapter_html = f"<div style='font-size:0.65rem; font-weight:900; letter-spacing:0.15em; color:#00C060; margin-bottom:4px; text-transform:uppercase;'>{chapter}</div>" if chapter else ""
-    st.markdown(f"""
-    <div style="margin: -24px -24px 20px -24px; background: #00C060; height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-bottom: 2.5px solid #1a1a1a; border-radius: 13px 13px 0 0;">
-        <div style="width: 16px; height: 16px; border: 2.5px solid #1a1a1a; border-radius: 50%; background: #f5f5f0;"></div>
-        <span style="font-size:0.75rem; color:#ffffff; font-weight:900; letter-spacing:0.1em;">AMLS QUANT SYSTEM</span>
-        <div style="width: 16px; height: 16px; border: 2.5px solid #1a1a1a; border-radius: 50%; background: #f5f5f0;"></div>
+    /* ── BUTTONS ────────────────────────────────────── */
+    [data-testid="stButton"] > button {{
+        background: transparent !important;
+        border: 1px solid var(--rule-strong) !important;
+        color: var(--ink-2) !important;
+        border-radius: 0 !important;
+        padding: 7px 16px !important;
+        font-weight: 500 !important; font-size: 0.78em !important;
+        transition: all 0.15s ease !important;
+        font-family:'DM Mono', monospace !important;
+        letter-spacing: 0.06em; text-transform: uppercase;
+    }}
+    [data-testid="stButton"] > button:hover {{
+        background: var(--acc-pale) !important;
+        border-color: var(--acc-line) !important;
+        color: var(--bull) !important;
+    }}
+
+    /* ── TYPOGRAPHY ─────────────────────────────────── */
+    h1 {{
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        font-size: 2.2em !important; font-weight: 800 !important;
+        letter-spacing: -1.5px; margin: 0 !important;
+        color: {tc_heading} !important;
+    }}
+    h2 {{
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        color: {tc_heading} !important; font-weight: 800 !important;
+        letter-spacing: -0.5px;
+    }}
+    h3 {{ font-family: 'Plus Jakarta Sans', sans-serif !important; color: {tc_body} !important; }}
+    p  {{ color: {tc_body} !important; line-height: 1.65; }}
+    strong {{ color: {tc_heading} !important; }}
+
+    /* All numbers — tabular figures */
+    [data-testid="stMetricValue"],
+    .cval, .mint-table td {{ font-variant-numeric: tabular-nums; }}
+
+    /* ── DATA ROWS ──────────────────────────────────── */
+    .crow {{
+        display:flex; justify-content:space-between; align-items:center;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--rule);
+        font-size: 0.9em;
+    }}
+    .crow:last-child {{ border-bottom:none; }}
+    .clabel {{
+        color: {tc_muted}; font-weight:500;
+        font-family:'DM Sans'; font-size:1em;
+    }}
+    .cval {{
+        font-family:'DM Mono', monospace; font-weight:400;
+        color:#10B981; font-size:0.9em;
+        letter-spacing:0.02em; font-variant-numeric:tabular-nums;
+    }}
+
+    /* ── METRIC CARD TEXT ───────────────────────────── */
+    [data-testid="stMetricLabel"] > div > div > p {{
+        font-size: 0.65em !important; font-weight: 500;
+        color: {tc_label} !important;
+        white-space:normal !important; letter-spacing: 0.14em; text-transform:uppercase;
+        font-family:'DM Mono', monospace !important;
+    }}
+    [data-testid="stMetricValue"] > div {{
+        font-family:'DM Mono', monospace !important;
+        font-size:1.4em !important; font-weight:400;
+        color:{tc_data} !important;
+        font-variant-numeric: tabular-nums;
+    }}
+
+    /* ── SIDEBAR TEXT ───────────────────────────────── */
+    [data-testid="stSidebar"] p      {{ color:{tc_sidebar} !important; }}
+    [data-testid="stSidebar"] strong {{ color:{tc_heading}   !important; }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] p {{
+        color:{tc_sidebar} !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) p {{
+        color:{tc_heading} !important; font-weight:700 !important;
+    }}
+
+    /* ── RADAR LINKS ────────────────────────────────── */
+    .radar-link {{ text-decoration:none !important; display:block; }}
+    .radar-link-title {{
+        font-size:0.62em; font-weight:500; color:{tc_label};
+        transition:color 0.15s; font-family:'DM Mono', monospace;
+        letter-spacing:0.16em; text-transform:uppercase;
+    }}
+    .radar-link:hover .radar-link-title {{ color:var(--acc) !important; }}
+
+    /* ── TABLES ─────────────────────────────────────── */
+    .mint-table {{
+        width:100%; border-collapse:collapse;
+        font-family:'DM Mono', monospace;
+    }}
+    .mint-table th {{
+        padding:8px 12px; font-weight:400; color:var(--ink-4);
+        text-align:right; font-size:0.68em;
+        letter-spacing:0.16em; text-transform:uppercase;
+        border-bottom: 2px solid var(--ink-3);
+        background: var(--paper-2);
+    }}
+    .mint-table td {{
+        padding:10px 12px;
+        background: #FAFAF7;
+        color:var(--ink-2); text-align:right;
+        border-bottom: 1px solid var(--rule);
+        font-size:0.8em;
+        font-variant-numeric:tabular-nums;
+        transition:background 0.12s;
+    }}
+    .mint-table tr:hover td {{ background:var(--acc-pale); }}
+    .mint-table td:first-child {{
+        border-left:3px solid transparent;
+        text-align:left; font-family:'DM Sans';
+        font-weight:700; color:var(--bull);
+        font-size:0.82em;
+    }}
+    .mint-table tr:hover td:first-child {{ border-left-color:var(--acc); }}
+    .mint-table th:first-child {{ text-align:left; }}
+
+    /* ── INPUTS ─────────────────────────────────────── */
+    [data-testid="stNumberInput"] > div > div,
+    [data-testid="stTextInput"] > div > div {{
+        background:#FAFAF7 !important;
+        border:1px solid var(--rule-strong) !important;
+        border-radius:0 !important;
+        color:var(--ink) !important;
+    }}
+    [data-testid="stDateInput"] > div > div {{
+        background:#FAFAF7 !important;
+        border:1px solid var(--rule-strong) !important;
+        border-radius:0 !important;
+        color:var(--ink) !important;
+    }}
+    [data-baseweb="select"] > div {{
+        background:#FAFAF7 !important;
+        border:1px solid var(--rule-strong) !important;
+        border-radius:0 !important;
+    }}
+
+    /* ── FILE UPLOADER ──────────────────────────────── */
+    [data-testid="stFileUploader"] {{
+        background:var(--paper-2) !important;
+        border:1px dashed var(--rule-strong) !important;
+        border-radius:0 !important;
+    }}
+
+    /* ── EXPANDERS ──────────────────────────────────── */
+    [data-testid="stExpander"] {{
+        background:#FAFAF7 !important;
+        border:1px solid var(--rule-strong) !important;
+        border-radius:0 !important;
+    }}
+
+    /* ── DIVIDERS ───────────────────────────────────── */
+    hr {{ border-color:var(--rule-strong) !important; }}
+
+    /* ── SCROLLBAR ──────────────────────────────────── */
+    ::-webkit-scrollbar {{ width:3px; height:3px; }}
+    ::-webkit-scrollbar-track {{ background:var(--paper-2); }}
+    ::-webkit-scrollbar-thumb {{ background:var(--ink-5); }}
+    ::-webkit-scrollbar-thumb:hover {{ background:var(--ink-3); }}
+
+    /* ── ANIMATIONS ─────────────────────────────────── */
+    @keyframes pulseGlow {{
+        0%,100% {{ opacity:1; }}
+        50% {{ opacity:0.7; }}
+    }}
+    @keyframes fadeUp {{
+        from {{ opacity:0; transform:translateY(10px); }}
+        to   {{ opacity:1; transform:translateY(0); }}
+    }}
+    .live-pulse {{ animation:pulseGlow 2.8s ease-in-out infinite; }}
+
+    .main .block-container > div > div:nth-child(1) {{ animation:fadeUp 0.35s ease 0.05s both; }}
+    .main .block-container > div > div:nth-child(2) {{ animation:fadeUp 0.35s ease 0.10s both; }}
+    .main .block-container > div > div:nth-child(3) {{ animation:fadeUp 0.35s ease 0.15s both; }}
+    .main .block-container > div > div:nth-child(4) {{ animation:fadeUp 0.35s ease 0.20s both; }}
+    .main .block-container > div > div:nth-child(5) {{ animation:fadeUp 0.35s ease 0.25s both; }}
+
+    /* ── DATA EDITOR (portfolio table) ─────────────── */
+    [data-testid="stDataEditor"] {{
+        border:1px solid var(--rule-strong) !important;
+        border-radius:0 !important;
+    }}
+
+    /* ── DATA TABLE (stDataFrame) ───────────────────── */
+    [data-testid="stDataFrame"] {{
+        border:1px solid var(--rule-strong) !important;
+        border-radius:0 !important;
+    }}
+
+    /* ── MINT TABLE BODY TEXT ───────────────────────── */
+    .mint-table td {{ color:{tc_body} !important; }}
+    .mint-table th {{ color:{tc_label} !important; }}
+</style>"""
+
+
+st.markdown(apply_theme(css_block), unsafe_allow_html=True)
+
+# ==========================================
+# 4. 사이드바 UI  —  Dark Glass Terminal
+# ==========================================
+sidebar_top = st.sidebar.container()
+sidebar_top.markdown(apply_theme(f"""
+<div style="padding:20px 20px 14px; border-bottom:1px solid rgba(0,0,0,0.10);">
+    <div style="font-family:'DM Mono'; font-size:0.58em; color:#9494A0; letter-spacing:0.22em; text-transform:uppercase; margin-bottom:8px;">Quantitative Engine</div>
+    <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:1.5em; font-weight:800; color:#111118; letter-spacing:-0.5px; letter-spacing:-0.3px; line-height:1.1; margin-bottom:12px;">
+        AMLS <span style="color:#10B981;">V4.5</span>
     </div>
-    {chapter_html}
-    <div style="font-size:1.4rem; font-weight:900; color:#1a1a1a; margin-bottom:12px;">{title}</div>
-    """, unsafe_allow_html=True)
-
-# --- Plotly Sparkline (미니 차트) 생성 함수 ---
-def get_plotly_sparkline(data_list, color, hline=None):
-    if not data_list or all(pd.isna(x) for x in data_list): return go.Figure()
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(y=data_list, mode='lines', line=dict(color=color, width=3), hoverinfo='skip'))
-    if hline is not None:
-        fig.add_hline(y=hline, line_dash="dash", line_color="red", line_width=2)
-    fig.update_layout(
-        showlegend=False, margin=dict(l=0, r=0, t=0, b=0), height=45,
-        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)
-    )
-    return fig
-
-def get_plotly_dual_sparkline(d1, d2, c1, c2):
-    if not d1 or not d2: return go.Figure()
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(y=d2, mode='lines', line=dict(color=c2, width=2, dash='dot'), hoverinfo='skip'))
-    fig.add_trace(go.Scatter(y=d1, mode='lines', line=dict(color=c1, width=3), hoverinfo='skip'))
-    fig.update_layout(
-        showlegend=False, margin=dict(l=0, r=0, t=0, b=0), height=45,
-        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)
-    )
-    return fig
-
-
-# =====================================================================
-# [4] 글로벌 백엔드 함수
-# =====================================================================
-@st.cache_data(ttl=3600)
-def load_amls_backtest_data(start, end, init_cap, monthly_cont, rebal_freq="월 1회"):
-    tickers = ['QQQ', 'TQQQ', 'SOXL', 'USD', 'QLD', 'SSO', 'SPY', 'SMH', 'GLD', '^VIX']
-    start_str = (start - timedelta(days=400)).strftime("%Y-%m-%d")
-    end_str = end.strftime("%Y-%m-%d")
-    try: data = yf.download(tickers, start=start_str, end=end_str, progress=False, auto_adjust=True)['Close']
-    except: data = yf.download(tickers, start=start_str, end=end_str, progress=False)['Close']
-    data = data.ffill().dropna(subset=['QQQ', '^VIX'])
-
-    df = pd.DataFrame(index=data.index)
-    for t in data.columns: df[t] = data[t]
-
-    df['QQQ_MA50'] = df['QQQ'].rolling(window=50).mean()
-    df['QQQ_MA200'] = df['QQQ'].rolling(window=200).mean()
-    df['QQQ_RSI'] = ta.rsi(df['QQQ'], length=14)
-    df['SMH_MA50'] = df['SMH'].rolling(window=50).mean()
-    df['SMH_3M_Ret'] = df['SMH'].pct_change(periods=63)
-    df['SMH_RSI'] = ta.rsi(df['SMH'], length=14)
-
-    df = df.dropna(subset=['QQQ_MA200', 'SMH_RSI']).loc[pd.to_datetime(start):]
-    daily_returns = df[data.columns].pct_change().fillna(0)
-
-    def get_target_regime(row):
-        vix, qqq, ma200, ma50 = row['^VIX'], row['QQQ'], row['QQQ_MA200'], row['QQQ_MA50']
-        if vix > 40: return 4
-        if qqq < ma200: return 3
-        if qqq >= ma200 and ma50 >= ma200 and vix < 25: return 1
-        return 2
-
-    df['Target_Regime'] = df.apply(get_target_regime, axis=1)
-    
-    actual_regime_v4_4 = []
-    current_v4_4 = 3
-    pend_v4_4 = None
-    cnt_v4_4 = 0
-
-    for i in range(len(df)):
-        tr = df['Target_Regime'].iloc[i]
-        if tr > current_v4_4: 
-            current_v4_4 = tr; pend_v4_4 = None; cnt_v4_4 = 0; actual_regime_v4_4.append(current_v4_4)
-        elif tr < current_v4_4:
-            if tr == pend_v4_4:
-                cnt_v4_4 += 1
-                if cnt_v4_4 >= 5: current_v4_4 = tr; pend_v4_4 = None; cnt_v4_4 = 0; actual_regime_v4_4.append(current_v4_4)
-                else: actual_regime_v4_4.append(current_v4_4 - 1)
-            else: 
-                pend_v4_4 = tr; cnt_v4_4 = 1; actual_regime_v4_4.append(current_v4_4 - 1)
-        else: 
-            pend_v4_4 = None; cnt_v4_4 = 0; actual_regime_v4_4.append(current_v4_4)
-
-    df['Signal_Regime_v4_4'] = pd.Series(actual_regime_v4_4, index=df.index).shift(1).bfill()
-
-    def get_v4_4_weights(regime, use_soxl):
-        w = {t: 0.0 for t in data.columns}; semi = 'SOXL' if use_soxl else 'USD'
-        if regime == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'], w['SPY'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
-        elif regime == 2: w['QLD'], w['SSO'], w['GLD'], w['USD'], w['QQQ'], w['SPY'] = 0.30, 0.25, 0.25, 0.10, 0.05, 0.05
-        elif regime == 3: w['GLD'], w['QQQ'] = 0.50, 0.15 
-        elif regime == 4: w['GLD'], w['QQQ'] = 0.50, 0.10 
-        total_w = sum(w.values())
-        if total_w < 1.0: w['CASH'] = round(1.0 - total_w, 4)
-        return w
-
-    strategies = ['AMLS v4.4', 'QQQ', 'QLD', 'TQQQ']
-    ports = {s: init_cap for s in strategies}
-    hists = {s: [init_cap] for s in ports.keys()}
-    total_invested = init_cap
-    weights_v4_4 = {t: 0.0 for t in data.columns}; weights_v4_4['CASH'] = 1.0
-    logs, days_since_v4_4 = [], 0
-
-    for i in range(1, len(df)):
-        today, yesterday = df.index[i], df.index[i-1]
-        days_since_v4_4 += 1
-        
-        ret_v4_4 = 0
-        for t in data.columns: ret_v4_4 += weights_v4_4.get(t, 0) * daily_returns[t].iloc[i]
-        
-        ports['AMLS v4.4'] *= (1 + ret_v4_4)
-        for s in ['QQQ', 'QLD', 'TQQQ']: ports[s] *= (1 + daily_returns[s].iloc[i])
-        
-        for t in data.columns:
-            if ports['AMLS v4.4'] > 0: weights_v4_4[t] = weights_v4_4.get(t,0)*(1+daily_returns[t].iloc[i])/(1+ret_v4_4)
-        if ports['AMLS v4.4'] > 0: weights_v4_4['CASH'] = weights_v4_4.get('CASH',0) / (1+ret_v4_4)
-            
-        if today.month != yesterday.month:
-            for s in ports: ports[s] += monthly_cont
-            total_invested += monthly_cont
-        for s in ports: hists[s].append(ports[s])
-        
-        use_soxl = (df['SMH'].iloc[i-1] > df['SMH_MA50'].iloc[i-1]) and (df['SMH_3M_Ret'].iloc[i-1] > 0.05) and (df['SMH_RSI'].iloc[i-1] > 50)
-
-        sig_r_v4_4 = df['Signal_Regime_v4_4'].iloc[i]
-        rebal_v4_4 = False
-        if sig_r_v4_4 != df['Signal_Regime_v4_4'].iloc[i-1] or i == 1: rebal_v4_4 = True
-        elif rebal_freq == "월 1회" and today.month != yesterday.month: rebal_v4_4 = True
-        elif "주 1회" in rebal_freq and days_since_v4_4 >= 5: rebal_v4_4 = True
-        elif "2주 1회" in rebal_freq and days_since_v4_4 >= 10: rebal_v4_4 = True
-        elif "3주 1회" in rebal_freq and days_since_v4_4 >= 15: rebal_v4_4 = True
-        
-        if rebal_v4_4:
-            weights_v4_4 = get_v4_4_weights(sig_r_v4_4, use_soxl)
-            log_type = "레짐 전환" if sig_r_v4_4 != df['Signal_Regime_v4_4'].iloc[i-1] else f"정기 ({rebal_freq.split(' ')[0]})"
-            semi_target = "SOXL" if use_soxl and sig_r_v4_4 == 1 else ("USD" if sig_r_v4_4 in [1, 2] else "-")
-            logs.append({"날짜": today.strftime('%Y-%m-%d'), "유형": log_type, "국면": f"R{int(sig_r_v4_4)}", "반도체": semi_target, "평가액": ports['AMLS v4.4']})
-            days_since_v4_4 = 0
-
-    for s in ports: df[f'{s}_Value'] = hists[s]
-    inv_arr = [init_cap]; curr_inv = init_cap
-    for i in range(1, len(df)):
-        if df.index[i].month != df.index[i-1].month: curr_inv += monthly_cont
-        inv_arr.append(curr_inv)
-    df['Invested'] = inv_arr
-    return df, logs, data.columns
-
-@st.cache_data(ttl=3600)
-def get_sector_momentum():
-    sectors = {'XLK':'기술', 'XLV':'헬스케어', 'XLE':'에너지', 'XLF':'금융', 'XLI':'산업재',
-               'XLY':'소비재', 'XLP':'필수소비재', 'XLU':'유틸리티', 'XLB':'소재', 'XLRE':'부동산'}
-    try:
-        data = yf.download(list(sectors.keys()), period="6mo", progress=False)['Close'].ffill()
-        sector_returns = {}
-        for s, k_name in sectors.items():
-            if s in data.columns and not data[s].dropna().empty:
-                if len(data[s].dropna()) > 63:
-                    ret3m = (data[s].iloc[-1] / data[s].iloc[-64]) - 1
-                    sector_returns[k_name] = ret3m
-        return sorted(sector_returns.items(), key=lambda x: x[1], reverse=True)[:3]
-    except:
-        return []
-
-# =====================================================================
-# [5] 페이지 구성: 글로벌 마켓 대시보드
-# =====================================================================
-def page_market_dashboard():
-    st.markdown(f"<h1 style='font-size:3.5rem; margin-bottom:0;'>🌐 마켓 <span style='color:{MAIN_GREEN};'>터미널</span></h1>", unsafe_allow_html=True)
-    st.caption("실시간 글로벌 자금 흐름 및 거시 경제 모니터링")
-    
-    with st.container(border=True):
-        render_card_header("🌐 실시간 시세", "GLOBAL MARKET")
-        components.html(f"""<div class="tradingview-widget-container" style="border-radius: 12px; overflow: hidden; border: 2px solid #1a1a1a;">
-<div class="tradingview-widget-container__widget"></div>
-<script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
-{{
-"symbols": [
-{{"proName": "FOREXCOM:SPXUSD", "title": "S&P 500"}},
-{{"proName": "FOREXCOM:NSXUSD", "title": "NASDAQ 100"}},
-{{"description": "TQQQ", "proName": "NASDAQ:TQQQ"}},
-{{"description": "SOXL", "proName": "ARCA:SOXL"}},
-{{"description": "USD/KRW", "proName": "FX_IDC:USDKRW"}},
-{{"description": "GOLD", "proName": "OANDA:XAUUSD"}}
-],
-"showSymbolLogo": true, "colorTheme": "{WIDGET_THEME}", "locale": "kr"
-}}
-</script>
-</div>""", height=70)
-
-    col_left, col_right = st.columns([1, 1.8])
-    with col_left:
-        with st.container(border=True):
-            render_card_header("📈 주요 지수", "MARKET INDEX")
-            tickers = ['^GSPC', '^IXIC', '^VIX', 'USDKRW=X']
-            indices_df = yf.download(tickers, start=datetime.today()-timedelta(days=365), progress=False)['Close'].ffill()
-            if not indices_df.empty:
-                c1, c2 = st.columns(2); latest = indices_df.iloc[-1]; prev = indices_df.iloc[-2]
-                c1.metric("S&P 500", f"{latest.get('^GSPC', 0):,.0f}", f"{(latest.get('^GSPC',0)/prev.get('^GSPC',1)-1)*100:+.2f}%")
-                c2.metric("NASDAQ", f"{latest.get('^IXIC', 0):,.0f}", f"{(latest.get('^IXIC',0)/prev.get('^IXIC',1)-1)*100:+.2f}%")
-                c3, c4 = st.columns(2)
-                c3.metric("VIX", f"{latest.get('^VIX', 0):,.2f}", f"{(latest.get('^VIX',0)/prev.get('^VIX',1)-1)*100:+.2f}%", delta_color="inverse")
-                c4.metric("USD/KRW", f"₩{latest.get('USDKRW=X', 0):,.1f}", f"{(latest.get('USDKRW=X',0)/prev.get('USDKRW=X',1)-1)*100:+.2f}%", delta_color="inverse")
-                
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=indices_df.index, y=indices_df['^GSPC']/indices_df['^GSPC'].iloc[0]*100, name="S&P 500", line=dict(color=TEXT_SUB, width=3)))
-                fig.add_trace(go.Scatter(x=indices_df.index, y=indices_df['^IXIC']/indices_df['^IXIC'].iloc[0]*100, name="NASDAQ", line=dict(color=MAIN_GREEN, width=3)))
-                custom_l = THEME_LAYOUT.copy(); custom_l.update(height=240, showlegend=False)
-                fig.update_layout(**custom_l)
-                st.plotly_chart(fig, use_container_width=True)
-
-    with col_right:
-        with st.container(border=True):
-            render_card_header("🗺️ 글로벌 증시 히트맵", "HEATMAP")
-            tab_sp, tab_ndx = st.tabs(["S&P 500", "NASDAQ 100"])
-            with tab_sp:
-                components.html(f"""<div class="tradingview-widget-container" style="border: 2.5px solid #1a1a1a; border-radius:12px; overflow:hidden;">
-                  <div class="tradingview-widget-container__widget"></div>
-                  <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js" async>
-                  {{ "exchanges": [], "dataSource": "SPX500", "grouping": "sector", "blockSize": "market_cap_basic", "blockColor": "change", "locale": "kr", "colorTheme": "{WIDGET_THEME}", "hasTopBar": false, "isDataSetEnabled": false, "isZoomEnabled": true, "hasSymbolTooltip": true, "width": "100%", "height": "400" }}
-                  </script></div>""", height=400)
-            with tab_ndx:
-                components.html(f"""<div class="tradingview-widget-container" style="border: 2.5px solid #1a1a1a; border-radius:12px; overflow:hidden;">
-                  <div class="tradingview-widget-container__widget"></div>
-                  <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-stock-heatmap.js" async>
-                  {{ "exchanges": [], "dataSource": "NDX", "grouping": "sector", "blockSize": "market_cap_basic", "blockColor": "change", "locale": "kr", "colorTheme": "{WIDGET_THEME}", "hasTopBar": false, "isDataSetEnabled": false, "isZoomEnabled": true, "hasSymbolTooltip": true, "width": "100%", "height": "400" }}
-                  </script></div>""", height=400)
-
-    col_mac1, col_mac2 = st.columns([1, 1.8])
-    with col_mac1:
-        with st.container(border=True):
-            render_card_header("🛢️ 금리 & 원자재 & 크립토", "MACRO")
-            macro_tickers = ['^TNX', 'CL=F', 'GC=F', 'BTC-USD']
-            macro_names = {'^TNX': '미 10년물 국채금리', 'CL=F': 'WTI 원유', 'GC=F': '국제 금', 'BTC-USD': '비트코인'}
-            try:
-                macro_df = yf.download(macro_tickers, period="5d", progress=False)['Close'].ffill()
-                if not macro_df.empty:
-                    latest_m = macro_df.iloc[-1]; prev_m = macro_df.iloc[-2]
-                    mc1, mc2 = st.columns(2)
-                    mc1.metric(macro_names['^TNX'], f"{latest_m.get('^TNX', 0):.3f}%", f"{(latest_m.get('^TNX', 0) - prev_m.get('^TNX', 0)):+.3f}bp", delta_color="inverse")
-                    mc2.metric(macro_names['CL=F'], f"${latest_m.get('CL=F', 0):.2f}", f"{(latest_m.get('CL=F', 0)/prev_m.get('CL=F', 1)-1)*100:+.2f}%", delta_color="inverse")
-                    st.write("")
-                    mc3, mc4 = st.columns(2)
-                    mc3.metric(macro_names['GC=F'], f"${latest_m.get('GC=F', 0):,.1f}", f"{(latest_m.get('GC=F', 0)/prev_m.get('GC=F', 1)-1)*100:+.2f}%")
-                    mc4.metric(macro_names['BTC-USD'], f"${latest_m.get('BTC-USD', 0):,.0f}", f"{(latest_m.get('BTC-USD', 0)/prev_m.get('BTC-USD', 1)-1)*100:+.2f}%")
-            except: st.info("데이터 로딩 중...")
-            
-        with st.container(border=True):
-            render_card_header("🔄 주도 섹터 스캐너 (3M TOP 3)", "SECTOR MOMENTUM")
-            top_sectors = get_sector_momentum()
-            if top_sectors:
-                sec_html = ""
-                for i, (s_name, s_ret) in enumerate(top_sectors):
-                    sec_html += f"<div style='display:flex; justify-content:space-between; margin-bottom:8px;'><span style='font-weight:900; color:{TEXT_COLOR};'><span style='display:inline-flex; width:24px; height:24px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; align-items:center; justify-content:center; font-size:0.8rem; margin-right:8px;'>{i+1}</span>{s_name}</span><span style='color:{C_UP if s_ret>0 else C_DOWN}; font-weight:900; font-size:1.1rem;'>{s_ret*100:+.1f}%</span></div>"
-                st.markdown(f"<div>{sec_html}</div>", unsafe_allow_html=True)
-            else:
-                st.info("데이터 로딩 중...")
-
-    with col_mac2:
-        with st.container(border=True):
-            render_card_header("🔥 시장 주도주 (Top Gainers & Losers)", "MOVERS")
-            components.html(f"""<div class="tradingview-widget-container" style="border: 2.5px solid #1a1a1a; border-radius:12px; overflow:hidden;">
-              <div class="tradingview-widget-container__widget"></div>
-              <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-hotlists.js" async>
-              {{ "colorTheme": "{WIDGET_THEME}", "dateRange": "12M", "exchange": "US", "showChart": true, "locale": "kr", "largeChartUrl": "", "isTransparent": true, "showSymbolLogo": true, "showFloatingTooltip": false, "width": "100%", "height": "350" }}
-              </script></div>""", height=350)
-
-    with st.container(border=True):
-        render_card_header("🇺🇸 미국 핵심 경제 캘린더", "CALENDAR")
-        components.html(f"""<div class="tradingview-widget-container" style="border: 2.5px solid #1a1a1a; border-radius:12px; overflow:hidden;">
-          <div class="tradingview-widget-container__widget"></div>
-          <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-events.js" async>
-          {{ "colorTheme": "{WIDGET_THEME}", "isTransparent": true, "width": "100%", "height": "450", "locale": "kr", "importanceFilter": "0,1", "currencyFilter": "USD" }}
-          </script></div>""", height=450)
-
-
-# =====================================================================
-# [6] 페이지 구성: 백테스트
-# =====================================================================
-def page_amls_backtest():
-    st.markdown(f"<h1 style='font-size:3.5rem; margin-bottom:0;'>🦅 전략 <span style='color:{MAIN_GREEN};'>시뮬레이터</span></h1>", unsafe_allow_html=True)
-    st.caption("과거 데이터 기반 퍼포먼스 및 궤적 추적")
-    st.sidebar.header("⚙️ 시뮬레이션 설정")
-    BACKTEST_START = st.sidebar.date_input("시작일", datetime(2018, 1, 1))
-    BACKTEST_END = st.sidebar.date_input("종료일", datetime.today())
-    INITIAL_CAPITAL = st.sidebar.number_input("초기 자본금 ($)", value=10000, step=1000)
-    MONTHLY_CONTRIBUTION = st.sidebar.number_input("월 적립금 ($)", value=2000, step=500)
-    REBAL_FREQ = st.sidebar.selectbox("🔄 리밸런싱 주기", ["월 1회", "주 1회 (5거래일)", "2주 1회 (10거래일)", "3주 1회 (15거래일)"], index=0)
-
-    with st.spinner('과거 데이터를 분석 중입니다...'):
-        df, logs, tickers = load_amls_backtest_data(BACKTEST_START, BACKTEST_END, INITIAL_CAPITAL, MONTHLY_CONTRIBUTION, REBAL_FREQ)
-    
-    def calc_metrics(series, invested_series):
-        final_val = series.iloc[-1]; total_inv = invested_series.iloc[-1]
-        total_ret = (final_val / total_inv) - 1
-        days = (series.index[-1] - series.index[0]).days
-        cagr = (final_val / invested_series.iloc[-1]) ** (365.25 / days) - 1 if days > 0 else 0
-        mdd = ((series / series.cummax()) - 1).min()
-        daily_ret = series.pct_change().dropna()
-        sharpe = (daily_ret.mean() * 252) / (daily_ret.std() * np.sqrt(252)) if daily_ret.std() != 0 else 0
-        return final_val, total_ret, cagr, mdd, sharpe
-
-    strats = ['AMLS v4.4', 'QQQ', 'QLD', 'TQQQ']
-    metrics_data = []
-    for s in strats:
-        fv, tr, cagr, mdd, shp = calc_metrics(df[f'{s}_Value'], df['Invested'])
-        metrics_data.append({"전략": s, "최종 금액": f"${fv:,.0f}", "수익률": f"{tr*100:+.1f}%", "CAGR": f"{cagr*100:.1f}%", "MDD": f"{mdd*100:.1f}%", "샤프": f"{shp:.2f}"})
-    metrics_df = pd.DataFrame(metrics_data).set_index("전략")
-
-    tab1, tab2, tab3 = st.tabs(["📊 요약", "📈 성장 곡선", "📝 매매 로그"])
-
-    with tab1:
-        with st.container(border=True):
-            render_card_header("🏆 성과 요약", "SUMMARY")
-            st.markdown(f"**투입 원금:** <span style='color:{MAIN_GREEN}; font-weight:800;'>${df['Invested'].iloc[-1]:,.0f}</span>", unsafe_allow_html=True)
-            st.dataframe(metrics_df, use_container_width=True)
-
-        with st.container(border=True):
-            render_card_header("🥧 국면별 비중", "ALLOCATION")
-            c1, c2, c3, c4 = st.columns(4)
-            def get_w(reg):
-                if reg == 1: return {'TQQQ':30, 'SOXL/USD':20, 'QLD':20, 'SSO':15, 'GLD':10, 'SPY':5}
-                elif reg == 2: return {'QLD':30, 'SSO':25, 'GLD':25, 'USD':10, 'QQQ':5, 'SPY':5}
-                elif reg == 3: return {'GLD':50, 'CASH':35, 'QQQ':15}
-                elif reg == 4: return {'GLD':50, 'CASH':40, 'QQQ':10}
-            
-            for i, col in enumerate([c1, c2, c3, c4]):
-                r = i+1; w = {k:v for k,v in get_w(r).items() if v>0}
-                fig_p = go.Figure(go.Pie(labels=list(w.keys()), values=list(w.values()), hole=0.5, marker=dict(colors=[COLOR_PALETTE.get(k.split('/')[0], '#888') for k in w.keys()])))
-                cust_p = THEME_LAYOUT.copy(); cust_p.update(title=f"<b>R{r}</b>", title_x=0.5, height=250, margin=dict(t=40,b=10,l=10,r=10), showlegend=False)
-                fig_p.update_layout(**cust_p)
-                fig_p.update_traces(textinfo='label+percent', textposition='inside', textfont=dict(color="#ffffff", size=13))
-                col.plotly_chart(fig_p, use_container_width=True)
-
-    with tab2:
-        with st.container(border=True):
-            render_card_header("📈 자산 곡선", "CURVE")
-            use_log = st.checkbox("Y축 로그 스케일", value=False)
-            fig_eq = go.Figure()
-            fig_eq.add_trace(go.Scatter(x=df.index, y=df['AMLS v4.4_Value'], name='AMLS', line=dict(color=MAIN_GREEN, width=3.5)))
-            fig_eq.add_trace(go.Scatter(x=df.index, y=df['QQQ_Value'], name='QQQ', line=dict(color='#86868B', width=2)))
-            fig_eq.add_trace(go.Scatter(x=df.index, y=df['TQQQ_Value'], name='TQQQ', line=dict(color=C_DOWN, width=2)))
-            fig_eq.add_trace(go.Scatter(x=df.index, y=df['Invested'], name='원금', line=dict(color=TEXT_COLOR, width=2, dash='dot')))
-            
-            if use_log: fig_eq.update_yaxes(type="log")
-            cust_eq = THEME_LAYOUT.copy(); cust_eq.update(height=450, hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-            fig_eq.update_layout(**cust_eq)
-            st.plotly_chart(fig_eq, use_container_width=True)
-
-    with tab3:
-        with st.container(border=True):
-            render_card_header("📝 매매 로그", "LOGS")
-            log_df = pd.DataFrame(logs)[::-1]
-            if not log_df.empty:
-                log_df['평가액'] = log_df['평가액'].apply(lambda x: f"${x:,.0f}")
-                st.dataframe(log_df, hide_index=True, use_container_width=True, height=400)
-
-
-# =====================================================================
-# [7] 페이지 구성: 내 포트폴리오 관리 
-# =====================================================================
-def make_portfolio_page(acc_name):
-    def page_func():
-        st.markdown(f"<h1 style='font-size:3.5rem; margin-bottom:0;'>💼 <span style='color:{MAIN_GREEN};'>{acc_name}</span></h1>", unsafe_allow_html=True)
-        st.caption("나의 전략 계좌 현황 및 리밸런싱 지침")
-        
-        curr_acc_data = st.session_state['accounts'][acc_name]
-        
-        DEFAULT_LAYOUT = ["🎯 목표 달성률", "📊 실시간 요약", "⚡ 시스템 분석관", "🚀 실전 퀀트 무기", "💼 포트폴리오 & 리밸런싱", "🧩 자산 상관관계 히트맵", "🔮 10년 은퇴 시뮬레이션", "📈 성장 곡선", "📈 목표 달성률 추이", "📝 매매 일지"]
-        current_layout = curr_acc_data.get("layout_order", [])
-        
-        if "💼 기입표" in current_layout: current_layout[current_layout.index("💼 기입표")] = "💼 포트폴리오 & 리밸런싱"
-        if "🍩 자산 배분 & 지침" in current_layout: current_layout.remove("🍩 자산 배분 & 지침")
-        if "🍩 배분 및 지침" in current_layout: current_layout.remove("🍩 배분 및 지침")
-            
-        for item in DEFAULT_LAYOUT:
-            if item not in current_layout: current_layout.append(item)
-        current_layout = [x for x in current_layout if x in DEFAULT_LAYOUT]
-        
-        if current_layout != curr_acc_data.get("layout_order", []):
-            curr_acc_data["layout_order"] = current_layout
-            save_accounts_data(st.session_state['accounts'])
-
-        pf_df = pd.DataFrame(curr_acc_data["portfolio"])
-        for col in ["수량 (주/달러)", "평균 단가 ($)", "매입 환율"]:
-            if col in pf_df.columns: pf_df[col] = pf_df[col].astype(float)
-
-        @st.cache_data(ttl=1800)
-        def get_market_status():
-            TICKERS = ['QQQ', 'TQQQ', 'SOXL', 'USD', 'QLD', 'SSO', 'SPY', 'SMH', 'GLD', '^VIX', 'HYG', 'IEF', 'QQQE']
-            data = yf.download(TICKERS, start=datetime.today()-timedelta(days=400), progress=False)['Close'].ffill()
-            today = data.iloc[-1]; yesterday = data.iloc[-2]
-            
-            ma200_s = data['QQQ'].rolling(200).mean()
-            ma50_s = data['QQQ'].rolling(50).mean()
-            smh_ma50_s = data['SMH'].rolling(50).mean()
-            smh_3m_ret_s = data['SMH'].pct_change(63)
-            smh_rsi_s = ta.rsi(data['SMH'], length=14)
-            qqq_rsi_s = ta.rsi(data['QQQ'], length=14)
-            
-            target_regimes = []
-            for i in range(len(data)):
-                v = data['^VIX'].iloc[i]; q = data['QQQ'].iloc[i]; m200 = ma200_s.iloc[i]; m50 = ma50_s.iloc[i]
-                if pd.isna(m200): target_regimes.append(2); continue
-                if v > 40: target_regimes.append(4)
-                elif q < m200: target_regimes.append(3)
-                elif q >= m200 and m50 >= m200 and v < 25: target_regimes.append(1)
-                else: target_regimes.append(2)
-                
-            current_v4_4 = 3; pend_v4_4 = None; cnt_v4_4 = 0; actual_regime_v4_4 = []
-            regime_entry_dates = []; current_entry_date = data.index[0]
-            
-            for i, tr in enumerate(target_regimes):
-                prev_regime_state = current_v4_4
-                if tr > current_v4_4: 
-                    current_v4_4 = tr; pend_v4_4 = None; cnt_v4_4 = 0; actual_regime_v4_4.append(current_v4_4)
-                elif tr < current_v4_4:
-                    if tr == pend_v4_4:
-                        cnt_v4_4 += 1
-                        if cnt_v4_4 >= 5: current_v4_4 = tr; pend_v4_4 = None; cnt_v4_4 = 0; actual_regime_v4_4.append(current_v4_4)
-                        else: actual_regime_v4_4.append(current_v4_4 - 1)
-                    else: 
-                        pend_v4_4 = tr; cnt_v4_4 = 1; actual_regime_v4_4.append(current_v4_4 - 1)
-                else: 
-                    pend_v4_4 = None; cnt_v4_4 = 0; actual_regime_v4_4.append(current_v4_4)
-                    
-                if actual_regime_v4_4[-1] != prev_regime_state:
-                    current_entry_date = data.index[i]
-                regime_entry_dates.append(current_entry_date)
-                    
-            applied_series = pd.Series(actual_regime_v4_4, index=data.index).shift(1).bfill()
-            entry_dates_series = pd.Series(regime_entry_dates, index=data.index).shift(1).bfill()
-            
-            current_reg = applied_series.iloc[-1]
-            regime_start_date = entry_dates_series.iloc[-1]
-            regime_duration = len(data.loc[regime_start_date:])
-
-            target_reg = int(target_regimes[-1])
-            is_waiting = (pend_v4_4 is not None and target_reg < current_v4_4)
-
-            hyg_ief_ratio = data['HYG'] / data['IEF']
-            hyg_ief_ma50 = hyg_ief_ratio.rolling(50).mean().iloc[-1]
-            hyg_ief_curr = hyg_ief_ratio.iloc[-1]
-            
-            qqq_20d = (data['QQQ'].iloc[-1] / data['QQQ'].iloc[-21]) - 1 if len(data) > 21 else 0
-            if 'QQQE' in data.columns and len(data['QQQE'].dropna()) > 21:
-                qqqe_20d = (data['QQQE'].iloc[-1] / data['QQQE'].iloc[-21]) - 1
-            else: qqqe_20d = qqq_20d
-
-            try:
-                fx_data = yf.download('USDKRW=X', period='5d', progress=False)['Close'].ffill()
-                current_usdkrw = float(fx_data.iloc[:, 0].iloc[-1] if isinstance(fx_data, pd.DataFrame) else fx_data.iloc[-1])
-            except: current_usdkrw = 0.0
-
-            hist_len = 45
-            hist_vix = data['^VIX'].tail(hist_len).fillna(method='bfill').tolist()
-            hist_qqq = data['QQQ'].tail(hist_len).fillna(method='bfill').tolist()
-            hist_ma200 = ma200_s.tail(hist_len).fillna(method='bfill').tolist()
-            hist_ma50 = ma50_s.tail(hist_len).fillna(method='bfill').tolist()
-
-            return {
-                'regime': int(current_reg), 'target_regime': target_reg, 'is_waiting': is_waiting, 'wait_days': cnt_v4_4, 
-                'regime_duration': regime_duration, 'regime_start_date': regime_start_date,
-                'vix': today['^VIX'], 'qqq': today['QQQ'], 'ma200': ma200_s.iloc[-1], 'ma50': ma50_s.iloc[-1],
-                'qqq_rsi': qqq_rsi_s.iloc[-1],
-                'smh': today['SMH'], 'smh_ma50': smh_ma50_s.iloc[-1], 'smh_3m_ret': smh_3m_ret_s.iloc[-1], 'smh_rsi': smh_rsi_s.iloc[-1],
-                'prices': today.to_dict(), 'prev_prices': yesterday.to_dict(), 'date': data.index[-1], 'usdkrw': current_usdkrw,
-                'hyg_ief_curr': hyg_ief_curr, 'hyg_ief_ma50': hyg_ief_ma50,
-                'qqq_20d': qqq_20d, 'qqqe_20d': qqqe_20d,
-                'hist_vix': hist_vix, 'hist_qqq': hist_qqq, 'hist_ma200': hist_ma200, 'hist_ma50': hist_ma50
-            }
-
-        @st.cache_data(ttl=60)
-        def get_realtime_prices():
-            RT_TICKERS = ['QQQ', 'TQQQ', 'SOXL', 'USD', 'QLD', 'SSO', 'SPY', 'SMH', 'GLD', '^VIX', 'USDKRW=X']
-            try:
-                rt = yf.download(RT_TICKERS, period='1d', interval='5m', prepost=True, progress=False)['Close']
-                if rt.empty: return None
-                return rt.ffill().iloc[-1].to_dict()
-            except: return None
-
-        with st.spinner("AI 엔진 및 데이터 동기화 중..."): 
-            ms = get_market_status()
-            rt_prices = get_realtime_prices()
-
-        if rt_prices:
-            for k, v in rt_prices.items():
-                if k in ms['prices'] and pd.notna(v): ms['prices'][k] = v
-            if pd.notna(rt_prices.get('^VIX', None)): ms['vix'] = rt_prices['^VIX']
-            if pd.notna(rt_prices.get('QQQ', None)): ms['qqq'] = rt_prices['QQQ']
-            if pd.notna(rt_prices.get('SMH', None)): ms['smh'] = rt_prices['SMH']
-            if pd.notna(rt_prices.get('USDKRW=X', None)): ms['usdkrw'] = rt_prices['USDKRW=X']
-            
-            vix_rt, qqq_rt = ms['vix'], ms['qqq']
-            if vix_rt > 40: rt_tgt = 4
-            elif qqq_rt < ms['ma200']: rt_tgt = 3
-            elif qqq_rt >= ms['ma200'] and ms['ma50'] >= ms['ma200'] and vix_rt < 25: rt_tgt = 1
-            else: rt_tgt = 2
-            
-            ms['target_regime'] = rt_tgt
-            if rt_tgt > ms['regime']:
-                ms['regime'] = rt_tgt
-                ms['is_waiting'] = False
-            
-            from datetime import timezone
-            now_utc = datetime.now(timezone.utc)
-            et_hour = (now_utc.hour - 5) % 24 
-            if 4 <= et_hour < 9.5: price_label = "Pre"
-            elif 9.5 <= et_hour < 16: price_label = "Live"
-            elif 16 <= et_hour < 20: price_label = "After"
-            else: price_label = "Live"
-        else: price_label = "Close"
-
-        live_prices = {k: ms['prices'].get(k, 1.0) for k in REQUIRED_TICKERS}; live_prices['CASH'] = 1.0
-        prev_prices = {k: ms['prev_prices'].get(k, live_prices[k]) for k in REQUIRED_TICKERS}; prev_prices['CASH'] = 1.0
-        current_usdkrw = ms['usdkrw']
-        
-        disp_df = pf_df.copy()
-        disp_df["현재가 ($)"] = disp_df["티커 (Ticker)"].apply(lambda x: live_prices.get(x, 0.0))
-        disp_df["현재 환율"] = current_usdkrw
-        
-        def cy(row):
-            if row["수량 (주/달러)"] == 0 or row["평균 단가 ($)"] == 0 or row["티커 (Ticker)"] == "CASH": return 0.0
-            return (row["현재가 ($)"] - row["평균 단가 ($)"]) / row["평균 단가 ($)"] * 100
-        disp_df["수익률 (%)"] = disp_df.apply(cy, axis=1)
-        
-        def cy_krw(row):
-            if row["수량 (주/달러)"] == 0 or row["평균 단가 ($)"] == 0 or row["티커 (Ticker)"] == "CASH": return 0.0
-            if row["매입 환율"] <= 0 or current_usdkrw <= 0: return 0.0
-            buy_krw = row["평균 단가 ($)"] * row["매입 환율"]; now_krw = row["현재가 ($)"] * current_usdkrw
-            return (now_krw - buy_krw) / buy_krw * 100
-        disp_df["원화 수익률 (%)"] = disp_df.apply(cy_krw, axis=1)
-
-        total_val_now = 0.0; total_val_yest = 0.0; auto_seed = 0.0
-        best_ticker = "-"; best_ret = -999.0
-        asset_vals = {}; weights_dict = {}
-        
-        for _, row in disp_df.iterrows():
-            tkr = str(row["티커 (Ticker)"]).upper().strip()
-            qty = float(row["수량 (주/달러)"] if pd.notna(row["수량 (주/달러)"]) else 0)
-            avg_p = float(row["평균 단가 ($)"] if pd.notna(row["평균 단가 ($)"]) else 0)
-            
-            v_now = qty * live_prices.get(tkr, 0.0) if tkr != "CASH" else qty
-            v_yest = qty * prev_prices.get(tkr, 0.0) if tkr != "CASH" else qty
-            
-            if v_now > 0: asset_vals[tkr] = v_now
-            if qty > 0:
-                total_val_now += v_now
-                total_val_yest += v_yest
-                auto_seed += qty if tkr == "CASH" else qty * avg_p
-                r_ret = row["수익률 (%)"]
-                if tkr != "CASH" and r_ret > best_ret: best_ret = r_ret; best_ticker = tkr
-
-        best_ret_display = f"{best_ret:+.1f}%" if best_ret != -999.0 else "0.0%"
-
-        if total_val_now > 0:
-            for k, v in asset_vals.items(): weights_dict[k] = v / total_val_now
-
-        daily_diff = total_val_now - total_val_yest
-        daily_diff_pct = (daily_diff / total_val_yest * 100) if total_val_yest > 0 else 0.0
-
-        st.session_state['accounts'][acc_name]["target_seed"] = auto_seed
-        rebal_base = total_val_now if total_val_now > 0 else auto_seed
-
-        today_str = datetime.now().strftime("%Y-%m-%d")
-        history_changed = False
-        last_seed = curr_acc_data["seed_history"].get(today_str, {}).get("seed")
-        last_equity = curr_acc_data["seed_history"].get(today_str, {}).get("equity")
-        if total_val_now > 0 or auto_seed > 0:
-            if last_seed != auto_seed or last_equity != total_val_now:
-                curr_acc_data["seed_history"][today_str] = {"seed": auto_seed, "equity": total_val_now}
-                history_changed = True
-        if history_changed: save_accounts_data(st.session_state['accounts'])
-
-        with st.sidebar.expander("🛠️ 화면 레이아웃 편집"):
-            st.caption("위아래 버튼으로 순서를 변경하세요.")
-            for i, block_name in enumerate(current_layout):
-                c_name, c_up, c_dn = st.columns([5, 1, 1])
-                c_name.markdown(f"<div style='padding-top:5px; font-size: 0.9rem; font-weight:bold;'>{i+1}. {block_name}</div>", unsafe_allow_html=True)
-                if c_up.button("▲", key=f"up_{i}_{acc_name}") and i > 0:
-                    current_layout[i], current_layout[i-1] = current_layout[i-1], current_layout[i]
-                    curr_acc_data["layout_order"] = current_layout
-                    save_accounts_data(st.session_state['accounts']); st.rerun()
-                if c_dn.button("▼", key=f"dn_{i}_{acc_name}") and i < len(current_layout)-1:
-                    current_layout[i], current_layout[i+1] = current_layout[i+1], current_layout[i]
-                    curr_acc_data["layout_order"] = current_layout
-                    save_accounts_data(st.session_state['accounts']); st.rerun()
-
-        for block in current_layout:
-            
-            if block == "🎯 목표 달성률":
-                target_val = curr_acc_data.get("target_portfolio_value", 100000.0)
-                progress_pct = (total_val_now / target_val) * 100 if target_val > 0 else 0.0
-                
-                with st.container(border=True):
-                    render_card_header("🎯 포트폴리오 목표 달성률", "PROGRESS")
-                    c_prog, c_set = st.columns([4, 1.2])
-                    with c_set:
-                        new_target = st.number_input("목표 금액 설정", min_value=0.0, value=float(target_val), step=10000.0, format="%.0f", key=f"tgt_{acc_name}")
-                        if new_target != target_val:
-                            st.session_state['accounts'][acc_name]["target_portfolio_value"] = new_target
-                            save_accounts_data(st.session_state['accounts'])
-                            st.rerun()
-                    with c_prog:
-                        st.markdown(f"""
-<div style='display:flex; justify-content:space-between; margin-bottom:8px; font-weight:900; font-size:1.2rem;'>
-<span>현재: ${total_val_now:,.0f}</span>
-<span style='color:{C_DOWN};'>목표: ${target_val:,.0f}</span>
+    <div class="live-pulse" style="display:inline-flex; align-items:center; gap:5px; font-family:'DM Mono'; font-size:0.65em; color:#059669; padding:4px 10px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); letter-spacing:0.06em;">
+        {rt_label}
+    </div>
 </div>
-<div style='background-color:rgba(0,0,0,0.05); border-radius:8px; height:20px; width:100%; position:relative; overflow:hidden; border: 1px solid rgba(0,0,0,0.1);'>
-<div style='background-color:{MAIN_GREEN}; width:{min(100.0, progress_pct)}%; height:100%;'></div>
-</div>
-<div style='text-align:right; margin-top:8px; font-weight:900; font-size:1.5rem; color:{MAIN_GREEN};'>{progress_pct:.2f}%</div>
-""", unsafe_allow_html=True)
+"""), unsafe_allow_html=True)
 
-            elif block == "📊 실시간 요약":
-                pn_col = C_UP if daily_diff > 0 else C_DOWN
-                pn_ico = "▲" if daily_diff > 0 else ("▼" if daily_diff < 0 else "-")
-                
-                with st.container(border=True):
-                    render_card_header(f"📊 자산 및 시황 요약 (기준: {price_label})", "DASHBOARD")
-                    st.markdown(f"""
-<div style='display:flex; flex-direction:row; justify-content:space-between; align-items:center; text-align:center;'>
-<div style='flex:1; border-right:1px solid rgba(0,0,0,0.05); padding:0 10px;'>
-<div style='font-size:0.95rem; font-weight:800; color:{TEXT_SUB};'>💰 총 평가액 (Total)</div>
-<div style='font-size:2.2rem; font-weight:800; margin-top:5px; color:{TEXT_COLOR};'>${total_val_now:,.0f}</div>
-</div>
-<div style='flex:1; border-right:1px solid rgba(0,0,0,0.05); padding:0 10px;'>
-<div style='font-size:0.95rem; font-weight:800; color:{TEXT_SUB};'>일간 손익 (Daily)</div>
-<div style='color:{pn_col}; font-size:2.2rem; font-weight:800; margin-top:5px;'>{pn_ico} {abs(daily_diff_pct):.2f}%</div>
-<div style='color:{pn_col}; font-size:1rem; font-weight:bold;'>({daily_diff:+.0f} $)</div>
-</div>
-<div style='flex:1; padding:0 10px;'>
-<div style='font-size:0.95rem; font-weight:800; color:{TEXT_SUB};'>👑 포트폴리오 MVP</div>
-<div style='font-size:2.2rem; font-weight:800; margin-top:5px; color:{TEXT_COLOR};'>{best_ticker}</div>
-<div style='font-size:1rem; font-weight:bold; color:{MAIN_GREEN};'>수익률 {best_ret_display}</div>
-</div>
-</div>
-""", unsafe_allow_html=True)
-                
-            elif block == "⚡ 시스템 분석관":
-                with st.container(border=True):
-                    render_card_header("⚡ 실시간 시스템 분석관 요약", "AI REGIME ANALYSIS")
-                    app_reg = ms['regime']
-                    tgt_reg = ms['target_regime']
-                    is_wait = ms['is_waiting']
-                    wait_d = ms['wait_days']
-                    dur = ms['regime_duration']
-                    start_dt = ms['regime_start_date'].strftime('%Y-%m-%d')
-                    
-                    vix_c = ms['vix']; qqq_c = ms['qqq']; ma200_c = ms['ma200']; smh_c = ms['smh']; smh_ma50_c = ms['smh_ma50']; ma50_c = ms['ma50']
-                    
-                    s_stat = "✅ 돌파" if smh_c > smh_ma50_c else "❌ 붕괴"
-                    s_col = C_UP if smh_c > smh_ma50_c else C_DOWN
-                    r_stat = "✅ 통과" if ms['smh_3m_ret'] > 0.05 else "❌ 미달"
-                    r_col = C_UP if ms['smh_3m_ret'] > 0.05 else C_DOWN
-                    rsi_stat = "✅ 통과" if ms['smh_rsi'] > 50 else "❌ 미달"
-                    rsi_col = C_UP if ms['smh_rsi'] > 50 else C_DOWN
-                    
-                    is_soxl_appr = (smh_c > smh_ma50_c and ms['smh_3m_ret'] > 0.05 and ms['smh_rsi'] > 50)
-                    soxl_res = f"<span style='color:{C_UP}; font-weight:900;'>✅ SOXL 편입 승인</span>" if is_soxl_appr else f"<span style='color:{C_WARN}; font-weight:900;'>⚠️ USD 방어 유지</span>"
-                    soxl_bg = "rgba(52, 199, 89, 0.15)" if is_soxl_appr else "rgba(255, 149, 0, 0.15)"
+st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 15px 6px;">Navigation</div>""", unsafe_allow_html=True)
+page = st.sidebar.radio("MENU",
+    ["📊 Dashboard", "💼 Portfolio", "🍫 12-Pack Radar", "📈 Backtest Lab", "📰 Macro News"],
+    label_visibility="collapsed")
 
-                    wait_msg = ""
-                    if is_wait and tgt_reg < app_reg:
-                        wait_msg = f"<div style='margin-top:10px; padding:10px; background-color:rgba(255,193,7,0.15); border-left:4px solid #ffc107; font-size:0.95rem; font-weight:bold; border-radius:8px;'><span style='color:#ff9800;'>⏳ 상향 전환 검증 진행 중 ({wait_d}/5일차)</span><br>휩쏘 방지를 위해 R{app_reg} 유지 중</div>"
-                    elif tgt_reg > app_reg:
-                        wait_msg = f"<div style='margin-top:10px; padding:10px; background-color:rgba(231,76,60,0.15); border-left:4px solid #e74c3c; font-size:0.95rem; font-weight:bold; border-radius:8px;'><span style='color:#e74c3c;'>🚨 하락 전환 주의</span><br>내일 아침 즉시 하향 전환(R{tgt_reg}) 예상</div>"
-
-                    dur_text = f"<br><span style='color:{TEXT_COLOR}; font-weight:800; font-size:1rem;'>⏱️ 현재 R{app_reg} 진입일: {start_dt} ({dur}일째 체류 중)</span>"
-
-                    b_badge = f"<span style='display:inline-flex; width:24px; height:24px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; font-size:0.8rem; margin-right:6px;'>"
-                    if app_reg == 1:
-                        reg_t = f"<span style='color:{MAIN_GREEN}; font-weight:800; font-size:1.5rem;'>[R1: 완벽한 강세장]</span>"
-                        reg_d = f"<div style='margin-bottom: 8px;'>{b_badge}1</span> <b>거시 및 추세 진단:</b> VIX 지수({vix_c:.1f})가 하향 안정화되었으며, 나스닥(QQQ)이 장기 추세선(200MA)을 확고히 지지하고 있습니다. 시장의 위험 선호 심리가 지배적인 완벽한 정배열 상승 국면입니다.</div><div>{b_badge}2</span> <b>운용 전략:</b> 포트폴리오의 공격성을 최대치로 끌어올려 상승 랠리에 동참해야 합니다. 3배수 레버리지(TQQQ) 비중을 확대하여 초과 수익을 극대화하십시오.</div>{dur_text}{wait_msg}"
-                    elif app_reg == 2:
-                        reg_t = f"<span style='color:{C_WARN}; font-weight:800; font-size:1.5rem;'>[R2: 조정/경계]</span>"
-                        reg_d = f"<div style='margin-bottom: 8px;'>{b_badge}1</span> <b>거시 및 추세 진단:</b> 장기 추세는 유효하나 VIX 지수가 상승하며 시장 노이즈가 발생 중입니다. 단기 모멘텀 약화로 기술적 피로도가 누적된 상태입니다.</div><div>{b_badge}2</span> <b>운용 전략:</b> 변동성 확대에 대비해 수익금 보존에 집중해야 할 시기입니다. 3배수 비중을 축소하고, 2배수 및 방어 자산 비중을 늘려 안전 마진을 확보하십시오.</div>{dur_text}{wait_msg}"
-                    elif app_reg == 3:
-                        reg_t = f"<span style='color:{C_DOWN}; font-weight:800; font-size:1.5rem;'>[R3: 장기 하락장]</span>"
-                        reg_d = f"<div style='margin-bottom: 8px;'>{b_badge}1</span> <b>거시 및 추세 진단:</b> 나스닥이 200일 이평선을 하향 이탈하여 중장기 역배열 추세가 컨펌되었습니다. 자본 이탈이 가속화되는 베어마켓 진입 초기일 가능성이 높습니다.</div><div>{b_badge}2</span> <b>운용 전략:</b> 레버리지 상품을 전면 청산하고 극단적인 방어 태세를 갖추십시오. 자산의 절반 이상을 안전 자산으로 대피시켜 치명적 손실을 방어해야 합니다.</div>{dur_text}{wait_msg}"
-                    else:
-                        reg_t = f"<span style='color:{C_DOWN}; font-weight:800; font-size:1.5rem;'>[R4: 시스템 패닉]</span>"
-                        reg_d = f"<div style='margin-bottom: 8px;'>{b_badge}1</span> <b>거시 및 추세 진단:</b> VIX 지수가 40을 돌파하며 극단적 공포 현상이 지표로 확인되었습니다. 시스템 리스크 구간입니다.</div><div>{b_badge}2</span> <b>운용 전략:</b> 모든 투기적 포지션을 즉시 중단하십시오. 무모한 바닥 잡기를 지양하고 현금 보유 비중을 최대로 유지하십시오.</div>{dur_text}{wait_msg}"
-
-                    vix_status = "🔴 패닉 (>40)" if vix_c > 40 else ("🟡 경계 (25~40)" if vix_c >= 25 else "🟢 안정 (<25)")
-                    vix_col = C_DOWN if vix_c > 40 else (C_WARN if vix_c >= 25 else C_UP)
-                    trend_status = "🟢 상승" if qqq_c >= ma200_c else "🔴 하락"
-                    trend_col = C_UP if qqq_c >= ma200_c else C_DOWN
-                    trend_gap = (qqq_c / ma200_c - 1) * 100
-                    align_status = "🟢 정배열" if ma50_c >= ma200_c else "🔴 역배열"
-                    align_col = C_UP if ma50_c >= ma200_c else C_DOWN
-                    align_gap = (ma50_c / ma200_c - 1) * 100
-
-                    html_str = f"""
-<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px;'>
-<div style='background:rgba(255,255,255,0.4); border:1px solid rgba(0,0,0,0.05); border-radius:16px; padding:20px; display:flex; flex-direction:column; justify-content:space-between;'>
-<div style='font-weight:800; font-size:1.1rem; margin-bottom:12px; border-bottom:1px solid rgba(0,0,0,0.05); padding-bottom:6px;'>⚡ SOXL 진입 판독기</div>
-<div style='display: flex; flex-direction: column; gap: 10px;'>
-<div style='background: rgba(255,255,255,0.7); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.05); border-left: 4px solid {s_col};'>
-<div style='display: flex; justify-content: space-between; align-items: center;'>
-<span style='font-size: 0.85rem; font-weight: bold;'>① 50MA 추세</span>
-<span style='font-size: 0.9rem; font-weight: 800; color: {s_col};'>{s_stat}</span>
-</div>
-<div style='display: flex; justify-content: space-between; align-items: center; margin-top: 4px;'>
-<span style='font-size: 1.3rem; font-weight: 800;'>${smh_c:.2f}</span>
-<span style='font-size: 0.85rem; opacity: 0.7;'>기준: ${smh_ma50_c:.2f}</span>
-</div>
-</div>
-<div style='background: rgba(255,255,255,0.7); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.05); border-left: 4px solid {r_col};'>
-<div style='display: flex; justify-content: space-between; align-items: center;'>
-<span style='font-size: 0.85rem; font-weight: bold;'>② 3M 수익률</span>
-<span style='font-size: 0.9rem; font-weight: 800; color: {r_col};'>{r_stat}</span>
-</div>
-<div style='display: flex; justify-content: space-between; align-items: center; margin-top: 4px;'>
-<span style='font-size: 1.3rem; font-weight: 800;'>{ms['smh_3m_ret']*100:+.2f}%</span>
-<span style='font-size: 0.85rem; opacity: 0.7;'>기준: +5.0% 이상</span>
-</div>
-</div>
-<div style='background: rgba(255,255,255,0.7); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.05); border-left: 4px solid {rsi_col};'>
-<div style='display: flex; justify-content: space-between; align-items: center;'>
-<span style='font-size: 0.85rem; font-weight: bold;'>③ 과열/침체 (RSI)</span>
-<span style='font-size: 0.9rem; font-weight: 800; color: {rsi_col};'>{rsi_stat}</span>
-</div>
-<div style='display: flex; justify-content: space-between; align-items: center; margin-top: 4px;'>
-<span style='font-size: 1.3rem; font-weight: 800;'>{ms['smh_rsi']:.1f}</span>
-<span style='font-size: 0.85rem; opacity: 0.7;'>기준: 50.0 이상</span>
-</div>
-</div>
-</div>
-<div style='margin-top:15px; padding:12px; border-radius:12px; background-color:{soxl_bg}; text-align: center;'>
-<div style='font-size: 1.2rem; font-weight: 800;'>{soxl_res}</div>
-</div>
-</div>
-
-<div style='grid-column: span 2; background:rgba(255,255,255,0.4); border:1px solid rgba(0,0,0,0.05); border-radius:16px; padding:20px; display:flex; flex-direction:column; justify-content:flex-start;'>
-<div style='font-weight:800; font-size:1.1rem; margin-bottom:12px; border-bottom:1px solid rgba(0,0,0,0.05); padding-bottom:6px;'>🤖 AI 전략 분석관 리서치 Report</div>
-<div style='font-size:1rem; line-height:1.7; padding-top: 5px;'>
-<div style='margin-bottom:12px;'>{reg_t}</div>
-{reg_d}
-</div>
-<div style='margin-top: auto; padding-top: 15px; border-top: 1px dashed rgba(0,0,0,0.1);'>
-<div style='font-weight:800; margin-bottom:10px; font-size: 1rem;'>🔍 타겟 국면(Regime) 산출 근거 시각화 <span style='font-weight:bold; color:{MAIN_GREEN};'>(현재 AI 타겟: R{tgt_reg})</span></div>
-</div>
-</div>
-</div>
-"""
-                    st.markdown(html_str, unsafe_allow_html=True)
-                    
-                    m1, m2, m3 = st.columns(3)
-                    with m1:
-                        st.markdown(f"""<div style='text-align:center; padding: 10px; background: rgba(255,255,255,0.7); border: 1px solid rgba(0,0,0,0.05); border-radius: 12px; min-width: 120px;'>
-<div style='font-size: 0.8rem; font-weight: bold;'>조건 1. 공포 지수 (VIX)</div>
-<div style='font-size: 1.2rem; font-weight: 800; color: {vix_col}; margin-top: 5px;'>{vix_status}</div>
-</div>""", unsafe_allow_html=True)
-                        st.plotly_chart(get_plotly_sparkline(ms['hist_vix'], vix_col, hline=40 if vix_c>30 else 25), use_container_width=True, config={'displayModeBar': False})
-                        st.markdown(f"<div style='text-align:center; font-size: 0.8rem; margin-top: -10px; font-weight: bold; color:{TEXT_SUB};'>현재: {vix_c:.2f}</div>", unsafe_allow_html=True)
-                    with m2:
-                        st.markdown(f"""<div style='text-align:center; padding: 10px; background: rgba(255,255,255,0.7); border: 1px solid rgba(0,0,0,0.05); border-radius: 12px; min-width: 120px;'>
-<div style='font-size: 0.8rem; font-weight: bold;'>조건 2. 장기 추세 (QQQ)</div>
-<div style='font-size: 1.2rem; font-weight: 800; color: {trend_col}; margin-top: 5px;'>{trend_status}</div>
-</div>""", unsafe_allow_html=True)
-                        st.plotly_chart(get_plotly_dual_sparkline(ms['hist_qqq'], ms['hist_ma200'], trend_col, 'rgba(150,150,150,0.5)'), use_container_width=True, config={'displayModeBar': False})
-                        st.markdown(f"<div style='text-align:center; font-size: 0.8rem; margin-top: -10px; font-weight: bold; color:{TEXT_SUB};'>200MA 이격: {trend_gap:+.1f}%</div>", unsafe_allow_html=True)
-                    with m3:
-                        st.markdown(f"""<div style='text-align:center; padding: 10px; background: rgba(255,255,255,0.7); border: 1px solid rgba(0,0,0,0.05); border-radius: 12px; min-width: 120px;'>
-<div style='font-size: 0.8rem; font-weight: bold;'>조건 3. 이평선 배열</div>
-<div style='font-size: 1.2rem; font-weight: 800; color: {align_col}; margin-top: 5px;'>{align_status}</div>
-</div>""", unsafe_allow_html=True)
-                        st.plotly_chart(get_plotly_dual_sparkline(ms['hist_ma50'], ms['hist_ma200'], align_col, 'rgba(150,150,150,0.5)'), use_container_width=True, config={'displayModeBar': False})
-                        st.markdown(f"<div style='text-align:center; font-size: 0.8rem; margin-top: -10px; font-weight: bold; color:{TEXT_SUB};'>50MA 이격: {align_gap:+.1f}%</div>", unsafe_allow_html=True)
-                
-            elif block == "🚀 실전 퀀트 무기":
-                with st.container(border=True):
-                    render_card_header("🚀 실전 퀀트 무기 (Macro & Momentum)", "QUANT TOOLS")
-                    q_rsi = ms['qqq_rsi']
-                    if q_rsi > 70: dca_col, dca_stat, dca_desc = C_DOWN, "🔥 과열 (Overbought)", "QQQ RSI가 70 초과. 신규 자금 투입 보류 권장."
-                    elif q_rsi < 30: dca_col, dca_stat, dca_desc = C_UP, "❄️ 바닥 (Oversold)", "QQQ RSI가 30 미만. 적립금 200% 투입 권장."
-                    else: dca_col, dca_stat, dca_desc = C_SAFE, "🟢 정상 (Neutral)", "적절한 가격대. 계획된 월 적립금 정상 투입."
-
-                    sm_curr, sm_ma50 = ms['hyg_ief_curr'], ms['hyg_ief_ma50']
-                    if pd.notna(sm_curr) and pd.notna(sm_ma50):
-                        if sm_curr < sm_ma50: sm_col, sm_stat, sm_desc = C_DOWN, "🚨 자금 이탈 (Risk-Off)", "하이일드 투매 현상. 증시 폭락 선행 지표 감지."
-                        else: sm_col, sm_stat, sm_desc = C_UP, "✅ 자금 유입 (Risk-On)", "스마트머니가 위험 자산에 안정적으로 체류 중."
-                    else: sm_col, sm_stat, sm_desc = TEXT_SUB, "데이터 부족", "데이터 로딩 중"
-
-                    q_20, qe_20 = ms['qqq_20d'], ms['qqqe_20d']
-                    if q_20 > 0 and qe_20 < 0: br_col, br_stat, br_desc = C_WARN, "⚠️ 가짜 상승 (Divergence)", "지수는 오르나 대다수 하락. 소수 대형주 독주."
-                    elif q_20 < 0 and qe_20 > 0: br_col, br_stat, br_desc = C_UP, "💡 숨은 강세 (Accumulation)", "지수는 내리나 대다수 반등. 폭넓은 매수세 유입."
-                    else: br_col, br_stat, br_desc = C_SAFE, "🟢 건전한 동조화", "시총 가중치와 동일 가중치가 함께 움직임."
-
-                    st.markdown(f"""
-<div style='display: flex; gap: 15px; flex-wrap: wrap;'>
-<div style='flex: 1; min-width: 250px; background: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.05); border-radius: 14px; padding: 16px;'>
-<div style='font-weight:800; margin-bottom:8px; border-bottom:1px dashed rgba(0,0,0,0.1); padding-bottom:4px;'>💰 스마트 DCA (자금 투입)</div>
-<div style='font-size:0.95rem; line-height:1.6;'>
-<span style='color:{dca_col}; font-weight:800; font-size:1.3rem;'>{dca_stat}</span><br>
-<span style='font-weight:bold; color:{TEXT_SUB};'>{dca_desc}</span>
-</div>
-</div>
-<div style='flex: 1; min-width: 250px; background: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.05); border-radius: 14px; padding: 16px;'>
-<div style='font-weight:800; margin-bottom:8px; border-bottom:1px dashed rgba(0,0,0,0.1); padding-bottom:4px;'>🚨 채권 스프레드 (스마트머니)</div>
-<div style='font-size:0.95rem; line-height:1.6;'>
-<span style='color:{sm_col}; font-weight:800; font-size:1.3rem;'>{sm_stat}</span><br>
-<span style='font-weight:bold; color:{TEXT_SUB};'>{sm_desc}</span>
-</div>
-</div>
-<div style='flex: 1; min-width: 250px; background: rgba(255,255,255,0.5); border: 1px solid rgba(0,0,0,0.05); border-radius: 14px; padding: 16px;'>
-<div style='font-weight:800; margin-bottom:8px; border-bottom:1px dashed rgba(0,0,0,0.1); padding-bottom:4px;'>⚖️ 시장 폭 (Market Breadth)</div>
-<div style='font-size:0.95rem; line-height:1.6;'>
-<span style='color:{br_col}; font-weight:800; font-size:1.3rem;'>{br_stat}</span><br>
-<span style='font-weight:bold; color:{TEXT_SUB};'>{br_desc}</span>
-</div>
-</div>
-</div>
-""", unsafe_allow_html=True)
-
-            elif block == "💼 포트폴리오 & 리밸런싱":
-                with st.container(border=True):
-                    render_card_header("💼 포트폴리오 기입 및 현황", "PORTFOLIO")
-                    col_tab, col_pie = st.columns([1.6, 1])
-                    
-                    with col_tab:
-                        def color_y(val):
-                            if isinstance(val, (int, float)):
-                                if val > 0: return f'color: {C_UP}; font-weight: 800;'
-                                elif val < 0: return f'color: {C_DOWN}; font-weight: 800;'
-                            return ''
-                        ed_disp = st.data_editor(
-                            disp_df.style.map(color_y, subset=["수익률 (%)", "원화 수익률 (%)"]), 
-                            num_rows="dynamic", use_container_width=True, height=320, key=f"ed_{acc_name}",
-                            column_order=["태그", "티커 (Ticker)", "수량 (주/달러)", "평균 단가 ($)", "매입 환율", "현재가 ($)", "수익률 (%)", "원화 수익률 (%)"],
-                            column_config={
-                                "태그": st.column_config.SelectboxColumn("태그", options=["코어", "위성", "헷지", "현금", "단기픽"], required=True),
-                                "티커 (Ticker)": st.column_config.TextColumn("종목명"),
-                                "현재가 ($)": st.column_config.NumberColumn("현재가 💵", disabled=True, format="$ %.2f"),
-                                "현재 환율": st.column_config.NumberColumn("현재 환율 💱", disabled=True, format="₩ %.1f"),
-                                "수익률 (%)": st.column_config.NumberColumn("수익률 📈", disabled=True, format="%.2f %%"),
-                                "원화 수익률 (%)": st.column_config.NumberColumn("원화 수익 🇰🇷", disabled=True, format="%.2f %%"),
-                                "매입 환율": st.column_config.NumberColumn("매입 환율 💱", format="₩ %.1f"),
-                            }
-                        )
-                        base_cols = ["티커 (Ticker)", "수량 (주/달러)", "평균 단가 ($)", "매입 환율", "태그"]
-                        if not ed_disp[base_cols].equals(pf_df[base_cols]):
-                            st.session_state['accounts'][acc_name]["portfolio"] = ed_disp[base_cols].to_dict(orient="records")
-                            save_accounts_data(st.session_state['accounts']); st.rerun()
-
-                    with col_pie:
-                        if total_val_now > 0:
-                            fig = go.Figure(go.Pie(labels=list(asset_vals.keys()), values=list(asset_vals.values()), hole=0.6, marker=dict(colors=[COLOR_PALETTE.get(k.split('/')[0], '#888') for k in asset_vals.keys()])))
-                            cust_p2 = THEME_LAYOUT.copy()
-                            cust_p2.update(height=280, showlegend=False, margin=dict(t=10, b=10, l=10, r=10), annotations=[dict(text="<b>100%</b>", x=0.5, y=0.5, showarrow=False, font=dict(color=TEXT_COLOR, size=18))])
-                            fig.update_layout(**cust_p2)
-                            fig.update_traces(textposition='inside', textinfo='percent+label', textfont_size=14, textfont_color="#fff")
-                            st.plotly_chart(fig, use_container_width=True)
-                        else:
-                            st.markdown(f"<div style='height: 280px; display: flex; align-items: center; justify-content: center; color: {TEXT_SUB}; font-weight:800;'>자산을 입력해 주세요.</div>", unsafe_allow_html=True)
-                
-                with st.container(border=True):
-                    render_card_header("⚖️ 기계적 리밸런싱 지침 (Tolerance: ±1.5주)", "REBALANCING")
-                    status_d = []
-                    smh_cond = (ms['smh'] > ms['smh_ma50']) and (ms['smh_3m_ret'] > 0.05) and (ms['smh_rsi'] > 50)
-                    
-                    def get_w_local(reg, usx):
-                        w = {t: 0.0 for t in REQUIRED_TICKERS}; semi = 'SOXL' if usx else 'USD'
-                        if reg == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'], w['SPY'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
-                        elif reg == 2: w['QLD'], w['SSO'], w['GLD'], w['USD'], w['QQQ'], w['SPY'] = 0.30, 0.25, 0.25, 0.10, 0.05, 0.05
-                        elif reg == 3: w['GLD'], w['QQQ'] = 0.50, 0.15
-                        elif reg == 4: w['GLD'], w['QQQ'] = 0.50, 0.10
-                        total_w = sum(w.values())
-                        if total_w < 1.0: w['CASH'] = round(1.0 - total_w, 4)
-                        return {k: v for k, v in w.items() if v > 0}
-                        
-                    target_w_dict = get_w_local(ms['regime'], smh_cond)
-                    
-                    target_seed = st.number_input("운용 시드 설정 ($)", value=float(curr_acc_data.get("target_seed", 10000.0)), step=1000.0, key=f"seed_{acc_name}")
-                    if target_seed != curr_acc_data.get("target_seed"):
-                        st.session_state['accounts'][acc_name]["target_seed"] = target_seed
-                        save_accounts_data(st.session_state['accounts'])
-
-                    all_tkrs = set([t for t in asset_vals.keys()] + list(target_w_dict.keys()))
-                    for tkr in all_tkrs:
-                        tkr = tkr.upper()
-                        my_v = asset_vals.get(tkr, 0.0); my_w = (my_v / total_val_now * 100) if total_val_now > 0 else 0.0
-                        tw = target_w_dict.get(tkr, 0.0)
-                        
-                        tv = target_seed * tw
-                        diff = tv - my_v
-                        cp = live_prices.get(tkr, 0.0)
-                        
-                        if tkr != "CASH" and cp > 0:
-                            shares_to_trade = abs(diff) / cp
-                            action_suffix = f" (약 {shares_to_trade:.1f}주)"
-                            if shares_to_trade <= 1.5: action = "유지 (적정)"
-                            elif diff > 0: action = f"매수 ${diff:,.0f}{action_suffix}"
-                            else: action = f"매도 ${abs(diff):,.0f}{action_suffix}"
-                        elif tkr == "CASH":
-                            if abs(diff) < 50: action = "유지 (적정)"
-                            elif diff > 0: action = f"현금 비축 필요 (+${diff:,.0f})"
-                            else: action = f"타 종목 매수에 활용 (${abs(diff):,.0f} 여유)"
-                        else: action = "유지 (적정)"
-                        
-                        if my_v > 0 or tw > 0: 
-                            status_d.append({"종목": tkr, "목표비중": f"{tw*100:.1f}%", "현재비중": f"{my_w:.1f}%", "목표액": f"${tv:,.0f}", "현재액": f"${my_v:,.0f}", "리밸런싱 액션": action})
-                            
-                    if status_d:
-                        status_df = pd.DataFrame(status_d).sort_values("목표비중", ascending=False)
-                        fig_comp = go.Figure(data=[
-                            go.Bar(name='현재 비중 (Actual)', x=list(status_df['종목']), y=[float(str(x).replace('%','')) for x in status_df['현재비중']], marker_color='#86868B'),
-                            go.Bar(name='목표 비중 (Target)', x=list(status_df['종목']), y=[float(str(x).replace('%','')) for x in status_df['목표비중']], marker_color=MAIN_GREEN)
-                        ])
-                        fig_comp.update_layout(barmode='group', height=250, margin=dict(t=30, b=0, l=0, r=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                        st.plotly_chart(fig_comp, use_container_width=True)
-
-                        def color_act(val):
-                            val_s = str(val)
-                            if '매수' in val_s or '비축' in val_s: return f'color: {C_UP}; font-weight:800;'
-                            elif '매도' in val_s or '활용' in val_s: return f'color: {C_DOWN}; font-weight:800;'
-                            elif '적정' in val_s: return f'color: {TEXT_SUB}; font-weight:bold;'
-                            return ''
-                        st.dataframe(status_df.style.map(color_act, subset=['리밸런싱 액션']), use_container_width=True, hide_index=True)
-
-            elif block == "🧩 자산 상관관계 히트맵":
-                with st.container(border=True):
-                    render_card_header("🧩 자산 상관관계 분석 (Correlation Matrix)", "CORRELATION")
-                    st.caption("거물의 시선: 지난 1년간 내 포트폴리오 종목들이 얼마나 똑같이 움직였을까? 1.0에 가까우면 동조화, 음수면 훌륭한 헷징 수단이라네.")
-                    active_tkrs = [t for t in asset_vals.keys() if t != "CASH"]
-                    if len(active_tkrs) > 1:
-                        try:
-                            corr_data = yf.download(active_tkrs, period="1y", progress=False)['Close']
-                            corr_matrix = corr_data.pct_change().corr().round(2)
-                            fig_corr = go.Figure(data=go.Heatmap(
-                                z=corr_matrix.values, x=corr_matrix.columns, y=corr_matrix.index,
-                                text=corr_matrix.values, texttemplate="%{text}",
-                                colorscale="RdBu", zmin=-1, zmax=1
-                            ))
-                            cust_corr = THEME_LAYOUT.copy(); cust_corr.update(height=400, margin=dict(l=10, r=10, t=10, b=10))
-                            fig_corr.update_layout(**cust_corr)
-                            st.plotly_chart(fig_corr, use_container_width=True)
-                        except Exception as e:
-                            st.info("상관관계 데이터를 불러오기에 종목 수가 부족하거나 일시적인 네트워크 오류입니다.")
-                    else:
-                        st.info("히트맵을 분석하려면 주식 종목이 2개 이상 필요합니다.")
-
-            elif block == "🔮 10년 은퇴 시뮬레이션":
-                with st.container(border=True):
-                    render_card_header("🔮 10년 은퇴 몬테카를로 시뮬레이션", "MONTE CARLO")
-                    st.caption("거물의 시선: 과거의 평균 수익률과 변동성을 바탕으로, 자네가 10년 뒤 얼마나 큰 부를 이룰 수 있을지 확률론적으로 그려봤네.")
-                    if total_val_now > 1000 and sum(weights_dict.values()) > 0:
-                        try:
-                            sim_tkrs = [t for t in weights_dict.keys() if t != "CASH"]
-                            sim_data = yf.download(sim_tkrs, period="5y", progress=False)['Close'].pct_change().dropna()
-                            port_ret = sum(sim_data[t].mean() * weights_dict[t] for t in sim_tkrs if t in sim_data.columns) * 252
-                            port_vol = np.sqrt(sum((sim_data[t].std() * np.sqrt(252))**2 * (weights_dict[t]**2) for t in sim_tkrs if t in sim_data.columns))
-                            
-                            years = 10; days = years * 252
-                            np.random.seed(42) 
-                            dt = 1/252
-                            drift = (port_ret - 0.5 * port_vol**2) * dt
-                            vol = port_vol * np.sqrt(dt)
-                            paths = np.zeros((days, 3)); paths[0] = total_val_now
-                            
-                            z_scores = [1.28, 0, -1.28] 
-                            for t in range(1, days):
-                                for j in range(3):
-                                    paths[t][j] = paths[t-1][j] * np.exp(drift + vol * z_scores[j])
-
-                            x_dates = [datetime.today() + timedelta(days=i) for i in range(days)]
-                            fig_mc = go.Figure()
-                            fig_mc.add_trace(go.Scatter(x=x_dates, y=paths[:, 0], name="낙관적 (상위 10%)", line=dict(color=MAIN_GREEN, width=1.5, dash='dash')))
-                            fig_mc.add_trace(go.Scatter(x=x_dates, y=paths[:, 1], name="기대 평균", line=dict(color=TEXT_COLOR, width=3)))
-                            fig_mc.add_trace(go.Scatter(x=x_dates, y=paths[:, 2], name="비관적 (하위 10%)", line=dict(color=C_DOWN, width=1.5, dash='dash')))
-                            
-                            cust_mc = THEME_LAYOUT.copy()
-                            cust_mc.update(height=400, hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                            fig_mc.update_layout(**cust_mc)
-                            st.plotly_chart(fig_mc, use_container_width=True)
-                            st.success(f"**분석 결과:** 10년 후 당신의 자산은 평균적으로 **${paths[-1][1]:,.0f}** 에 도달할 것으로 기대됩니다. (연평균 기대 수익률 {port_ret*100:.1f}%, 변동성 {port_vol*100:.1f}% 가정)")
-                        except Exception as e:
-                            st.info("데이터가 부족하여 시뮬레이션을 실행할 수 없습니다.")
-                    else:
-                        st.info("시뮬레이션을 돌리기엔 자금이 너무 적거나 포트폴리오가 비어있습니다.")
-
-            elif block == "📈 목표 달성률 추이":
-                with st.container(border=True):
-                    render_card_header("📈 목표 달성률 추이", "TRACKING")
-                    hist_dict = curr_acc_data.get("seed_history", {})
-                    target_val = curr_acc_data.get("target_portfolio_value", 100000.0)
-                    
-                    if hist_dict and target_val > 0:
-                        hist_df = pd.DataFrame.from_dict(hist_dict, orient='index')
-                        hist_df.index = pd.to_datetime(hist_df.index)
-                        hist_df = hist_df.sort_index()
-
-                        hist_df['achieve_pct'] = (hist_df['equity'] / target_val) * 100
-
-                        fig_achieve = go.Figure()
-                        fig_achieve.add_trace(go.Scatter(
-                            x=hist_df.index, y=hist_df['achieve_pct'], 
-                            name="달성률", mode='lines+markers',
-                            line=dict(color=MAIN_GREEN, width=3.5), 
-                            marker=dict(size=8, color='#1a1a1a'),
-                            fill='tozeroy', fillcolor='rgba(0,192,96,0.1)'
-                        ))
-                        fig_achieve.add_hline(y=100, line_dash="dash", line_color=C_DOWN, annotation_text="목표 달성 (100%)", annotation_position="top left")
-                        
-                        cust_s = THEME_LAYOUT.copy()
-                        cust_s.update(height=350, hovermode="x unified", yaxis=dict(showgrid=True, ticksuffix="%"))
-                        fig_achieve.update_layout(**cust_s)
-                        st.plotly_chart(fig_achieve, use_container_width=True)
-                        st.caption("💡 접속 시 자동으로 해당 날짜의 총 평가액을 기록하여 목표 금액 대비 달성률(%) 궤적을 추적합니다.")
-                    else:
-                        st.info("아직 충분한 자산 기록이 없거나 목표 금액이 설정되지 않았습니다.")
-
-            elif block == "📈 성장 곡선":
-                with st.container(border=True):
-                    render_card_header("📈 자산 성장 곡선", "GROWTH")
-                    hist_dict = curr_acc_data.get("seed_history", {})
-                    if hist_dict:
-                        hist_df = pd.DataFrame.from_dict(hist_dict, orient='index')
-                        hist_df.index = pd.to_datetime(hist_df.index)
-                        hist_df = hist_df.sort_index()
-
-                        fed_str = curr_acc_data.get("first_entry_date")
-                        col_date, _ = st.columns([1, 3])
-                        with col_date:
-                            default_date = pd.to_datetime(fed_str).date() if fed_str else (datetime.today() - timedelta(days=90)).date()
-                            u_date = st.date_input("기준일 설정", value=default_date, key=f"date_{acc_name}")
-                            if str(u_date) != str(fed_str)[:10]: 
-                                st.session_state['accounts'][acc_name]["first_entry_date"] = str(u_date)
-                                save_accounts_data(st.session_state['accounts'])
-                        
-                        try:
-                            if fed_str:
-                                fed_dt = pd.to_datetime(fed_str)
-                                if fed_dt < hist_df.index[0]:
-                                    hist_df.loc[fed_dt] = {"seed": auto_seed, "equity": auto_seed}
-                                    hist_df = hist_df.sort_index()
-
-                            hist_df = hist_df.resample('D').ffill()
-
-                            fig_seed = go.Figure()
-                            fig_seed.add_trace(go.Scatter(x=hist_df.index, y=hist_df['equity'], name="실제 총 평가액", line=dict(color=MAIN_GREEN, width=3.5, shape='hv'), mode='lines'))
-                            fig_seed.add_trace(go.Scatter(x=hist_df.index, y=hist_df['seed'], name="투입 시드 원금", line=dict(color=TEXT_SUB, width=2, dash='dot', shape='hv'), mode='lines'))
-                            
-                            cust_s = THEME_LAYOUT.copy()
-                            cust_s.update(height=350, hovermode="x unified", yaxis=dict(showgrid=True, autorange=True, rangemode="normal"))
-                            fig_seed.update_layout(**cust_s)
-                            st.plotly_chart(fig_seed, use_container_width=True)
-                        except Exception as e: pass
-
-            elif block == "📝 매매 일지":
-                with st.container(border=True):
-                    render_card_header("📝 매매 일지 & 시스템 로그", "JOURNAL & LOGS")
-                    col_log1, col_log2 = st.columns([1.5, 1])
-                    with col_log1:
-                        def save_j(): st.session_state['accounts'][acc_name]["journal_text"] = st.session_state[f"j_{acc_name}"]; save_accounts_data(st.session_state['accounts'])
-                        st.text_area("LOG...", value=curr_acc_data.get('journal_text', ''), key=f"j_{acc_name}", height=300, on_change=save_j, label_visibility="collapsed")
-                    with col_log2:
-                        history = curr_acc_data.get('history', [])
-                        if history: st.dataframe(pd.DataFrame(history)[::-1], hide_index=True, use_container_width=True, height=300)
-
-    page_func.__name__ = f"pf_{abs(hash(acc_name))}"
-    return page_func
-
-
-# --- 페이지 구성: 계좌 관리 ---
-def page_manage_accounts():
-    st.markdown(f"<h1 style='font-size:3.5rem; margin-bottom:0;'>⚙️ <span style='color:{MAIN_GREEN};'>계좌</span> 관리</h1>", unsafe_allow_html=True)
-    new_acc = st.text_input("새 계좌명")
-    if st.button("개설", type="primary") and new_acc:
-        if new_acc not in st.session_state['accounts']:
-            st.session_state['accounts'][new_acc] = {"portfolio": [{"티커 (Ticker)": t, "수량 (주/달러)": 0.0, "평균 단가 ($)": 0.0, "매입 환율": 0.0, "태그": "코어"} for t in REQUIRED_TICKERS], "history": [{"Date": datetime.now().strftime("%Y-%m-%d"), "Log": "계좌 개설"}], "target_seed": 10000.0, "seed_history": {}, "target_portfolio_value": 100000.0, "layout_order": ["🎯 목표 달성률", "📊 실시간 요약", "⚡ 시스템 분석관", "🚀 실전 퀀트 무기", "💼 포트폴리오 & 리밸런싱", "🧩 자산 상관관계 히트맵", "🔮 10년 은퇴 시뮬레이션", "📈 성장 곡선", "📈 목표 달성률 추이", "📝 매매 일지"]}
-            save_accounts_data(st.session_state['accounts']); st.rerun()
-    st.divider()
-    for acc in list(st.session_state['accounts'].keys()):
-        c1, c2 = st.columns([4, 1])
-        c1.write(f"📁 **{acc}**")
-        if c2.button("삭제", key=f"del_{acc}", disabled=len(st.session_state['accounts']) <=1):
-            del st.session_state['accounts'][acc]; save_accounts_data(st.session_state['accounts']); st.rerun()
-
-# --- 페이지 구성: 전략 명세서 ---
-def page_strategy_specification():
-    st.markdown("<h1 style='font-size:3.5rem; margin-bottom:0;'>📜 전략 명세서</h1>", unsafe_allow_html=True)
-    
-    with st.container(border=True):
-        render_card_header("AMLS v4.5 전략 명세서", "DOCUMENTATION")
-        st.markdown(f"""
-<p style="color:#ff3b30; font-weight:800;">기밀 등급: CLASSIFIED - 내부 전용</p>
-<hr style="border: 1px solid rgba(0,0,0,0.1);">
-<br>
-<h4><span style='display:inline-flex; width:28px; height:28px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; margin-right:8px;'>1</span> 전략 개요 (Philosophy)</h4>
-<p style="text-align:left;">AMLS는 스탠 웬스타인(Stan Weinstein)의 '4단계 국면 이론(Stage Analysis)'을 현대적 퀀트 자산배분 기법으로 재해석한 전략입니다. 시장의 상승/하락 추세뿐만 아니라 <b>'공포 지수(VIX)'</b>를 결합하여, 국면별 최적의 레버리지 배수를 동적으로 조절합니다.</p>
-<br>
-<h4><span style='display:inline-flex; width:28px; height:28px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; margin-right:8px;'>2</span> V4.5 핵심 변경점: Zero-Cash 최적화</h4>
-<p style="text-align:left;">기존 V4.3까지는 R1/R2 국면에서 일정 수준의 '현금(CASH)' 비중을 유지하여 방어력을 도모했습니다. 그러나 장기 백테스트 결과, 현금이 수익률을 갉아먹는 '현금 드래그(Cash Drag)' 현상이 발견되었습니다.</p>
-<ul style="text-align:left; font-size:0.95rem; color:{TEXT_SUB}; line-height:1.8;">
-<li><b>Regime 1:</b> 현금 5% ➔ SPY 5%</li>
-<li><b>Regime 2:</b> 현금 10% ➔ SPY 5% + GLD 5% 추가</li>
-<li><b>Regime 3/4:</b> 극한의 방어가 필요한 하락장에서는 여전히 현금 35~40%를 쥐고 관망합니다.</li>
-</ul>
-<br>
-<hr style="border: 1px solid rgba(0,0,0,0.1);">
-<br>
-<h4><span style='display:inline-flex; width:28px; height:28px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; margin-right:8px;'>3</span> 레짐(Regime) 판단 기준 및 배분표</h4>
-<p style="text-align:left;">AI 엔진은 매일 종가 기준으로 아래의 3가지 지표를 분석하여 내일의 타겟 레짐을 결정합니다.</p>
-<table style="width:100%; border-collapse: collapse; text-align:left; font-size:0.9rem; border: 1px solid rgba(0,0,0,0.1); background:rgba(255,255,255,0.7);">
-<tr style="background:rgba(0,0,0,0.05); color:{TEXT_COLOR};">
-<th style="padding:10px; border:1px solid rgba(0,0,0,0.1);">판단 순위</th>
-<th style="padding:10px; border:1px solid rgba(0,0,0,0.1);">상태</th>
-<th style="padding:10px; border:1px solid rgba(0,0,0,0.1);">진입 조건 (Daily Close)</th>
-<th style="padding:10px; border:1px solid rgba(0,0,0,0.1);">시장 상태 해석</th>
-<th style="padding:10px; border:1px solid rgba(0,0,0,0.1);">레버리지</th>
-</tr>
-<tr><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);"><b>1순위</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">🔴 R4</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);"><b>VIX > 40</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">이성을 잃은 패닉/투매 장세</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1); font-weight:bold;">0.10x</td></tr>
-<tr><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);"><b>2순위</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">🟠 R3</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">VIX ≤ 40 & <b>QQQ < 200MA</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">베어마켓 진입, 장기 하락 추세</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1); font-weight:bold;">0.15x</td></tr>
-<tr><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);"><b>3순위</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">🟢 R1</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">VIX < 25 & <b>QQQ ≥ 200MA</b> & <b>50MA ≥ 200MA</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">완벽한 정배열, 변동성이 낮은 대세 상승장</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1); font-weight:800; color:{MAIN_GREEN};">2.30x</td></tr>
-<tr><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);"><b>4순위</b></td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">🟡 R2</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">위 조건에 해당하지 않는 모든 경우</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1);">단기 조정 또는 모멘텀 둔화 구간</td><td style="padding:10px; border:1px solid rgba(0,0,0,0.1); font-weight:bold;">1.80x</td></tr>
-</table>
-<br>
-<h4><span style='display:inline-flex; width:28px; height:28px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; margin-right:8px;'>4</span> 포트폴리오 비중 세부 지침 (Weights)</h4>
-<ul style="text-align:left; font-size:0.95rem; color:{TEXT_SUB}; line-height:1.8;">
-<li><b>R1 (강세):</b> TQQQ 30% / SOXL(USD) 20% / QLD 20% / SSO 15% / GLD 10% / SPY 5%</li>
-<li><b>R2 (보통):</b> QLD 30% / SSO 25% / GLD 25% / USD 10% / QQQ 5% / SPY 5%</li>
-<li><b>R3 (약세):</b> GLD 50% / CASH 35% / QQQ 15%</li>
-<li><b>R4 (위기):</b> GLD 50% / CASH 40% / QQQ 10%</li>
-</ul>
-<br>
-<hr style="border: 1px solid rgba(0,0,0,0.1);">
-<br>
-<h4><span style='display:inline-flex; width:28px; height:28px; background:{MAIN_GREEN}; border-radius:50%; color:#fff; font-weight:bold; align-items:center; justify-content:center; margin-right:8px;'>5</span> 휩쏘(가짜 신호) 방지: 비대칭 5일 대기 프로토콜</h4>
-<ul style="text-align:left; font-size:0.95rem; color:{TEXT_SUB}; line-height:1.8;">
-<li><b>하향 돌파 (위험 회피):</b> 타겟 레짐이 현재 레짐보다 높아질 때(예: R1 ➔ R3), 시스템은 1초의 망설임 없이 <b>즉시 비중을 축소</b>합니다. 자본의 보호가 최우선이기 때문입니다.</li>
-<li><b>상향 돌파 (가짜 반등 필터링):</b> 타겟 레짐이 현재 레짐보다 낮아져 공격적으로 변할 때(예: R3 ➔ R1), 베어마켓 랠리(가짜 반등)에 속아 레버리지를 고점에 무는 것을 막기 위해 <b>반드시 5영업일 연속으로 해당 조건이 충족</b>되어야만 비로소 진입합니다.</li>
-</ul>
-""", unsafe_allow_html=True)
-
-
-# =====================================================================
-# [7] 사이드바 설정 및 네비게이션
-# =====================================================================
-
-st.sidebar.markdown("---")
-
-st.sidebar.markdown(f"<div style='font-size:1.2rem; font-weight:900; color:{TEXT_COLOR}; margin-bottom:10px;'>⭐ 즐겨찾기</div>", unsafe_allow_html=True)
-st.sidebar.markdown(f"""<div style="display:flex; flex-direction:column; gap:2px;">
-<div style="font-size:0.8rem; font-weight:bold; margin-top:5px; color:{TEXT_SUB};">유튜브</div>
-<a href="https://www.youtube.com/@JB_Insight" target="_blank" class="sidebar-link"><span>📊</span> JB 인사이트</a>
-<a href="https://www.youtube.com/@odokgod" target="_blank" class="sidebar-link"><span>📻</span> 오독</a>
-<a href="https://www.youtube.com/@TQQQCRAZY" target="_blank" class="sidebar-link"><span>🔥</span> TQQQ 미친놈</a>
-<a href="https://www.youtube.com/@developmong" target="_blank" class="sidebar-link"><span>🐒</span> 디벨롭몽</a>
-<div style="font-size:0.8rem; font-weight:bold; margin-top:15px; color:{TEXT_SUB};">차트 분석</div>
-<a href="https://kr.investing.com/" target="_blank" class="sidebar-link"><span>🌍</span> 인베스팅닷컴</a>
-<a href="https://kr.tradingview.com/" target="_blank" class="sidebar-link"><span>📉</span> 트레이딩뷰</a>
-<div style="font-size:0.8rem; font-weight:bold; margin-top:15px; color:{TEXT_SUB};">AI 도우미</div>
-<a href="https://claude.ai/" target="_blank" class="sidebar-link"><span>🧠</span> 클로드</a>
-<a href="https://gemini.google.com/" target="_blank" class="sidebar-link"><span>✨</span> 제미나이</a>
-</div>""", unsafe_allow_html=True)
-st.sidebar.markdown("---")
-
-with st.sidebar.expander("💾 백업 및 복구"):
-    st.download_button("📥 백업 다운로드", data=json.dumps(st.session_state['accounts']), file_name="amls_backup.json")
-    up_f = st.file_uploader("📤 복구 업로드", type=['json'])
-    if up_f and st.button("⚠️ 복구 실행"):
-        st.session_state['accounts'] = json.load(up_f)
-        save_accounts_data(st.session_state['accounts'])
+st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:6px 15px;">Theme Color</div>""", unsafe_allow_html=True)
+col1, col2, col3 = st.sidebar.columns([0.1, 1, 0.1])
+with col2:
+    new_color = st.color_picker("메인 컬러", st.session_state.main_color, label_visibility="collapsed", key="cp_theme")
+    if new_color != st.session_state.main_color:
+        st.session_state.main_color = new_color
         st.rerun()
 
-pages = {
-    "시스템": [st.Page(page_market_dashboard, title="마켓 터미널", icon="🌐"), st.Page(page_amls_backtest, title="백테스트 엔진", icon="🦅")],
-    "포트폴리오": [],
-    "설정": [st.Page(page_strategy_specification, title="전략 명세서", icon="📜"), st.Page(page_manage_accounts, title="계좌 관리", icon="⚙️")]
-}
+# ── 배경색 설정 ────────────────────────────────────────
+st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 15px 4px; border-top:1px solid rgba(0,0,0,0.08);">배경 색상</div>""", unsafe_allow_html=True)
+_bg_c1, _bg_c2, _bg_c3 = st.sidebar.columns([0.1, 1, 0.1])
+with _bg_c2:
+    _new_bg = st.color_picker("배경색", st.session_state.bg_color, label_visibility="collapsed", key="cp_bg")
+    if _new_bg != st.session_state.bg_color:
+        st.session_state.bg_color = _new_bg
+        st.rerun()
 
-for name in st.session_state['accounts'].keys():
-    pages["포트폴리오"].append(st.Page(make_portfolio_page(name), title=name, icon="💼"))
 
-pg = st.navigation(pages)
-pg.run()
+# ── 글씨 색상 개별 설정 (접기/펼치기) ───────────────
+with st.sidebar.expander("🎨  글씨 색상 설정", expanded=False):
+    _tc_defs = [
+        ("heading",  "헤딩  (제목·큰 숫자)",    "tc_heading",  "cp_tc_heading"),
+        ("body",     "본문  (설명·라벨)",        "tc_body",     "cp_tc_body"),
+        ("muted",    "뮤트  (보조 텍스트)",      "tc_muted",    "cp_tc_muted"),
+        ("label",    "서브라벨  (캡션·단위)",    "tc_label",    "cp_tc_label"),
+        ("data",     "데이터  (숫자·표)",        "tc_data",     "cp_tc_data"),
+        ("sidebar",  "사이드바  (메뉴)",         "tc_sidebar",  "cp_tc_sidebar"),
+    ]
+    for _role, _disp, _key, _widget_key in _tc_defs:
+        _lc, _rc = st.columns([2, 1])
+        _lc.markdown(
+            f'<div style="font-family:DM Mono,monospace;font-size:0.72em;'
+            f'color:{getattr(st.session_state, _key)};padding:6px 0 0 2px;">{_disp}</div>',
+            unsafe_allow_html=True
+        )
+        _picked = _rc.color_picker("", getattr(st.session_state, _key),
+                                    label_visibility="collapsed", key=_widget_key)
+        if _picked != getattr(st.session_state, _key):
+            setattr(st.session_state, _key, _picked)
+            st.rerun()
+
+    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+    if st.button("↺  색상 전체 초기화", use_container_width=True, key="reset_colors"):
+        for _k, _v in [("main_color","#10B981"),("bg_color","#F7F6F2"),
+                        ("tc_heading","#111118"),("tc_body","#2D2D2D"),
+                        ("tc_muted","#6B6B7A"),("tc_label","#9494A0"),
+                        ("tc_data","#111118"),("tc_sidebar","#2D2D2D")]:
+            setattr(st.session_state, _k, _v)
+        st.rerun()
+
+st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:6px 15px;">Bookmarks</div>""", unsafe_allow_html=True)
+st.sidebar.markdown("""
+<div style="display:flex; flex-direction:column; gap:0px; padding:0 12px;">
+    <a href="https://www.youtube.com/@JB_Insight" target="_blank" class="sidebar-link">📊 JB 인사이트</a>
+    <a href="https://www.youtube.com/@odokgod" target="_blank" class="sidebar-link">📻 오독</a>
+    <a href="https://www.youtube.com/@TQQQCRAZY" target="_blank" class="sidebar-link">🔥 TQQQ 미친놈</a>
+    <a href="https://www.youtube.com/@developmong" target="_blank" class="sidebar-link">🐒 디벨롭몽</a>
+    <a href="https://kr.investing.com/" target="_blank" class="sidebar-link">🌍 인베스팅닷컴</a>
+    <a href="https://kr.tradingview.com/" target="_blank" class="sidebar-link">📉 트레이딩뷰</a>
+    <a href="https://claude.ai/" target="_blank" class="sidebar-link">🧠 클로드</a>
+    <a href="https://gemini.google.com/" target="_blank" class="sidebar-link">✨ 제미나이</a>
+</div>
+""", unsafe_allow_html=True)
+
+# ── 사이드바 포트폴리오 백업/복구 ──────────────────
+st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 20px 6px; border-top:1px solid rgba(0,0,0,0.08);">Portfolio Data</div>""", unsafe_allow_html=True)
+
+import json as _json2
+_sb_json = _json2.dumps(st.session_state.portfolio)
+st.sidebar.download_button(
+    "💾  Backup (JSON 저장)",
+    data=_sb_json,
+    file_name="portfolio.json",
+    mime="application/json",
+    use_container_width=True,
+    key="sb_backup"
+)
+
+_sidebar_upload = st.sidebar.file_uploader(
+    "📂  Restore (JSON 불러오기)",
+    type="json",
+    key="sb_uploader",
+    label_visibility="visible"
+)
+if _sidebar_upload is not None:
+    try:
+        import json as _json
+        _loaded = _json.load(_sidebar_upload)
+        st.session_state.portfolio.update(_loaded)
+        sanitize_portfolio()
+        save_portfolio_to_disk()
+        st.sidebar.success("✅ 복구 완료")
+        st.rerun()
+    except:
+        st.sidebar.error("❌ 파일 형식 오류")
+
+# ==========================================
+# 5. 메인 헤더  —  Editorial Bento Style
+# ==========================================
+
+# ① 풀 너비 상단 인트로 스트립 (타이틀 + 컨트롤 인라인)
+_qqq_chg  = (last_row['QQQ'] / last_row['QQQ_MA200'] - 1) * 100
+_vix_now  = last_row['^VIX']
+_smh_chg  = last_row['SMH_1M_Ret'] * 100
+
+def _pill(label, value, color):
+    return (f'<div style="display:flex;flex-direction:column;align-items:center;'
+            f'padding:8px 18px;background:#FFFFFF;border:1px solid rgba(0,0,0,0.07);'
+            f'border-top:2px solid {color};border-radius:12px;min-width:90px;">'
+            f'<span style="font-family:\'DM Mono\';font-size:0.6em;color:#4A5568;letter-spacing:0.14em;text-transform:uppercase;">{label}</span>'
+            f'<span style="font-family:\'DM Mono\';font-size:1.05em;font-weight:500;color:#0F172A;margin-top:2px;">{value}</span>'
+            f'</div>')
+
+_p_qqq  = _pill("QQQ/200MA", f"{_qqq_chg:+.1f}%", main_color if _qqq_chg >= 0 else "#EF4444")
+_p_vix  = _pill("VIX", f"{_vix_now:.1f}", main_color if _vix_now < 20 else ("#F59E0B" if _vix_now < 30 else "#EF4444"))
+_p_smh  = _pill("SMH 1M", f"{_smh_chg:+.1f}%", main_color if _smh_chg >= 0 else "#EF4444")
+_p_reg  = _pill("REGIME", f"R{curr_regime}", main_color)
+
+_hdr_left = apply_theme(f"""
+<div style="display:flex;flex-direction:column;justify-content:center;">
+    <div style="font-family:'Plus Jakarta Sans';font-size:2.5em;font-weight:800;letter-spacing:-2px;color:#0F172A;line-height:1;">
+        AMLS <span style="color:#10B981;">V4.5</span>
+    </div>
+    <div style="font-family:'DM Mono';font-size:0.65em;color:#4A5568;letter-spacing:0.22em;text-transform:uppercase;margin-top:4px;">
+        The Wall Street Quantitative Strategy
+    </div>
+</div>
+""")
+
+_hdr_right = apply_theme(f"""
+<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+    <div style="display:flex;gap:6px;">
+        {_p_qqq}{_p_vix}{_p_smh}{_p_reg}
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+        <div class="live-pulse" style="font-family:'DM Mono';font-size:0.68em;color:#059669;padding:4px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:6px;letter-spacing:0.06em;">{rt_label}</div>
+        <div style="font-family:'DM Mono';font-size:0.68em;color:#4A5568;letter-spacing:0.04em;">⏱ {last_update_time}</div>
+    </div>
+</div>
+""")
+
+hdr_c1, hdr_c2 = st.columns([1, 1.6])
+with hdr_c1:
+    st.markdown(_hdr_left, unsafe_allow_html=True)
+with hdr_c2:
+    c_sync1, c_sync2 = st.columns([4, 1])
+    with c_sync2:
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        if st.button("↺ 동기화", use_container_width=True):
+            fetch_realtime_prices.clear()
+            load_data.clear()
+            st.rerun()
+    with c_sync1:
+        st.markdown(_hdr_right, unsafe_allow_html=True)
+
+st.markdown(apply_theme(f"""
+<div style="position:relative;margin:14px 0 24px;height:1px;background:rgba(0,0,0,0.07);">
+    <div style="position:absolute;left:0;top:0;width:100%;height:1px;background:rgba(0,0,0,0.12);"></div>
+    <div style="position:absolute;left:0;top:-1px;width:80px;height:3px;background:var(--acc);"></div>
+</div>
+"""), unsafe_allow_html=True)
+
+# ==========================================
+# 6. 페이지 라우팅
+# ==========================================
+if page == "📊 Dashboard":
+
+    def _lg_row(label, val, passed):
+        icon  = "●" if passed else "○"
+        color = main_color if passed else "#B0B0BE"
+        if isinstance(val, (int, float)):
+            val_str = f"${val:.2f}" if val > 5 else f"{val:.2f}"
+        elif isinstance(val, str) and '%' in val:
+            val_str = val
+        else:
+            val_str = str(val)
+        return (f'<div class="crow">'
+                f'<span class="clabel">{label}</span>'
+                f'<span class="cval" style="color:{color};">{val_str}&nbsp;'
+                f'<span style="font-size:0.7em;">{icon}</span></span>'
+                f'</div>')
+
+    soxl_title = "SOXL  APPROVED" if smh_cond else "USD  DEFENSE"
+    soxl_strat = "3× Leverage Active" if smh_cond else "2× Defense Mode"
+    soxl_color = main_color if smh_cond else "#9494A0"
+
+    # ── ① 상단 Live Feed 티커 바 ───────────────────────────────
+    _qqq_vs  = (last_row['QQQ']  / last_row['QQQ_MA200']  - 1) * 100
+    _tqqq_vs = (last_row['TQQQ'] / last_row['TQQQ_MA200'] - 1) * 100
+    _smh_vs  = (last_row['SMH']  / last_row['SMH_MA50']   - 1) * 100
+    _vix_val = last_row['^VIX']
+    _rsi_val = last_row['SMH_RSI']
+
+    def _tick(label, val, sub, ok):
+        c   = "#059669" if ok else "#DC2626"
+        dot = "▲" if ok else "▼"
+        return (
+            f'<div style="display:inline-flex;flex-direction:column;'
+            f'padding:0 20px;border-right:1px solid rgba(0,0,0,0.09);min-width:110px;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.65em;color:#9494A0;'
+        f'letter-spacing:0.14em;text-transform:uppercase;">{label}</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:1.05em;color:#111118;'
+            f'font-variant-numeric:tabular-nums;">{val}</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.76em;color:{c};">'
+            f'{dot} {sub}</span>'
+            f'</div>'
+        )
+
+    tickers = (
+        _tick("QQQ",     f"${last_row['QQQ']:.2f}",            f"{_qqq_vs:+.2f}%",           _qqq_vs>=0)  +
+        _tick("TQQQ",    f"${last_row['TQQQ']:.2f}",           f"{_tqqq_vs:+.2f}%",          _tqqq_vs>=0) +
+        _tick("VIX",     f"{_vix_val:.2f}",                    f"MA20: {last_row['VIX_MA20']:.1f}", _vix_val<20) +
+        _tick("SMH 1M",  f"{last_row['SMH_1M_Ret']*100:+.1f}%",f"vs 50MA: {_smh_vs:+.1f}%", last_row['SMH_1M_Ret']>=0) +
+        _tick("SMH RSI", f"{_rsi_val:.1f}",                    "> 50 target",                _rsi_val>50)
+    )
+
+    st.markdown(
+        f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
+        f'border-left:3px solid #111118;padding:12px 0 12px 18px;'
+        f'margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;">'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.65em;color:#9494A0;'
+        f'letter-spacing:0.18em;text-transform:uppercase;white-space:nowrap;'
+        f'padding-right:16px;border-right:1px solid rgba(0,0,0,0.09);">Live&nbsp;Feed</span>'
+        f'{tickers}'
+        f'<div style="margin-left:auto;padding:0 14px;white-space:nowrap;">'
+        f'<span class="live-pulse" style="font-family:DM Mono,monospace;font-size:0.6em;'
+        f'color:#059669;letter-spacing:0.06em;">{rt_label}</span>'
+        f'</div></div>',
+        unsafe_allow_html=True
+    )
+
+    # ── ② 메인 레이아웃: 좌(인스트루먼트 패널) + 우(차트 워크벤치) ─
+    left_col, right_col = st.columns([1, 2.4])
+
+    with left_col:
+        r_colors = {1: main_color, 2: "#D97706", 3: "#DC2626", 4: "#7C3AED"}
+        regime_accent = r_colors[curr_regime]
+
+        # 레짐 카드 — 워터마크 숫자 포함
+        cond_rows = (
+            _lg_row('VIX < 40',     f'{vix_close:.2f}',  vix_close<=40)       +
+            _lg_row('QQQ > 200MA',  f'${qqq_close:.2f}', qqq_close>=qqq_ma200) +
+            _lg_row('50MA ≥ 200MA', f'${qqq_ma50:.2f}',  qqq_ma50>=qqq_ma200)
+        )
+        st.markdown(apply_theme(
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
+            f'border-top:3px solid {regime_accent};'
+            f'padding:20px 18px 16px;margin-bottom:10px;position:relative;overflow:hidden;">'
+            f'<div style="position:absolute;right:-4px;bottom:-16px;'
+            f'font-family:Plus Jakarta Sans,sans-serif;font-size:7em;font-weight:800;'
+            f'color:rgba(0,0,0,0.04);line-height:1;pointer-events:none;user-select:none;">'
+            f'{curr_regime}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;'
+            f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;">Market Regime</div>'
+            f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:2em;'
+            f'font-weight:800;letter-spacing:-1px;color:{regime_accent};'
+            f'letter-spacing:-0.5px;line-height:1;margin-bottom:4px;">'
+            f'{regime_info[curr_regime][0]}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.72em;color:#6B6B7A;'
+            f'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;">'
+            f'{regime_info[curr_regime][1]}</div>'
+            f'{cond_rows}'
+            f'<div style="margin-top:8px;padding:6px 10px;'
+            f'background:rgba(16,185,129,0.07);border-left:2px solid {main_color};'
+            f'font-family:DM Mono,monospace;font-size:0.76em;color:#059669;">'
+            f'{regime_committee_msg}</div>'
+            f'</div>'
+        ), unsafe_allow_html=True)
+
+        # SOXL 게이트 카드
+        soxl_rows = (
+            _lg_row('SMH > 50MA',       f'${smh_close:.2f}', smh_c1) +
+            _lg_row('Momentum 1M >10%', f'{smh_1m*100:.1f}%', smh_c2) +
+            _lg_row('RSI > 50',         f'{smh_rsi:.1f}',    smh_c3)
+        )
+        st.markdown(apply_theme(
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
+            f'border-top:3px solid {soxl_color};'
+            f'padding:18px 18px 14px;margin-bottom:10px;">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;'
+            f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:8px;">Semi-Conductor Gate</div>'
+            f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.6em;'
+            f'font-weight:400;color:{soxl_color};margin-bottom:4px;">'
+            f'{soxl_title}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.7em;color:#6B6B7A;'
+            f'letter-spacing:0.1em;text-transform:uppercase;margin-bottom:12px;">{soxl_strat}</div>'
+            f'{soxl_rows}'
+            f'</div>'
+        ), unsafe_allow_html=True)
+
+        # 타겟 웨이트 — 프로그레스 바 형식
+        weight_bar_rows = ""
+        for k, v in target_weights.items():
+            if v <= 0:
+                continue
+            pct   = v * 100
+            bar_w = int(pct * 2.5)
+            weight_bar_rows += (
+                f'<div style="display:flex;align-items:center;'
+                f'justify-content:space-between;padding:7px 0;'
+                f'border-bottom:1px solid rgba(0,0,0,0.05);">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.84em;'
+                f'color:#2C2C35;min-width:48px;">{k}</span>'
+                f'<div style="flex:1;margin:0 9px;height:4px;'
+                f'background:rgba(0,0,0,0.07);overflow:hidden;">'
+                f'<div style="height:4px;width:{bar_w}%;background:{main_color};"></div>'
+                f'</div>'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.84em;'
+                f'color:{main_color};font-variant-numeric:tabular-nums;'
+                f'min-width:36px;text-align:right;">{pct:.0f}%</span>'
+                f'</div>'
+            )
+        st.markdown(apply_theme(
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
+            f'border-top:3px solid #111118;padding:18px 18px 14px;">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;'
+            f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:12px;">'
+            f'Target Weights  ·  R{curr_regime}</div>'
+            f'{weight_bar_rows}'
+            f'</div>'
+        ), unsafe_allow_html=True)
+
+    with right_col:
+        # 레짐 탭 바 (우측 상단)
+        r_labels = {1:"R1  BULL", 2:"R2  CORR", 3:"R3  BEAR", 4:"R4  PANIC"}
+        r_clrs   = {1: main_color, 2:"#D97706", 3:"#DC2626", 4:"#7C3AED"}
+        tabs_html = ""
+        for r in [1, 2, 3, 4]:
+            active   = (r == curr_regime)
+            bg_t     = r_clrs[r] if active else "transparent"
+            ft_t     = "#FFFFFF" if active else "#9494A0"
+            bdr_t    = f"1px solid {r_clrs[r]}" if active else "1px solid rgba(0,0,0,0.08)"
+            tabs_html += (
+                f'<div style="padding:7px 16px;border:{bdr_t};background:{bg_t};">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.76em;'
+                f'font-weight:500;color:{ft_t};letter-spacing:0.05em;">{r_labels[r]}</span>'
+                f'</div>'
+            )
+        st.markdown(
+            f'<div style="display:flex;gap:4px;margin-bottom:10px;align-items:center;">'
+            f'{tabs_html}'
+            f'<div style="margin-left:auto;font-family:DM Mono,monospace;font-size:0.7em;'
+            f'color:#9494A0;">⏱ {last_update_time}</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+        # 차트 2개 세로 스택 (fill 포함)
+        df_recent = df.iloc[-500:]
+
+        fig_qqq = go.Figure()
+        fig_qqq.add_trace(go.Scatter(
+            x=df_recent.index, y=df_recent['QQQ'], name='QQQ',
+            line=dict(color=line_c, width=2),
+            fill='tozeroy', fillcolor=f'rgba({r_c},{g_c},{b_c},0.06)'
+        ))
+        fig_qqq.add_trace(go.Scatter(
+            x=df_recent.index, y=df_recent['QQQ_MA200'], name='200MA',
+            line=dict(color=dash_c, width=1.2, dash='dot')
+        ))
+        fig_qqq.update_layout(
+            title=dict(text="QQQ  /  200-Day Moving Average",
+                       font=dict(family='DM Mono', size=13, color=t_color)),
+            height=330, **chart_layout,
+            legend=dict(orientation='h', yanchor='bottom', y=1.0,
+                        xanchor='right', x=1,
+                        font=dict(family='DM Mono', size=11, color=t_color))
+        )
+        fig_qqq.update_xaxes(**_ax)
+        fig_qqq.update_yaxes(**_ax)
+
+        fig_tqqq = go.Figure()
+        fig_tqqq.add_trace(go.Scatter(
+            x=df_recent.index, y=df_recent['TQQQ'], name='TQQQ',
+            line=dict(color=line_c, width=2),
+            fill='tozeroy', fillcolor=f'rgba({r_c},{g_c},{b_c},0.06)'
+        ))
+        fig_tqqq.add_trace(go.Scatter(
+            x=df_recent.index, y=df_recent['TQQQ_MA200'], name='200MA',
+            line=dict(color=dash_c, width=1.2, dash='dot')
+        ))
+        fig_tqqq.update_layout(
+            title=dict(text="TQQQ  /  200-Day Moving Average",
+                       font=dict(family='DM Mono', size=13, color=t_color)),
+            height=330, **chart_layout,
+            legend=dict(orientation='h', yanchor='bottom', y=1.0,
+                        xanchor='right', x=1,
+                        font=dict(family='DM Mono', size=11, color=t_color))
+        )
+        fig_tqqq.update_xaxes(**_ax)
+        fig_tqqq.update_yaxes(**_ax)
+
+        with st.container(border=True):
+            st.plotly_chart(fig_qqq, use_container_width=True)
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.plotly_chart(fig_tqqq, use_container_width=True)
+
+    # ══════════════════════════════════════════════════════════════
+    # ── 하단 추가 섹션 ──────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════
+    with st.spinner("글로벌 마켓 데이터 로딩..."):
+        _gm_data, _gm_tickers, _asset_tickers, _leader_tickers = fetch_global_markets()
+
+    def _sec_label(txt):
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:12px;margin:24px 0 14px;">'
+            f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.1em;font-weight:700;'
+            f'color:{tc_heading};letter-spacing:-0.3px;white-space:nowrap;">'
+            f'{txt}</div>'
+            f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.12);"></div>'
+            f'</div>',
+            unsafe_allow_html=True)
+
+    def _chg_color(v): return "#059669" if v >= 0 else "#DC2626"
+    def _chg_arrow(v): return "▲" if v >= 0 else "▼"
+
+    # ── ① 나스닥 100 히트맵 (Treemap) ──────────────────────────
+    _sec_label("① Nasdaq 100  ·  Heatmap")
+
+    # 나스닥 100 주요 구성종목 (섹터별 그룹)
+    _qqq_stocks = {
+        'AAPL': ('Technology', 'Apple'),
+        'MSFT': ('Technology', 'Microsoft'),
+        'NVDA': ('Technology', 'Nvidia'),
+        'AVGO': ('Technology', 'Broadcom'),
+        'AMD':  ('Technology', 'AMD'),
+        'INTC': ('Technology', 'Intel'),
+        'QCOM': ('Technology', 'Qualcomm'),
+        'TXN':  ('Technology', 'Texas Instr'),
+        'ORCL': ('Technology', 'Oracle'),
+        'ADBE': ('Technology', 'Adobe'),
+        'CRM':  ('Technology', 'Salesforce'),
+        'NOW':  ('Technology', 'ServiceNow'),
+        'INTU': ('Technology', 'Intuit'),
+        'GOOGL':('Communication', 'Alphabet'),
+        'META': ('Communication', 'Meta'),
+        'NFLX': ('Communication', 'Netflix'),
+        'AMZN': ('Consumer', 'Amazon'),
+        'TSLA': ('Consumer', 'Tesla'),
+        'BKNG': ('Consumer', 'Booking'),
+        'MCD':  ('Consumer', "McDonald's"),
+        'COST': ('Consumer', 'Costco'),
+        'SBUX': ('Consumer', 'Starbucks'),
+        'PYPL': ('Financials', 'PayPal'),
+        'ISRG': ('Healthcare', 'Intuitive Surg'),
+        'GILD': ('Healthcare', 'Gilead'),
+        'AMGN': ('Healthcare', 'Amgen'),
+        'REGN': ('Healthcare', 'Regeneron'),
+        'HON':  ('Industrials', 'Honeywell'),
+        'PEP':  ('Staples', 'PepsiCo'),
+    }
+
+    # 종목 데이터 수집 (이미 _gm_data에 없으면 fetch)
+    _qqq_tlist = list(_qqq_stocks.keys())
+    _qqq_missing = [t for t in _qqq_tlist if t not in _gm_data]
+    if _qqq_missing:
+        try:
+            _end_q = datetime.now()
+            _start_q = _end_q - timedelta(days=5)
+            _raw_q = yf.download(_qqq_missing,
+                                  start=_start_q.strftime('%Y-%m-%d'),
+                                  end=_end_q.strftime('%Y-%m-%d'),
+                                  progress=False, auto_adjust=True)['Close']
+            for _t in _qqq_missing:
+                _col_q = _raw_q[_t] if _t in _raw_q.columns else None
+                if _col_q is not None:
+                    _s = _col_q.dropna()
+                    if len(_s) >= 2:
+                        _gm_data[_t] = {'price': float(_s.iloc[-1]),
+                                         'chg': float((_s.iloc[-1]/_s.iloc[-2]-1)*100)}
+                    elif len(_s) == 1:
+                        _gm_data[_t] = {'price': float(_s.iloc[-1]), 'chg': 0.0}
+        except:
+            pass
+
+    # Treemap 데이터 준비
+    _tm_labels, _tm_parents, _tm_values, _tm_colors, _tm_text = [], [], [], [], []
+    _tm_labels.append("Nasdaq 100"); _tm_parents.append(""); _tm_values.append(0); _tm_colors.append(0); _tm_text.append("")
+
+    _sector_set = {}
+    for _t, (_sec, _name) in _qqq_stocks.items():
+        if _sec not in _sector_set:
+            _sector_set[_sec] = True
+            _tm_labels.append(_sec); _tm_parents.append("Nasdaq 100")
+            _tm_values.append(0); _tm_colors.append(0); _tm_text.append("")
+
+    for _t, (_sec, _name) in _qqq_stocks.items():
+        _d   = _gm_data.get(_t, {})
+        _chg = _d.get('chg', 0.0)
+        _px  = _d.get('price', 0.0)
+        _tm_labels.append(f"{_t}")
+        _tm_parents.append(_sec)
+        _tm_values.append(max(abs(_px) * 0.1, 1))   # 크기는 가격 기반
+        _tm_colors.append(_chg)
+        _tm_text.append(f"{_name}<br>{_px:,.1f}<br>{_chg:+.2f}%")
+
+    _tm_fig = go.Figure(go.Treemap(
+        labels=_tm_labels,
+        parents=_tm_parents,
+        values=_tm_values,
+        customdata=_tm_text,
+        hovertemplate='%{customdata}<extra></extra>',
+        texttemplate='<b>%{label}</b><br>%{customdata}',
+        textfont=dict(size=11, family='DM Mono'),
+        marker=dict(
+            colors=_tm_colors,
+            colorscale=[
+                [0.0, '#DC2626'],
+                [0.3, '#FCA5A5'],
+                [0.5, '#F7F6F2'],
+                [0.7, '#6EE7B7'],
+                [1.0, '#059669'],
+            ],
+            cmid=0,
+            cmin=-3, cmax=3,
+            showscale=True,
+            colorbar=dict(
+                thickness=12, len=0.6,
+                title=dict(text='%', font=dict(size=10, family='DM Mono')),
+                tickfont=dict(size=9, family='DM Mono'),
+                tickformat='+.1f',
+            )
+        ),
+        branchvalues='total',
+        tiling=dict(packing='squarify'),
+    ))
+    _tm_fig.update_layout(
+        height=400,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='DM Mono', color=t_color),
+        margin=dict(l=0, r=0, t=10, b=0),
+    )
+    with st.container(border=True):
+        st.plotly_chart(_tm_fig, use_container_width=True)
+
+    # ── ② 금리 / 원자재 / 크립토 ────────────────────────────────
+    _sec_label("② Rates  /  Commodities  /  Crypto")
+    _asset_icons = {'^TNX':'📈','GLD':'🥇','SLV':'⚪','USO':'🛢','BTC-USD':'₿','ETH-USD':'Ξ','UUP':'💵'}
+    _asset_cols = st.columns(7)
+    for _i, (_t, _name) in enumerate(_asset_tickers.items()):
+        _d   = _gm_data.get(_t, {})
+        _chg = _d.get('chg', 0.0)
+        _px  = _d.get('price', 0.0)
+        _clr = _chg_color(_chg)
+        _ico = _asset_icons.get(_t, '')
+        with _asset_cols[_i]:
+            st.markdown(
+                f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
+                f'border-top:2px solid {_clr};padding:12px 10px;text-align:center;">'
+                f'<div style="font-size:1.1em;margin-bottom:4px;">{_ico}</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;'
+                f'letter-spacing:0.1em;text-transform:uppercase;">{_name}</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.88em;color:#111118;'
+                f'font-variant-numeric:tabular-nums;margin:3px 0;">${_px:,.2f}</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.8em;'
+                f'color:{_clr};font-weight:600;">{_chg_arrow(_chg)} {_chg:+.2f}%</div>'
+                f'</div>', unsafe_allow_html=True)
+
+    # ── ③ 시장 주도주 ────────────────────────────────────────────
+    _sec_label("③ Market Leaders  ·  Magnificent 7  +  Semis")
+    _ld_sorted = sorted(_leader_tickers.items(),
+                        key=lambda x: _gm_data.get(x[0],{}).get('chg',0), reverse=True)
+    _ld_cols = st.columns(5)
+    for _i, (_t, _name) in enumerate(_ld_sorted):
+        _d   = _gm_data.get(_t, {})
+        _chg = _d.get('chg', 0.0)
+        _px  = _d.get('price', 0.0)
+        _clr = _chg_color(_chg)
+        _rank_color = "#D97706" if _i == 0 else ("#9494A0" if _i >= 3 else "#111118")
+        with _ld_cols[_i % 5]:
+            st.markdown(
+                f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
+                f'border-top:2px solid {_clr};padding:12px 14px;margin-bottom:8px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:baseline;">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.62em;color:#9494A0;'
+                f'text-transform:uppercase;letter-spacing:0.1em;">{_t}</span>'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.62em;'
+                f'color:{_rank_color};font-weight:600;">#{_i+1}</span>'
+                f'</div>'
+                f'<div style="font-family:DM Sans,sans-serif;font-size:0.82em;'
+                f'color:#2C2C35;margin:3px 0;">{_name}</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:1.0em;color:#111118;'
+                f'font-variant-numeric:tabular-nums;">${_px:,.2f}</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.82em;'
+                f'color:{_clr};font-weight:600;">{_chg_arrow(_chg)} {_chg:+.2f}%</div>'
+                f'</div>', unsafe_allow_html=True)
+
+    # ── ④ 주도 섹터 스캐너 ──────────────────────────────────────
+    _sec_label("④ Sector Scanner  ·  1-Month Performance")
+    _sec_data_full = [
+        {'t': s, 'name': {'XLK':'Technology','XLV':'Health Care','XLF':'Financials',
+            'XLY':'Cons. Discret','XLC':'Comm. Svc','XLI':'Industrials',
+            'XLP':'Cons. Staples','XLE':'Energy','XLU':'Utilities',
+            'XLRE':'Real Estate','XLB':'Materials'}.get(s, s),
+         'ret1m': last_row.get(f'{s}_1M', 0.0) * 100}
+        for s in SECTOR_TICKERS
+    ]
+    _sec_sorted_full = sorted(_sec_data_full, key=lambda x: x['ret1m'], reverse=True)
+
+    # 섹터 바 차트
+    _sec_fig = go.Figure()
+    _sec_names_plot  = [x['name'] for x in _sec_sorted_full]
+    _sec_rets_plot   = [x['ret1m'] for x in _sec_sorted_full]
+    _sec_colors_plot = [_chg_color(v) for v in _sec_rets_plot]
+    _sec_fig.add_trace(go.Bar(
+        x=_sec_names_plot, y=_sec_rets_plot,
+        marker_color=_sec_colors_plot, marker_line_width=0,
+        text=[f"{v:+.1f}%" for v in _sec_rets_plot],
+        textposition='outside', textfont=dict(size=10, family='DM Mono')
+    ))
+    _sec_fig.update_layout(
+        height=260, showlegend=False,
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(family='DM Mono', color=t_color),
+        margin=dict(l=0, r=0, t=20, b=40)
+    )
+    _sec_fig.update_xaxes(**_ax_r, tickfont=dict(size=10))
+    _sec_fig.update_yaxes(tickformat='.1f', ticksuffix='%', **_ax_r)
+    with st.container(border=True):
+        st.plotly_chart(_sec_fig, use_container_width=True)
+
+    # ── ⑤ 미국 경제 캘린더 ──────────────────────────────────────
+    _sec_label("⑤ US Economic Calendar  ·  Key Events This Week")
+    _cal_l, _cal_r = st.columns([1.4, 1])
+    with _cal_l:
+        # 주요 경제지표 일정 (정기 이벤트 기반 — 실제 날짜는 매달 고정 스케줄)
+        from datetime import date
+        _today    = date.today()
+        _weekday  = _today.weekday()   # Mon=0 ... Sun=6
+        _mon      = _today - timedelta(days=_weekday)
+        def _wd(offset):
+            d = _mon + timedelta(days=offset)
+            return d.strftime('%m/%d (%a)')
+
+        _cal_events = [
+            (_wd(0), "월", "ISM 제조업 PMI",           "보통", "#D97706"),
+            (_wd(0), "월", "건설 지출",                 "낮음", "#9494A0"),
+            (_wd(1), "화", "JOLTS 구인 건수",           "높음", "#DC2626"),
+            (_wd(1), "화", "공장 수주",                 "보통", "#D97706"),
+            (_wd(2), "수", "ADP 민간 고용 변화",        "높음", "#DC2626"),
+            (_wd(2), "수", "ISM 서비스 PMI",            "보통", "#D97706"),
+            (_wd(2), "수", "FOMC 의사록",               "높음", "#DC2626"),
+            (_wd(3), "목", "신규 실업수당 청구건수",    "보통", "#D97706"),
+            (_wd(3), "목", "무역수지",                  "보통", "#D97706"),
+            (_wd(4), "금", "비농업 고용 (NFP)",         "매우높음", "#DC2626"),
+            (_wd(4), "금", "실업률",                    "매우높음", "#DC2626"),
+            (_wd(4), "금", "평균 시간당 임금",          "보통", "#D97706"),
+        ]
+        st.markdown(
+            '<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);">'
+            '<table style="width:100%;border-collapse:collapse;font-family:DM Mono,monospace;">'
+            '<tr style="border-bottom:2px solid #111118;">'
+            '<th style="padding:8px 10px;font-size:0.6em;color:#9494A0;letter-spacing:0.14em;'
+            'text-transform:uppercase;text-align:left;font-weight:400;">날짜</th>'
+            '<th style="padding:8px 10px;font-size:0.6em;color:#9494A0;letter-spacing:0.14em;'
+            'text-transform:uppercase;text-align:left;font-weight:400;">지표</th>'
+            '<th style="padding:8px 10px;font-size:0.6em;color:#9494A0;letter-spacing:0.14em;'
+            'text-transform:uppercase;text-align:center;font-weight:400;">영향</th>'
+            '</tr>'
+            + "".join([
+                f'<tr style="border-bottom:1px solid rgba(0,0,0,0.05);">'
+                f'<td style="padding:7px 10px;font-size:0.7em;color:#9494A0;white-space:nowrap;">'
+                f'{date_s}</td>'
+                f'<td style="padding:7px 10px;font-size:0.82em;color:#2C2C35;font-family:Plus Jakarta Sans,sans-serif;">{evt}</td>'
+                f'<td style="padding:7px 10px;text-align:center;">'
+                f'<span style="background:{imp_c}22;color:{imp_c};border:1px solid {imp_c}55;'
+                f'font-size:0.62em;padding:2px 8px;letter-spacing:0.04em;">{imp}</span></td>'
+                f'</tr>'
+                for date_s, _, evt, imp, imp_c in _cal_events
+            ])
+            + '</table></div>',
+            unsafe_allow_html=True
+        )
+    with _cal_r:
+        # 이번 주 요약 카드
+        _high_events = [e for e in _cal_events if e[3] in ("높음", "매우높음")]
+        st.markdown(
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
+            f'border-top:2px solid #DC2626;padding:16px 18px;">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;'
+            f'letter-spacing:0.16em;text-transform:uppercase;margin-bottom:10px;">'
+            f'High Impact Events</div>'
+            + "".join([
+                f'<div style="display:flex;align-items:center;gap:8px;padding:7px 0;'
+                f'border-bottom:1px solid rgba(0,0,0,0.05);">'
+                f'<div style="width:6px;height:6px;border-radius:50%;background:#DC2626;'
+                f'flex-shrink:0;"></div>'
+                f'<div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.62em;color:#9494A0;">'
+                f'{d}</div>'
+                f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.85em;color:#2C2C35;'
+                f'font-weight:500;">{e}</div>'
+                f'</div></div>'
+                for d, _, e, imp, _ in _high_events
+            ])
+            + f'<div style="margin-top:10px;padding:8px;background:rgba(220,38,38,0.05);'
+            f'border-left:2px solid #DC2626;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.66em;color:#9494A0;">'
+            f'고영향 이벤트 총 <b style="color:#DC2626;">{len(_high_events)}건</b></span>'
+            f'</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+# ──────────────────────────────────────────
+elif page == "💼 Portfolio":
+
+    # ── 데이터 준비 ─────────────────────────────────────────────
+    current_prices = {}
+    for t in ASSET_LIST:
+        if t == 'CASH': current_prices[t] = 1.0
+        elif t in rt_prices: current_prices[t] = rt_prices[t]
+        elif t in df.columns: current_prices[t] = df[t].iloc[-1]
+        else: current_prices[t] = 0.0
+
+    cur_fx        = rt_prices.get('USDKRW=X', 1350.0)
+    curr_vals     = {a: st.session_state.portfolio[a]['shares'] * current_prices[a] for a in ASSET_LIST}
+    total_val_usd = sum(curr_vals.values())
+    total_val_krw = total_val_usd * cur_fx
+    invested_cost = sum(
+        st.session_state.portfolio[a]['shares'] * st.session_state.portfolio[a]['avg_price']
+        for a in ASSET_LIST if a != 'CASH'
+    )
+    pnl_usd   = total_val_usd - invested_cost
+    pnl_pct   = (pnl_usd / invested_cost * 100) if invested_cost > 0 else 0.0
+    pnl_color = "#059669" if pnl_pct >= 0 else "#DC2626"
+    pnl_sign  = "▲" if pnl_pct >= 0 else "▼"
+
+    diff_vals = {a: (total_val_usd * target_weights.get(a, 0.0)) - curr_vals[a] for a in ASSET_LIST} if total_val_usd > 0 else {a: 0.0 for a in ASSET_LIST}
+    C_GREEN = main_color
+    C_RED   = "#DC2626"
+
+    # ══════════════════════════════════════════════════════════
+    # ROW 1 — 상단 스탯 바
+    # ══════════════════════════════════════════════════════════
+    def _stat_chip(label, value, sub="", sub_color="#9494A0"):
+        return (
+            f'<div style="padding:0 22px;border-right:1px solid rgba(0,0,0,0.08);">' 
+            f'<div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;' 
+            f'letter-spacing:0.15em;text-transform:uppercase;margin-bottom:2px;">{label}</div>' 
+            f'<div style="font-family:DM Mono,monospace;font-size:1.05em;font-weight:400;' 
+            f'color:#111118;font-variant-numeric:tabular-nums;">{value}</div>' 
+            f'<div style="font-family:DM Mono,monospace;font-size:0.65em;color:{sub_color};">{sub}</div>' 
+            f'</div>'
+        )
+
+    chips = (
+        _stat_chip("Total NAV",  f"${total_val_usd:,.2f}",   f"₩{total_val_krw:,.0f}") +
+        _stat_chip("USD / KRW",  f"₩{cur_fx:,.0f}",          "환율") +
+        _stat_chip("P & L",      f"{pnl_pct:+.2f}%",         f"{pnl_sign} ${pnl_usd:,.0f}", pnl_color) +
+        _stat_chip("Regime",     f"R{curr_regime}",           regime_info[curr_regime][1]) +
+        _stat_chip("투자원금",   f"${invested_cost:,.0f}",    "원금 합계")
+    )
+    st.markdown(
+        f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);' 
+        f'border-left:3px solid #111118;padding:10px 0 10px 6px;' 
+        f'display:flex;align-items:center;overflow-x:auto;margin-bottom:12px;">' 
+        f'<span style="font-family:DM Mono,monospace;font-size:0.55em;color:#9494A0;' 
+        f'letter-spacing:0.2em;text-transform:uppercase;padding:0 16px;' 
+        f'border-right:1px solid rgba(0,0,0,0.08);white-space:nowrap;">Portfolio</span>' 
+        f'{chips}</div>',
+        unsafe_allow_html=True
+    )
+
+    # ══════════════════════════════════════════════════════════
+    # ROW 2 — Goal Tracker
+    # ══════════════════════════════════════════════════════════
+    gc_left, gc_right = st.columns([1, 3])
+    with gc_left:
+        new_goal = st.number_input(
+            "🎯 목표 금액 (USD)", min_value=1000.0, max_value=100_000_000.0,
+            value=st.session_state.goal_usd, step=1000.0, format="%.0f", key="goal_input"
+        )
+        if new_goal != st.session_state.goal_usd:
+            st.session_state.goal_usd = new_goal
+            st.rerun()
+
+    with gc_right:
+        _goal    = st.session_state.goal_usd
+        _pct_raw = (total_val_usd / _goal * 100) if _goal > 0 else 0.0
+        _pct     = min(_pct_raw, 100.0)
+        _over    = _pct_raw > 100.0
+        _remain  = max(_goal - total_val_usd, 0.0)
+        if _over:         _bc, _badge = "#059669", "🏆 목표 달성!"
+        elif _pct >= 75:  _bc, _badge = main_color, "⚡ 75% 이상"
+        elif _pct >= 50:  _bc, _badge = "#D97706", "📈 순항 중"
+        else:             _bc, _badge = "#9494A0", "🌱 시작 단계"
+
+        _markers_html = "".join([
+            f'<div style="position:absolute;left:{m}%;top:0;bottom:0;width:1px;background:rgba(0,0,0,0.13);">' 
+            f'<span style="position:absolute;top:-17px;left:50%;transform:translateX(-50%);' 
+            f'font-family:DM Mono,monospace;font-size:0.56em;color:#AAAAAA;white-space:nowrap;">{m}%</span>' 
+            f'</div>'
+            for m in [25, 50, 75, 100]
+        ])
+        _pin_x = min(_pct, 99.0)
+        _pin_html = (
+            f'<div style="position:absolute;left:{_pin_x}%;top:-3px;bottom:-3px;' 
+            f'width:2px;background:{_bc};transform:translateX(-50%);' 
+            f'box-shadow:0 0 5px {_bc};">' 
+            f'<div style="position:absolute;top:-6px;left:50%;transform:translateX(-50%);' 
+            f'width:9px;height:9px;border-radius:50%;background:{_bc};box-shadow:0 0 6px {_bc};"></div>' 
+            f'</div>'
+        )
+        st.markdown(
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);' 
+            f'border-top:3px solid {_bc};padding:14px 20px 12px;margin-bottom:12px;">' 
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' 
+            f'<div style="display:flex;align-items:center;gap:10px;">' 
+            f'<span style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;' 
+            f'letter-spacing:0.16em;text-transform:uppercase;">Goal Tracker</span>' 
+            f'<span style="background:{_bc}18;border:1px solid {_bc}55;color:{_bc};' 
+            f'font-family:DM Mono,monospace;font-size:0.63em;padding:2px 9px;">{_badge}</span>' 
+            f'</div>' 
+            f'<div style="text-align:right;">' 
+            f'<span style="font-family:DM Mono,monospace;font-size:1.75em;font-weight:400;' 
+            f'color:{_bc};font-variant-numeric:tabular-nums;letter-spacing:-0.5px;">{_pct_raw:.1f}%</span>' 
+            f'<span style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;margin-left:8px;">' 
+            f'{"초과달성!" if _over else f"잔여 ${_remain:,.0f}"}</span>' 
+            f'</div></div>' 
+            f'<div style="position:relative;padding-top:20px;">' 
+            f'{_markers_html}' 
+            f'<div style="position:relative;height:8px;background:rgba(0,0,0,0.07);overflow:visible;">' 
+            f'<div style="height:8px;width:{_pct:.2f}%;' 
+            f'background:linear-gradient(90deg,{_bc}66,{_bc});"></div>' 
+            f'{_pin_html}</div></div>' 
+            f'<div style="display:flex;justify-content:space-between;margin-top:10px;">' 
+            f'<div><div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;' 
+            f'text-transform:uppercase;letter-spacing:0.1em;">Current NAV</div>' 
+            f'<div style="font-family:DM Mono,monospace;font-size:0.95em;color:#111118;' 
+            f'font-variant-numeric:tabular-nums;">${total_val_usd:,.2f}</div></div>' 
+            f'<div style="text-align:center;"><div style="font-family:DM Mono,monospace;font-size:0.58em;' 
+            f'color:#9494A0;text-transform:uppercase;letter-spacing:0.1em;">Goal (USD)</div>' 
+            f'<div style="font-family:DM Mono,monospace;font-size:0.95em;color:#111118;' 
+            f'font-variant-numeric:tabular-nums;">${_goal:,.0f}</div></div>' 
+            f'<div style="text-align:right;"><div style="font-family:DM Mono,monospace;font-size:0.58em;' 
+            f'color:#9494A0;text-transform:uppercase;letter-spacing:0.1em;">Goal (KRW)</div>' 
+            f'<div style="font-family:DM Mono,monospace;font-size:0.95em;color:#111118;' 
+            f'font-variant-numeric:tabular-nums;">₩{_goal*cur_fx:,.0f}</div></div></div></div>',
+            unsafe_allow_html=True
+        )
+
+    # ══════════════════════════════════════════════════════════
+    # ROW 3+4 — 메인 레이아웃: 좌(입력) + 우(시각화)
+    # ══════════════════════════════════════════════════════════
+    col_l, col_r = st.columns([1.1, 2.5])
+
+    # ── 좌: Position Input ───────────────────────────────────
+    with col_l:
+        st.markdown(
+            '<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;' 
+            'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;' 
+            'padding-bottom:5px;border-bottom:2px solid #111118;margin-bottom:10px;">' 
+            'Position Input</div>',
+            unsafe_allow_html=True
+        )
+        _edata = []
+        for asset in ASSET_LIST:
+            v = st.session_state.portfolio.get(asset, {})
+            _edata.append({
+                "Asset":        asset,
+                "Shares":       float(v.get('shares', 0.0)),
+                "Avg Price($)": float(v.get('avg_price', 1.0 if asset == 'CASH' else 0.0)),
+                "FX Rate(₩)":  float(v.get('fx', 1350.0))
+            })
+        _df_ed = pd.DataFrame(_edata)
+        with st.container(border=True):
+            _df_edited = st.data_editor(
+                _df_ed, disabled=["Asset"], hide_index=True,
+                use_container_width=True, key="pf_editor",
+                column_config={
+                    "Shares":       st.column_config.NumberColumn("Shares", format="%.4f"),
+                    "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"),
+                    "FX Rate(₩)":  st.column_config.NumberColumn("FX(₩)",  format="%.0f"),
+                }
+            )
+        if not _df_edited.equals(_df_ed):
+            for _, row in _df_edited.iterrows():
+                st.session_state.portfolio[row["Asset"]] = {
+                    'shares':    float(row["Shares"]),
+                    'avg_price': float(row["Avg Price($)"]),
+                    'fx':        float(row["FX Rate(₩)"])
+                }
+            save_portfolio_to_disk()
+            st.rerun()
+
+        # Quick Orders — 입력 바로 아래
+        if total_val_usd > 0:
+            st.markdown(
+                '<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;' 
+                'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;' 
+                'padding-bottom:5px;border-bottom:2px solid #111118;margin:14px 0 10px;">' 
+                'Quick Orders</div>',
+                unsafe_allow_html=True
+            )
+            _sells, _buys = [], []
+            for asset in ASSET_LIST:
+                _cp = current_prices[asset] if current_prices[asset] > 0 else 1.0
+                _dv = diff_vals[asset]
+                if asset != 'CASH' and _dv < -_cp * 0.05:
+                    _sells.append((asset, f"{abs(_dv)/_cp:,.2f}주 매도"))
+                elif asset == 'CASH' and _dv < -1.0:
+                    _sells.append(("CASH", f"${abs(_dv):,.0f} 사용"))
+                if asset != 'CASH' and _dv > _cp * 0.05:
+                    _buys.append((asset, f"{_dv/_cp:,.2f}주 매수"))
+                elif asset == 'CASH' and _dv > 1.0:
+                    _buys.append(("CASH", f"${_dv:,.0f} 확보"))
+
+            def _qo_card(title, items, accent):
+                _rows = "".join([
+                    f'<div style="display:flex;justify-content:space-between;' 
+                    f'padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.05);">' 
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.8em;' 
+                    f'font-weight:600;color:#111118;">{a}</span>' 
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.78em;' 
+                    f'color:{accent};font-variant-numeric:tabular-nums;">{v}</span></div>'
+                    for a, v in items
+                ]) or '<div style="font-family:DM Mono,monospace;font-size:0.74em;color:#9494A0;padding:6px 0;">— 해당 없음</div>'
+                st.markdown(
+                    f'<div style="border:1px solid rgba(0,0,0,0.09);border-top:2px solid {accent};' 
+                    f'padding:11px 13px;margin-bottom:8px;">' 
+                    f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.82em;' 
+                    f'font-weight:700;color:{accent};margin-bottom:7px;">{title}</div>' 
+                    f'{_rows}</div>',
+                    unsafe_allow_html=True
+                )
+            _qo_card("🔴  SELL", _sells, "#DC2626")
+            _qo_card("🟢  BUY",  _buys,  "#059669")
+
+    # ── 우: Allocation + Rebalancing ─────────────────────────
+    with col_r:
+        _pie_common = dict(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(family="DM Mono", color=t_color),
+            showlegend=False, margin=dict(l=8, r=8, t=30, b=8)
+        )
+        _pie_colors = [line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0',
+                       '#059669','#047857','#065F46','#D1FAE5']
+
+        # ── Allocation Visual (파이 2 + 델타 바) ─────────────
+        st.markdown(
+            '<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;' 
+            'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;' 
+            'padding-bottom:5px;border-bottom:2px solid #111118;margin-bottom:10px;">' 
+            'Allocation  ·  Visual</div>',
+            unsafe_allow_html=True
+        )
+        _ca, _cb, _cc = st.columns([1, 1, 1.1])
+
+        _lcur = [a for a in ASSET_LIST if curr_vals[a] > 0]
+        _vcur = [curr_vals[a] for a in _lcur]
+        if sum(_vcur) > 0:
+            _fig_cur = go.Figure(go.Pie(
+                labels=_lcur, values=_vcur, hole=.52,
+                textinfo='label+percent', textfont=dict(size=10),
+                marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))
+            ))
+            _fig_cur.update_layout(title=dict(text="Current", font=dict(family="DM Mono", size=11, color=t_color)), **_pie_common)
+            with _ca:
+                with st.container(border=True):
+                    st.plotly_chart(_fig_cur, use_container_width=True)
+
+        _ltgt = [a for a in ASSET_LIST if target_weights.get(a, 0) > 0]
+        _vtgt = [target_weights[a] for a in _ltgt]
+        _fig_tgt = go.Figure(go.Pie(
+            labels=_ltgt, values=_vtgt, hole=.52,
+            textinfo='label+percent', textfont=dict(size=10),
+            marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))
+        ))
+        _fig_tgt.update_layout(title=dict(text=f"Target  R{curr_regime}", font=dict(family="DM Mono", size=11, color=t_color)), **_pie_common)
+        with _cb:
+            with st.container(border=True):
+                st.plotly_chart(_fig_tgt, use_container_width=True)
+
+        _dlabels = [a for a in ASSET_LIST if abs(diff_vals[a]) >= 1.0]
+        _dvals   = [diff_vals[a] for a in _dlabels]
+        if _dlabels:
+            _fig_bar = go.Figure(go.Bar(
+                x=_dlabels, y=_dvals,
+                marker_color=[C_GREEN if v > 0 else C_RED for v in _dvals],
+                text=[f"${v:,.0f}" for v in _dvals],
+                textposition='auto', textfont=dict(size=9), marker_line_width=0
+            ))
+            _fig_bar.update_layout(
+                title=dict(text="Δ Rebalancing", font=dict(family="DM Mono", size=11, color=t_color)),
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color=t_color, family="DM Mono", size=9),
+                showlegend=False, margin=dict(t=30, b=8, l=8, r=8)
+            )
+            _fig_bar.update_xaxes(**_ax_r)
+            _fig_bar.update_yaxes(**_ax_r)
+            with _cc:
+                with st.container(border=True):
+                    st.plotly_chart(_fig_bar, use_container_width=True)
+
+        # ── Rebalancing Matrix ────────────────────────────────
+        st.markdown(
+            '<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:500;' 
+            'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;' 
+            'padding-bottom:5px;border-bottom:2px solid #111118;margin:12px 0 10px;">' 
+            'Rebalancing  Matrix</div>',
+            unsafe_allow_html=True
+        )
+        if total_val_usd > 0:
+            _rhtml = '<div style="overflow-x:auto;"><table class="mint-table"><thead><tr>'
+            _rhtml += '<th>Asset</th><th>Avg→Cur</th><th>Ret%</th><th>Value($)</th><th>Tgt%</th><th>Tgt($)</th><th>Δ($)</th><th style="text-align:center;">Action</th>'
+            _rhtml += '</tr></thead><tbody>'
+            for asset in ASSET_LIST:
+                _shs  = st.session_state.portfolio[asset]['shares']
+                _avgp = st.session_state.portfolio[asset]['avg_price']
+                _curp = current_prices[asset] if current_prices[asset] > 0 else 1.0
+                _curv = curr_vals[asset]
+                _tgtw = target_weights.get(asset, 0.0)
+                _tgtv = total_val_usd * _tgtw
+                _diff = diff_vals[asset]
+                if asset == 'CASH':
+                    _avgstr, _ret = "—", 0.0
+                else:
+                    _avgstr = f"${_avgp:.1f}→${_curp:.1f}"
+                    _ret    = (_curp / _avgp - 1) * 100 if _avgp > 0 else 0.0
+                _retc   = C_GREEN if _ret >= 0 else C_RED
+                _retstr = f"{_ret:+.1f}%" if asset != 'CASH' else "—"
+                if abs(_diff) < _curp * 0.05 and asset != 'CASH':
+                    _act, _dstr = "<span style='color:#9494A0;'>HOLD</span>", "—"
+                elif abs(_diff) < 1.0 and asset == 'CASH':
+                    _act, _dstr = "<span style='color:#9494A0;'>HOLD</span>", "—"
+                elif _diff > 0:
+                    _act  = "<span style='color:#059669;font-weight:600;background:rgba(5,150,105,0.1);padding:2px 8px;border-left:2px solid #059669;'>BUY</span>"
+                    _dstr = f"<span style='color:#059669;font-weight:500;'>+${_diff:,.0f}</span>"
+                else:
+                    _act  = "<span style='color:#DC2626;font-weight:600;background:rgba(220,38,38,0.1);padding:2px 8px;border-left:2px solid #DC2626;'>SELL</span>"
+                    _dstr = f"<span style='color:#DC2626;font-weight:500;'>-${abs(_diff):,.0f}</span>"
+                if _tgtw > 0 or _curv > 0 or _shs > 0:
+                    _rhtml += (
+                        f'<tr><td style="font-weight:700;color:#059669;">{asset}</td>'
+                        f'<td style="color:#4A4A57;">{_avgstr}</td>'
+                        f'<td><span style="color:{_retc};font-weight:500;">{_retstr}</span></td>'
+                        f'<td>{_curv:,.0f}</td>'
+                        f'<td style="color:#059669;">{_tgtw*100:.0f}%</td>'
+                        f'<td>{_tgtv:,.0f}</td>'
+                        f'<td>{_dstr}</td>'
+                        f'<td style="text-align:center;">{_act}</td></tr>'
+                    )
+            _rhtml += "</tbody></table></div>"
+            with st.container(border=True):
+                st.markdown(apply_theme(_rhtml), unsafe_allow_html=True)
+
+
+elif page == "🍫 12-Pack Radar":
+
+    df_view  = df.iloc[-120:]
+    qqq_rsi  = last_row['QQQ_RSI']
+    qqq_dd   = last_row['QQQ_DD']
+    cnn_fgi  = fetch_fear_and_greed()
+    if cnn_fgi is not None:
+        fg_score = cnn_fgi
+    else:
+        vix_score = max(0, min(100, 100-(last_row['^VIX']-12)/28*100))
+        dd_score  = max(0, min(100, (qqq_dd+0.20)/0.20*100))
+        rsi_score = max(0, min(100, qqq_rsi))
+        fg_score  = (vix_score+dd_score+rsi_score)/3
+
+    sec_names = {'XLK':'TECH','XLV':'HEALTH','XLF':'FIN','XLY':'CONS','XLC':'COMM',
+                 'XLI':'IND','XLP':'STAPLE','XLE':'ENGY','XLU':'UTIL','XLRE':'REAL','XLB':'MAT'}
+    sec_data  = [{'섹터':sec_names[s],'수익률':last_row[f'{s}_1M']*100} for s in SECTOR_TICKERS]
+    sec_df    = pd.DataFrame(sec_data).sort_values(by='수익률', ascending=True)
+    top_sec, bot_sec = sec_df.iloc[-1]['섹터'], sec_df.iloc[0]['섹터']
+
+    risk_cnt, warn_cnt, safe_cnt = 0, 0, 0
+    if qqq_rsi < 40: safe_cnt+=1
+    elif qqq_rsi > 70: warn_cnt+=1
+    else: safe_cnt+=1
+    if qqq_dd < -0.20: risk_cnt+=1
+    elif qqq_dd < -0.10: warn_cnt+=1
+    else: safe_cnt+=1
+    if fg_score < 30: safe_cnt+=1
+    elif fg_score > 70: warn_cnt+=1
+    else: safe_cnt+=1
+    if last_row['HYG_IEF_Ratio'] < last_row['HYG_IEF_MA50']: risk_cnt+=1
+    else: safe_cnt+=1
+    if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0): warn_cnt+=1
+    else: safe_cnt+=1
+    if last_row['GLD_SPY_Ratio'] > last_row['GLD_SPY_MA50']: warn_cnt+=1
+    else: safe_cnt+=1
+    if last_row['UUP'] > last_row['UUP_MA50']: risk_cnt+=1
+    else: safe_cnt+=1
+    if last_row['^TNX'] > last_row['TNX_MA50']: warn_cnt+=1
+    else: safe_cnt+=1
+    if last_row['BTC-USD'] < last_row['BTC_MA50']: warn_cnt+=1
+    else: safe_cnt+=1
+    if last_row['IWM_SPY_Ratio'] < last_row['IWM_SPY_MA50']: warn_cnt+=1
+    else: safe_cnt+=1
+    if last_row['^VIX'] > last_row['VIX_MA50']: risk_cnt+=1
+    else: safe_cnt+=1
+    if top_sec not in ['UTIL', 'STAPLE', 'HEALTH']: safe_cnt+=1
+    else: warn_cnt+=1
+
+    if risk_cnt >= 3:
+        radar_status = "극단적 위험 구간 (Risk-Off)"
+        radar_msg    = "시장에 극단적인 공포가 덮쳤습니다. 현재 복수의 매크로 지표가 시스템 리스크를 강하게 경고하고 있습니다. 단순한 조정을 넘어선 투매 구간일 확률이 높으니, 모든 레버리지 포지션을 해제하고 현금과 달러, 금 등 안전 자산 비중을 최대로 늘려 폭풍우가 지나가기를 기다리셔야 합니다."
+        radar_color  = "#DC2626"
+    elif warn_cnt >= 4 or risk_cnt >= 1:
+        radar_status = "변동성 주의 (Warning)"
+        radar_msg    = "시장 곳곳에서 균열의 조짐이 감지되고 있습니다. 표면적인 지수는 버티고 있을지 몰라도 내부 자금 흐름이나 심리 지표가 점차 악화되고 있습니다. 신규 매수는 철저히 보류하시고, 포트폴리오의 리스크 노출도를 점검하며 보수적인 관망 자세를 유지하는 것이 좋습니다."
+        radar_color  = "#D97706"
+    else:
+        radar_status = "안정적 순항 (Safe)"
+        radar_msg    = "현재 글로벌 매크로 지표와 시장 심리가 모두 안정적인 궤도에 올라와 있습니다. 추세를 꺾을 만한 시스템 리스크가 보이지 않으니, AMLS 알고리즘이 제시하는 비중에 맞춰 자신감 있게 추세 추종 전략을 전개하시기 바랍니다."
+        radar_color  = main_color
+
+    # ── 상단 상태 바 ───────────────────────────────────────────────
+    total_signals = risk_cnt + warn_cnt + safe_cnt
+    risk_pct  = int(risk_cnt  / total_signals * 100) if total_signals else 0
+    warn_pct  = int(warn_cnt  / total_signals * 100) if total_signals else 0
+    safe_pct  = int(safe_cnt  / total_signals * 100) if total_signals else 0
+
+    st.markdown(apply_theme(
+        f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
+        f'border-left:3px solid {radar_color};padding:14px 20px;margin-bottom:12px;">'
+        f'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;">'
+
+        # 좌: 상태 텍스트
+        f'<div style="flex:3;min-width:260px;">'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;'
+        f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px;">Macro Signal Status</div>'
+        f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.2em;font-weight:700;letter-spacing:-0.3px;font-style:normal;coloric;'
+        f'color:{radar_color};line-height:1.1;margin-bottom:8px;">{radar_status}</div>'
+        f'<div style="font-family:DM Sans,sans-serif;font-size:0.82em;color:#4A4A57;line-height:1.6;">{radar_msg}</div>'
+        f'</div>'
+
+        # 우: 3개 숫자 카드 + 프로그레스
+        f'<div style="flex:1;min-width:180px;">'
+        f'<div style="display:flex;gap:6px;margin-bottom:8px;">'
+        f'<div style="flex:1;border-top:2px solid #DC2626;padding:8px 6px;background:rgba(220,38,38,0.04);">'
+        f'<div style="font-family:DM Mono,monospace;font-size:1.5em;color:#DC2626;line-height:1;">{risk_cnt}</div>'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">Risk</div>'
+        f'</div>'
+        f'<div style="flex:1;border-top:2px solid #D97706;padding:8px 6px;background:rgba(217,119,6,0.04);">'
+        f'<div style="font-family:DM Mono,monospace;font-size:1.5em;color:#D97706;line-height:1;">{warn_cnt}</div>'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">Warn</div>'
+        f'</div>'
+        f'<div style="flex:1;border-top:2px solid {main_color};padding:8px 6px;background:rgba({r_c},{g_c},{b_c},0.04);">'
+        f'<div style="font-family:DM Mono,monospace;font-size:1.5em;color:{main_color};line-height:1;">{safe_cnt}</div>'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.57em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">Safe</div>'
+        f'</div>'
+        f'</div>'
+        # 누적 프로그레스 바
+        f'<div style="height:4px;background:rgba(0,0,0,0.07);display:flex;overflow:hidden;">'
+        f'<div style="width:{risk_pct}%;background:#DC2626;"></div>'
+        f'<div style="width:{warn_pct}%;background:#D97706;"></div>'
+        f'<div style="width:{safe_pct}%;background:{main_color};"></div>'
+        f'</div>'
+        f'<div style="display:flex;justify-content:space-between;font-family:DM Mono,monospace;'
+        f'font-size:0.58em;color:#9494A0;margin-top:3px;">'
+        f'<span>{risk_pct}% risk</span><span>{warn_pct}% warn</span><span>{safe_pct}% safe</span></div>'
+        f'</div>'
+
+        f'</div></div>'
+    ), unsafe_allow_html=True)
+
+    # ── badge / desc / url 정의 ────────────────────────────────────
+    def _badge(label, color, icon):
+        p = {
+            'green':  (f'rgba({r_c},{g_c},{b_c},0.10)', main_color),
+            'orange': ('rgba(217,119,6,0.10)',           '#D97706'),
+            'red':    ('rgba(220,38,38,0.10)',           '#DC2626'),
+            'blue':   ('rgba(59,130,246,0.10)',          '#3B82F6')
+        }
+        bg, fg = p[color]
+        return (f'<span style="background:{bg};color:{fg};border:1px solid {fg};'
+                f'padding:2px 7px;font-size:0.68em;font-weight:500;'
+                f'font-family:DM Mono,monospace;letter-spacing:0.05em;white-space:nowrap;">'
+                f'{icon} {label}</span>')
+
+    b1  = _badge("BUY","green","▲") if qqq_rsi<40 else (_badge("OVER","red","▼") if qqq_rsi>70 else _badge("NEUTRAL","blue","—"))
+    b2  = _badge("BEAR−20%","red","▼") if qqq_dd<-0.20 else (_badge("CORR−10%","orange","▼") if qqq_dd<-0.10 else _badge("SAFE","green","▲"))
+    b3  = _badge("FEAR","green","▲") if fg_score<30 else (_badge("GREED","red","▼") if fg_score>70 else _badge("NEUTRAL","blue","—"))
+    b4  = f'<span style="background:rgba({r_c},{g_c},{b_c},0.10);color:{main_color};border:1px solid {main_color};padding:2px 7px;font-size:0.68em;font-family:DM Mono,monospace;">▲{top_sec}/▼{bot_sec}</span>'
+    b5  = _badge("RISK OFF","red","▼") if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else _badge("RISK ON","green","▲")
+    b6  = _badge("NARROW","orange","⚠") if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else _badge("BROAD","green","▲")
+    b7  = _badge("GOLD","orange","▲") if last_row['GLD_SPY_Ratio']>last_row['GLD_SPY_MA50'] else _badge("EQUITY","green","▲")
+    b8  = _badge("USD STR","red","▼") if last_row['UUP']>last_row['UUP_MA50'] else _badge("USD WK","green","▲")
+    b9  = _badge("YIELD↑","red","▼") if last_row['^TNX'] > last_row['TNX_MA50'] else _badge("YIELD↓","green","▲")
+    b10 = _badge("RISK OFF","red","▼") if last_row['BTC-USD'] < last_row['BTC_MA50'] else _badge("RISK ON","green","▲")
+    b11 = _badge("NARROW","orange","⚠") if last_row['IWM_SPY_Ratio'] < last_row['IWM_SPY_MA50'] else _badge("BROAD","green","▲")
+    b12 = _badge("EXPAND","red","▼") if last_row['^VIX'] > last_row['VIX_MA50'] else _badge("SHRINK","green","▲")
+
+    gauge_steps = [
+        {'range':[0,25],  'color':"rgba(220,38,38,0.4)"},
+        {'range':[25,45], 'color':"rgba(217,119,6,0.3)"},
+        {'range':[45,55], 'color':"rgba(0,0,0,0.04)"},
+        {'range':[55,75], 'color':f"rgba({r_c},{g_c},{b_c},0.3)"},
+        {'range':[75,100],'color':f"rgba({r_c},{g_c},{b_c},0.5)"}
+    ]
+
+    desc1  = "나스닥 100(QQQ)의 단기 과열 및 침체를 나타내는 RSI 지표. 30↓ 투매→매수기회, 70↑ 과열→신규진입중단."
+    desc2  = "QQQ 52주 고점 대비 하락률. -10% 건전한 조정, -20% 돌파시 약세장 진입으로 즉각 방어 필요."
+    desc3  = "CNN Fear & Greed 지수. 극단적 공포 구간이 역사적 매수 기회, 극단적 탐욕 구간은 수익실현 시점."
+    desc4  = "월간 섹터 자금흐름. 방어주(유틸/필수소비/헬스) 강세시 경기침체 대비 시그널."
+    desc5  = "HYG/IEF 비율. 하이일드 채권이 국채 대비 약세면 스마트머니가 선제 이탈 중."
+    desc6  = "QQQ(시총가중) vs QQQE(동일가중). 괴리 발생시 소수 대형주만 끌어올리는 가짜 상승 경고."
+    desc7  = "GLD/SPY 비율. 금이 상대 강세면 기관의 Risk-Off 전환, 구조적 리스크 시그널."
+    desc8  = "달러지수(UUP). 50일선 상향 돌파시 기술주 강한 하방압력, 주식비중 축소 정석."
+    desc9  = "미 10년물 금리. 50일선 상향 돌파시 나스닥 성장주에 강한 역풍, 레버리지 주의."
+    desc10 = "비트코인 트렌드. 50일선 하향시 글로벌 유동성 가뭄 선행 경고."
+    desc11 = "IWM/SPY 비율. 중소형주 상대약세시 시장 내부 균열, TZA 전략 고려 가능."
+    desc12 = "VIX 추세. 50일선 상향 돌파시 변동성 확장 국면 진입, 시스템 패닉 시그널."
+
+    # 카드 헤더 생성 함수 — 번호 + 링크 + 배지 + 한줄 설명
+    def r_head(num, title, badge, url, desc):
+        return (
+            f'<div style="border-bottom:1px solid rgba(0,0,0,0.08);padding-bottom:8px;margin-bottom:8px;">'
+            f'<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.62em;color:#9494A0;'
+            f'min-width:18px;">{num:02d}</span>'
+            f'<a href="{url}" target="_blank" style="text-decoration:none;flex:1;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.66em;font-weight:500;'
+            f'color:#2C2C35;letter-spacing:0.08em;text-transform:uppercase;">{title}&nbsp;↗</span>'
+            f'</a>'
+            f'{badge}'
+            f'</div>'
+            f'<div style="font-family:DM Sans,sans-serif;font-size:0.73em;color:#6B6B7A;'
+            f'line-height:1.4;letter-spacing:-0.1px;">{desc}</div>'
+            f'</div>'
+        )
+
+    u1  = "https://kr.tradingview.com/chart/?symbol=NASDAQ:QQQ"
+    u2  = "https://kr.tradingview.com/chart/?symbol=NASDAQ:QQQ"
+    u3  = "https://edition.cnn.com/markets/fear-and-greed"
+    u4  = "https://finviz.com/map.ashx?t=sec"
+    u5  = "https://fred.stlouisfed.org/series/BAMLH0A0HYM2"
+    u6  = "https://kr.tradingview.com/chart/?symbol=NASDAQ:QQQE"
+    u7  = "https://kr.tradingview.com/chart/?symbol=AMEX:GLD"
+    u8  = "https://kr.tradingview.com/chart/?symbol=AMEX:UUP"
+    u9  = "https://kr.tradingview.com/chart/?symbol=TVC:US10Y"
+    u10 = "https://kr.tradingview.com/chart/?symbol=BINANCE:BTCUSD"
+    u11 = "https://kr.tradingview.com/chart/?symbol=AMEX:IWM"
+    u12 = "https://kr.tradingview.com/chart/?symbol=CBOE:VIX"
+
+    # ── 3×4 신호 그리드 ─────────────────────────────────────────
+    row1 = st.columns(4)
+    with row1[0]:
+        with st.container(border=True):
+            st.markdown(apply_theme(r_head(1, "DCA · RSI", b1, u1, desc1)), unsafe_allow_html=True)
+            fig1=go.Figure()
+            fig1.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQ_RSI'], line=dict(color=line_c, width=1.8)))
+            fig1.add_hline(y=70, line_dash='dot', line_color='#B0B0BE', line_width=1)
+            fig1.add_hline(y=30, line_dash='dot', line_color=rsi_low_c, line_width=1)
+            fig1.update_layout(**radar_layout, showlegend=False)
+            fig1.update_xaxes(**_ax_r)
+            fig1.update_yaxes(range=[10,90], **_ax_r)
+            st.plotly_chart(fig1, use_container_width=True)
+    with row1[1]:
+        with st.container(border=True):
+            st.markdown(apply_theme(r_head(2, "Drawdown", b2, u2, desc2)), unsafe_allow_html=True)
+            fig2=go.Figure()
+            fig2.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQ_DD'], fill='tozeroy', fillcolor='rgba(220,38,38,0.07)', line=dict(color='#DC2626', width=1.8)))
+            fig2.update_layout(**radar_layout, showlegend=False)
+            fig2.update_xaxes(**_ax_r)
+            fig2.update_yaxes(tickformat='.0%', **_ax_r)
+            st.plotly_chart(fig2, use_container_width=True)
+    with row1[2]:
+        with st.container(border=True):
+            st.markdown(apply_theme(r_head(3, "Fear & Greed", b3, u3, desc3)), unsafe_allow_html=True)
+            fig3=go.Figure(go.Indicator(
+                mode="gauge+number", value=fg_score, domain={'x':[0,1],'y':[0,1]},
+                gauge={'axis':{'range':[0,100],'tickcolor':t_color},'bar':{'color':line_c,'thickness':0.2},'steps':gauge_steps,'borderwidth':0}
+            ))
+            fig3.update_layout(height=200, margin=dict(l=15,r=15,t=10,b=10), paper_bgcolor=b_color, font=dict(family="DM Mono", color=t_color))
+            st.plotly_chart(fig3, use_container_width=True)
+    with row1[3]:
+        with st.container(border=True):
+            st.markdown(apply_theme(r_head(4, "Sector 1M", b4, u4, desc4)), unsafe_allow_html=True)
+            fig4=go.Figure(go.Bar(
+                x=sec_df['수익률'], y=sec_df['섹터'], orientation='h',
+                marker_color=[dash_c if v<0 else line_c for v in sec_df['수익률']],
+                marker_line_width=0
+            ))
+            fig4.update_layout(**radar_layout, showlegend=False)
+            fig4.update_xaxes(**_ax_r)
+            fig4.update_yaxes(**_ax_r)
+            st.plotly_chart(fig4, use_container_width=True)
+
+    row2 = st.columns(4)
+    with row2[0]:
+        with st.container(border=True):
+            st.markdown(apply_theme(r_head(5, "Credit Spread", b5, u5, desc5)), unsafe_allow_html=True)
+            fig5=go.Figure()
+            fig5.add_trace(go.Scatter(x=df_view.index, y=df_view['HYG_IEF_Ratio'], line=dict(color=line_c, width=1.8)))
+            fig5.add_trace(go.Scatter(x=df_view.index, y=df_view['HYG_IEF_MA50'],  line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig5.update_layout(**radar_layout, showlegend=False)
+            fig5.update_xaxes(**_ax_r); fig5.update_yaxes(**_ax_r)
+            st.plotly_chart(fig5, use_container_width=True)
+    with row2[1]:
+        with st.container(border=True):
+            st.markdown(apply_theme(r_head(6, "Mkt Breadth", b6, u6, desc6)), unsafe_allow_html=True)
+            fig6=go.Figure()
+            fig6.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQ_20d_Ret'],  name='QQQ',  line=dict(color=line_c, width=1.8)))
+            fig6.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQE_20d_Ret'], name='QQQE', line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig6.update_layout(**radar_layout, showlegend=False)
+            fig6.update_xaxes(**_ax_r)
+            fig6.update_yaxes(tickformat='.0%', **_ax_r)
+            st.plotly_chart(fig6, use_container_width=True)
+    with row2[2]:
+        with st.container(border=True):
+            st.markdown(apply_theme(r_head(7, "Gold / Equity", b7, u7, desc7)), unsafe_allow_html=True)
+            fig7=go.Figure()
+            fig7.add_trace(go.Scatter(x=df_view.index, y=df_view['GLD_SPY_Ratio'], line=dict(color=line_c, width=1.8)))
+            fig7.add_trace(go.Scatter(x=df_view.index, y=df_view['GLD_SPY_MA50'],  line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig7.update_layout(**radar_layout, showlegend=False)
+            fig7.update_xaxes(**_ax_r); fig7.update_yaxes(**_ax_r)
+            st.plotly_chart(fig7, use_container_width=True)
+    with row2[3]:
+        with st.container(border=True):
+            st.markdown(apply_theme(r_head(8, "USD (UUP)", b8, u8, desc8)), unsafe_allow_html=True)
+            fig8=go.Figure()
+            fig8.add_trace(go.Scatter(x=df_view.index, y=df_view['UUP'],       line=dict(color=line_c, width=1.8)))
+            fig8.add_trace(go.Scatter(x=df_view.index, y=df_view['UUP_MA50'],  line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig8.update_layout(**radar_layout, showlegend=False)
+            fig8.update_xaxes(**_ax_r); fig8.update_yaxes(**_ax_r)
+            st.plotly_chart(fig8, use_container_width=True)
+
+    row3 = st.columns(4)
+    with row3[0]:
+        with st.container(border=True):
+            st.markdown(apply_theme(r_head(9, "10Y Yield", b9, u9, desc9)), unsafe_allow_html=True)
+            fig9=go.Figure()
+            fig9.add_trace(go.Scatter(x=df_view.index, y=df_view['^TNX'],      line=dict(color=line_c, width=1.8)))
+            fig9.add_trace(go.Scatter(x=df_view.index, y=df_view['TNX_MA50'],  line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig9.update_layout(**radar_layout, showlegend=False)
+            fig9.update_xaxes(**_ax_r); fig9.update_yaxes(**_ax_r)
+            st.plotly_chart(fig9, use_container_width=True)
+    with row3[1]:
+        with st.container(border=True):
+            st.markdown(apply_theme(r_head(10, "Bitcoin", b10, u10, desc10)), unsafe_allow_html=True)
+            fig10=go.Figure()
+            fig10.add_trace(go.Scatter(x=df_view.index, y=df_view['BTC-USD'],  line=dict(color=line_c, width=1.8)))
+            fig10.add_trace(go.Scatter(x=df_view.index, y=df_view['BTC_MA50'], line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig10.update_layout(**radar_layout, showlegend=False)
+            fig10.update_xaxes(**_ax_r); fig10.update_yaxes(**_ax_r)
+            st.plotly_chart(fig10, use_container_width=True)
+    with row3[2]:
+        with st.container(border=True):
+            st.markdown(apply_theme(r_head(11, "Russell/SP500", b11, u11, desc11)), unsafe_allow_html=True)
+            fig11=go.Figure()
+            fig11.add_trace(go.Scatter(x=df_view.index, y=df_view['IWM_SPY_Ratio'], line=dict(color=line_c, width=1.8)))
+            fig11.add_trace(go.Scatter(x=df_view.index, y=df_view['IWM_SPY_MA50'],  line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig11.update_layout(**radar_layout, showlegend=False)
+            fig11.update_xaxes(**_ax_r); fig11.update_yaxes(**_ax_r)
+            st.plotly_chart(fig11, use_container_width=True)
+    with row3[3]:
+        with st.container(border=True):
+            st.markdown(apply_theme(r_head(12, "VIX Trend", b12, u12, desc12)), unsafe_allow_html=True)
+            fig12=go.Figure()
+            fig12.add_trace(go.Scatter(x=df_view.index, y=df_view['^VIX'],      line=dict(color=line_c, width=1.8)))
+            fig12.add_trace(go.Scatter(x=df_view.index, y=df_view['VIX_MA50'],  line=dict(color=dash_c, dash='dot', width=1.1)))
+            fig12.update_layout(**radar_layout, showlegend=False)
+            fig12.update_xaxes(**_ax_r); fig12.update_yaxes(**_ax_r)
+            st.plotly_chart(fig12, use_container_width=True)
+
+
+elif page == "📈 Backtest Lab":
+    st.markdown(apply_theme("""
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <div>
+            <h2 style="font-family:'Plus Jakarta Sans';font-size:1.7em;color:#0F172A;margin:0;">📈 Backtest Lab</h2>
+            <div style="font-family:'DM Mono';font-size:0.65em;color:#4A5568;letter-spacing:0.16em;text-transform:uppercase;margin-top:3px;">Strategy Simulator  ·  Historical Analysis</div>
+        </div>
+    </div>"""), unsafe_allow_html=True)
+
+    # ── 2패널: 좌(설정) + 우(결과) ────────────────────────────
+    panel_cfg, panel_res = st.columns([1, 2.8])
+
+    with panel_cfg:
+        with st.container(border=True):
+            st.markdown("""<div style="font-family:'DM Mono';font-size:0.62em;color:#4A5568;margin-bottom:14px;letter-spacing:0.2em;text-transform:uppercase;">⚙  Config</div>""", unsafe_allow_html=True)
+            bt_start = st.date_input("Start Date", datetime(2020, 1, 1), key="bt_start_input")
+            bt_end   = st.date_input("End Date",   datetime.today(),     key="bt_end_input")
+            monthly_cont = st.number_input("월 적립금 ($)", value=2000, step=500, key="bt_monthly_input")
+
+    with panel_res:
+        with st.spinner("시뮬레이션 가동 중..."):
+            bt_df = load_custom_backtest_data(bt_start, bt_end)
+
+            if bt_df.empty:
+                st.error("해당 기간의 데이터가 존재하지 않거나 부족합니다. 기간을 조정해주세요.")
+            else:
+                daily_ret = bt_df[['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPY','SMH','GLD']].pct_change().fillna(0)
+                w_orig = get_weights_v45(bt_df['Regime'].iloc[0], False)
+
+                val_o, val_q, val_qld, val_tqqq = 10000, 10000, 10000, 10000
+                hist_o, hist_q, hist_qld, hist_tqqq = [val_o], [val_q], [val_qld], [val_tqqq]
+                invested = [10000]; curr_inv = 10000
+
+                for i in range(1, len(bt_df)):
+                    today     = bt_df.index[i]
+                    yesterday = bt_df.index[i-1]
+                    ret_o = sum(w_orig.get(t,0) * daily_ret[t].iloc[i] for t in w_orig if t in daily_ret.columns)
+                    val_o *= (1 + ret_o); val_q *= (1 + daily_ret['QQQ'].iloc[i])
+                    val_qld *= (1 + daily_ret['QLD'].iloc[i]); val_tqqq *= (1 + daily_ret['TQQQ'].iloc[i])
+                    if today.month != yesterday.month:
+                        val_o += monthly_cont; val_q += monthly_cont
+                        val_qld += monthly_cont; val_tqqq += monthly_cont
+                        curr_inv += monthly_cont
+                    hist_o.append(val_o); hist_q.append(val_q)
+                    hist_qld.append(val_qld); hist_tqqq.append(val_tqqq)
+                    invested.append(curr_inv)
+                    smh_cond_i = (bt_df['SMH'].iloc[i] > bt_df['SMH_MA50'].iloc[i]) and (bt_df['SMH_3M_Ret'].iloc[i] > 0.05) and (bt_df['SMH_RSI'].iloc[i] > 50)
+                    w_orig = get_weights_v45(bt_df['Regime'].iloc[i], smh_cond_i)
+
+                res_df = pd.DataFrame(index=bt_df.index)
+                res_df['V4.5'], res_df['QQQ'], res_df['QLD'], res_df['TQQQ'] = hist_o, hist_q, hist_qld, hist_tqqq
+                res_df['Invested'] = invested
+                days = (res_df.index[-1] - res_df.index[0]).days
+
+                def calc_metrics(series, inv_series):
+                    final_val = series.iloc[-1]; total_inv = inv_series.iloc[-1]
+                    ret  = (final_val / total_inv) - 1
+                    cagr = (final_val / total_inv) ** (365.25 / days) - 1 if days > 0 else 0
+                    mdd  = ((series / series.cummax()) - 1).min()
+                    return ret, cagr, mdd
+
+                ret_o, cagr_o, mdd_o       = calc_metrics(res_df['V4.5'], res_df['Invested'])
+                ret_q, cagr_q, mdd_q       = calc_metrics(res_df['QQQ'],  res_df['Invested'])
+                ret_qld, cagr_qld, mdd_qld = calc_metrics(res_df['QLD'],  res_df['Invested'])
+                ret_t, cagr_t, mdd_t       = calc_metrics(res_df['TQQQ'], res_df['Invested'])
+
+                mc1, mc2, mc3, mc4 = st.columns(4)
+
+                def _mc_html(title, ret, cagr, mdd, is_main=False):
+                    """HTML 메트릭 카드 문자열 생성 (unsafe_allow_html 전용)"""
+                    border_top = f"rgba({r_c},{g_c},{b_c},0.55)" if is_main else "rgba(0,0,0,0.12)"
+                    bg        = f"rgba({r_c},{g_c},{b_c},0.06)" if is_main else "#FFFFFF"
+                    tag_html  = (f'<span style="background:rgba({r_c},{g_c},{b_c},0.1);'
+                                 f'color:{main_color};border-radius:5px;padding:2px 8px;'
+                                 f'font-size:0.6em;font-family:DM Mono,monospace;'
+                                 f'border:1px solid rgba({r_c},{g_c},{b_c},0.25);'
+                                 f'letter-spacing:0.1em;">STRATEGY</span>') if is_main else ''
+                    ret_c     = "#059669" if ret >= 0 else "#EF4444"
+                    # display:flex을 쓰지 않고 inline-block으로 대체 (Streamlit 파서 안전)
+                    return (
+                        f'<div style="background:{bg};border:1px solid rgba(0,0,0,0.08);'
+                        f'border-top:2px solid {border_top};border-radius:14px;'
+                        f'padding:16px 18px;box-shadow:0 2px 12px rgba(0,0,0,0.05);'
+                        f'min-height:100px;">'
+                        f'<div style="font-family:DM Mono,monospace;font-size:0.62em;'
+                        f'color:#4A5568;letter-spacing:0.14em;text-transform:uppercase;'
+                        f'margin-bottom:6px;">{title}&nbsp;&nbsp;{tag_html}</div>'
+                        f'<div style="font-family:DM Mono,monospace;font-size:1.6em;'
+                        f'font-weight:400;color:#0F172A;letter-spacing:-0.5px;'
+                        f'margin-bottom:6px;">CAGR {cagr*100:.1f}%</div>'
+                        f'<div style="font-family:DM Mono,monospace;font-size:0.72em;'
+                        f'color:#4A5568;">'
+                        f'누적&nbsp;<b style="color:{ret_c};">{ret*100:.1f}%</b>'
+                        f'&nbsp;&nbsp;MDD&nbsp;<b style="color:#EF4444;">{mdd*100:.1f}%</b>'
+                        f'</div></div>'
+                    )
+
+                with mc1: st.markdown(_mc_html("✦ AMLS V4.5", ret_o,   cagr_o,   mdd_o,   True), unsafe_allow_html=True)
+                with mc2: st.markdown(_mc_html("QQQ",          ret_q,   cagr_q,   mdd_q),         unsafe_allow_html=True)
+                with mc3: st.markdown(_mc_html("QLD",          ret_qld, cagr_qld, mdd_qld),        unsafe_allow_html=True)
+                with mc4: st.markdown(_mc_html("TQQQ",         ret_t,   cagr_t,   mdd_t),          unsafe_allow_html=True)
+
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+                fig_eq = go.Figure()
+                fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['QQQ'],  name='QQQ',  line=dict(color='#CBD5E1', width=1.2, dash='dot')))
+                fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['QLD'],  name='QLD',  line=dict(color='#3B82F6', width=1.2, dash='dash')))
+                fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['TQQQ'], name='TQQQ', line=dict(color='#EF4444', width=1.2, dash='dash')))
+                fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['V4.5'], name='AMLS', line=dict(color=main_color, width=3)))
+                fig_eq.update_layout(
+                    title=dict(text="Equity Curve  ·  Log Scale", font=dict(family='DM Mono', size=13, color=t_color)),
+                    height=380, yaxis_type='log', **chart_layout
+                )
+                fig_eq.update_xaxes(**_ax)
+                fig_eq.update_yaxes(**_ax)
+                with st.container(border=True):
+                    st.plotly_chart(fig_eq, use_container_width=True)
+
+                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+
+                def get_dd_series(s): return (s / s.cummax()) - 1
+                fig_dd = go.Figure()
+                fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['QQQ']),  name='QQQ',  line=dict(color='#CBD5E1', width=1)))
+                fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['QLD']),  name='QLD',  line=dict(color='#3B82F6', width=1)))
+                fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['TQQQ']), name='TQQQ', line=dict(color='#EF4444', width=1)))
+                fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['V4.5']), name='AMLS',
+                                             fill='tozeroy', fillcolor=f'rgba({r_c},{g_c},{b_c},0.1)',
+                                             line=dict(color=main_color, width=2.2)))
+                fig_dd.update_layout(
+                    title=dict(text="Drawdown Curve", font=dict(family='DM Mono', size=13, color=t_color)),
+                    height=260, **chart_layout
+                )
+                fig_dd.update_xaxes(**_ax)
+                fig_dd.update_yaxes(tickformat='.0%', **_ax)
+                with st.container(border=True):
+                    st.plotly_chart(fig_dd, use_container_width=True)
+
+                st.divider()
+            if st.button("✦ AI 추론 요약 실행", use_container_width=True):
+                try:
+                    import google.generativeai as genai
+                    api_key = st.secrets["GEMINI_API_KEY"]
+                    genai.configure(api_key=api_key)
+                    models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                    model  = genai.GenerativeModel(models[0].replace('models/',''))
+                    prompt = f"""너는 최고 퀀트 애널리스트야. AMLS V4.5 전략 백테스트 결과를 분석해.
+[AMLS] 누적수익률: {ret_o*100:.1f}%, CAGR: {cagr_o*100:.1f}%, MDD: {mdd_o*100:.1f}%
+[TQQQ] 누적수익률: {ret_t*100:.1f}%, CAGR: {cagr_t*100:.1f}%, MDD: {mdd_t*100:.1f}%
+AMLS 전략이 레버리지 MDD를 어떻게 회피하면서 수익을 냈는지 3단락으로 분석해."""
+                    with st.spinner("AI 분석 중..."):
+                        response = model.generate_content(prompt)
+                        st.markdown(apply_theme(f"""<div class="glass-card" style="height:auto !important; padding:28px !important; color:#CBD5E1; font-weight:400; line-height:1.75; font-size:0.95em;">{response.text}</div>"""), unsafe_allow_html=True)
+                except KeyError:
+                    st.error("🚨 GEMINI_API_KEY 누락")
+
+# ──────────────────────────────────────────
+elif page == "📰 Macro News":
+    headlines_for_ai, news_items = fetch_macro_news()
+
+    # ── 상단 마스트헤드 ────────────────────────────────────────
+    st.markdown(apply_theme(f"""
+    <div style="border-top:3px solid #111118;border-bottom:1px solid rgba(0,0,0,0.12);
+        padding:18px 0 14px;margin-bottom:24px;">
+        <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+            <div>
+                <div style="font-family:'DM Mono',monospace;font-size:0.6em;color:#9494A0;
+                    letter-spacing:0.22em;text-transform:uppercase;margin-bottom:6px;">
+                    Global Macro  ·  Wall Street Analysis Engine
+                </div>
+                <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:2.2em;
+                    font-weight:800;color:{tc_heading};
+                    letter-spacing:-1.5px;line-height:1;">
+                    Market Briefing
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;padding-bottom:4px;">
+                <div class="live-pulse" style="font-family:'DM Mono',monospace;font-size:0.65em;
+                    color:#059669;padding:4px 12px;
+                    background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);
+                    letter-spacing:0.06em;">{rt_label}</div>
+                <div style="font-family:'DM Mono',monospace;font-size:0.62em;color:#9494A0;
+                    letter-spacing:0.05em;">{last_update_time}</div>
+            </div>
+        </div>
+    </div>
+    """), unsafe_allow_html=True)
+
+    # ── 2패널: 좌(AI 분석) + 우(헤드라인) ─────────────────────
+    news_left, news_right = st.columns([1, 1.6])
+
+    with news_left:
+        st.markdown(
+            f'<div style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:500;'
+            f'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;'
+            f'padding-bottom:6px;border-bottom:2px solid #111118;margin-bottom:14px;">'
+            f'AI  Analyst  ·  System-2 Reasoning</div>',
+            unsafe_allow_html=True
+        )
+
+        if st.button("↻  심층 추론 요약 실행", use_container_width=True):
+            try:
+                import google.generativeai as genai
+                api_key = st.secrets["GEMINI_API_KEY"]
+                if not headlines_for_ai:
+                    st.warning("분석할 뉴스가 없습니다.")
+                else:
+                    with st.spinner("AI 분석 중..."):
+                        genai.configure(api_key=api_key)
+                        models = [m.name for m in genai.list_models()
+                                  if 'generateContent' in m.supported_generation_methods]
+                        model  = genai.GenerativeModel(models[0].replace('models/',''))
+                        prompt = ("너는 퀀트 애널리스트야. 다음 뉴스를 섹터별, 리스크 요소, "
+                                  "최종 투자 스탠스로 나누어 3문단으로 요약해.\n"
+                                  + "\n".join(headlines_for_ai))
+                        response = model.generate_content(prompt)
+                        # AI 응답 박스
+                        st.markdown(
+                            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
+                            f'border-left:3px solid {main_color};padding:20px 22px;'
+                            f'margin-top:12px;">'
+                            f'<div style="font-family:DM Mono,monospace;font-size:0.58em;'
+                            f'color:#9494A0;letter-spacing:0.16em;text-transform:uppercase;'
+                            f'margin-bottom:10px;">AI Summary</div>'
+                            f'<div style="font-family:DM Sans,sans-serif;font-size:0.9em;'
+                            f'color:{tc_body};line-height:1.75;">{response.text}</div>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+            except KeyError:
+                st.error("🚨 GEMINI_API_KEY 누락")
+        else:
+            # 버튼 미클릭 상태 — 안내 카드
+            st.markdown(
+                f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
+                f'border-left:3px solid rgba(0,0,0,0.15);padding:20px 22px;margin-top:12px;">'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;'
+                f'letter-spacing:0.14em;text-transform:uppercase;margin-bottom:10px;">How It Works</div>'
+                f'<div style="font-family:DM Sans,sans-serif;font-size:0.85em;color:{tc_muted};'
+                f'line-height:1.7;">'
+                f'버튼을 누르면 Google Gemini AI가 최신 뉴스 헤드라인을<br>'
+                f'<b style="color:{tc_body};">① 섹터별 분류</b> → '
+                f'<b style="color:{tc_body};">② 리스크 요소 추출</b> → '
+                f'<b style="color:{tc_body};">③ 최종 투자 스탠스</b><br>'
+                f'3단계로 구조화해서 요약해 드립니다.'
+                f'</div></div>',
+                unsafe_allow_html=True
+            )
+
+        # 뉴스 소스 카운트
+        if news_items:
+            st.markdown(
+                f'<div style="margin-top:16px;padding:10px 14px;'
+                f'background:rgba(0,0,0,0.03);border-left:2px solid rgba(0,0,0,0.15);">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.7em;color:#9494A0;">'
+                f'수집된 헤드라인  <b style="color:{tc_data};">{len(news_items)}건</b>'
+                f'  ·  Google News RSS</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+    with news_right:
+        st.markdown(
+            f'<div style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:500;'
+            f'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;'
+            f'padding-bottom:6px;border-bottom:2px solid #111118;margin-bottom:14px;">'
+            f'Latest Headlines  ·  {len(news_items) if news_items else 0} items</div>',
+            unsafe_allow_html=True
+        )
+
+        if news_items:
+            for idx, item in enumerate(news_items):
+                # 번호 + 제목 + 날짜 — 룰드 리스트 형식
+                _num_color  = main_color if idx < 3 else "#9494A0"
+                _top_border = f"2px solid {main_color}" if idx == 0 else "1px solid rgba(0,0,0,0.10)"
+                st.markdown(
+                    f'<div style="display:flex;gap:14px;padding:12px 0;'
+                    f'border-bottom:1px solid rgba(0,0,0,0.07);'
+                    f'border-top:{_top_border if idx == 0 else "none"};">'
+
+                    # 번호
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.75em;'
+                    f'color:{_num_color};font-weight:600;min-width:22px;'
+                    f'padding-top:2px;font-variant-numeric:tabular-nums;">'
+                    f'{idx+1:02d}</div>'
+
+                    # 내용
+                    f'<div style="flex:1;">'
+                    f'<a href="{item["link"]}" target="_blank" style="text-decoration:none;">'
+                    f'<div style="font-family:DM Sans,sans-serif;font-size:0.88em;'
+                    f'color:{tc_body};line-height:1.5;font-weight:{"500" if idx < 3 else "400"};'
+                    f'transition:color 0.15s;"'
+                    f' onmouseover="this.style.color=\'{main_color}\'"'
+                    f' onmouseout="this.style.color=\'{tc_body}\'">'
+                    f'{item["title"]}'
+                    f'</div>'
+                    f'</a>'
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.65em;'
+                    f'color:#9494A0;margin-top:4px;letter-spacing:0.04em;">'
+                    f'{item["date"]}</div>'
+                    f'</div>'
+
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+        else:
+            st.markdown(
+                f'<div style="padding:20px;background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.8em;color:#9494A0;">'
+                f'뉴스를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.</span></div>',
+                unsafe_allow_html=True
+            )
