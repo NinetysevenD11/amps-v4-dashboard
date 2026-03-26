@@ -808,7 +808,7 @@ for _dmi, (_dmic, _dml) in enumerate(zip(_dm_cols, _dm_labels)):
         f'{_dm_icon} {_dm_name}</div>',
         unsafe_allow_html=True
     )
-    if _dmic.button(_dm_name, key=f"dm_{_dm_name}", use_container_width=True, label_visibility="collapsed"):
+    if _dmic.button(_dm_name, key=f"dm_{_dm_name}", use_container_width=True):
         st.session_state.display_mode = _dm_name
         st.rerun()
 
