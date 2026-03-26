@@ -22,16 +22,16 @@ st.set_page_config(page_title="AMLS V4.5 FINANCE STRATEGY", layout="wide", page_
 
 # --- 🎨 테마 커스텀 시스템 ---
 if 'display_mode' not in st.session_state: st.session_state.display_mode  = 'PC'
-if 'lc_lr_split'  not in st.session_state: st.session_state.lc_lr_split   = 38   # LEFT 열 비율 (%)
-if 'lc_delta_wt'  not in st.session_state: st.session_state.lc_delta_wt   = 52   # RIGHT 하단 Delta 너비 (%)
-if 'lc_editor_h'  not in st.session_state: st.session_state.lc_editor_h   = 355  # 에디터 높이 (px)
-if 'lc_goal_inp'  not in st.session_state: st.session_state.lc_goal_inp   = 22   # Goal 입력창 너비 (%)
-if 'lc_pie_h'     not in st.session_state: st.session_state.lc_pie_h      = 200  # 파이차트 높이 (px)
-if 'lc_pie_split' not in st.session_state: st.session_state.lc_pie_split  = 50   # Current / Target 파이 비율 (%)
-if 'lc_bar_h'     not in st.session_state: st.session_state.lc_bar_h      = 185  # Delta bar 높이 (px)
-if 'lc_show_lp'   not in st.session_state: st.session_state.lc_show_lp    = True # Live Prices 표시
-if 'lc_show_qo'   not in st.session_state: st.session_state.lc_show_qo    = True # Quick Orders 표시
-if 'lc_show_reg'  not in st.session_state: st.session_state.lc_show_reg   = True # Regime 카드 표시
+if 'lc_lr_split'  not in st.session_state: st.session_state.lc_lr_split   = 38
+if 'lc_delta_wt'  not in st.session_state: st.session_state.lc_delta_wt   = 52
+if 'lc_editor_h'  not in st.session_state: st.session_state.lc_editor_h   = 355
+if 'lc_goal_inp'  not in st.session_state: st.session_state.lc_goal_inp   = 22
+if 'lc_pie_h'     not in st.session_state: st.session_state.lc_pie_h      = 200
+if 'lc_pie_split' not in st.session_state: st.session_state.lc_pie_split  = 50
+if 'lc_bar_h'     not in st.session_state: st.session_state.lc_bar_h      = 185
+if 'lc_show_lp'   not in st.session_state: st.session_state.lc_show_lp    = True
+if 'lc_show_qo'   not in st.session_state: st.session_state.lc_show_qo    = True
+if 'lc_show_reg'  not in st.session_state: st.session_state.lc_show_reg   = True
 if 'main_color'   not in st.session_state: st.session_state.main_color   = '#10B981'
 if 'bg_color'     not in st.session_state: st.session_state.bg_color     = '#F7F6F2'
 if 'tc_heading'   not in st.session_state: st.session_state.tc_heading   = '#111118'
@@ -40,6 +40,204 @@ if 'tc_muted'     not in st.session_state: st.session_state.tc_muted     = '#6B6
 if 'tc_label'     not in st.session_state: st.session_state.tc_label     = '#9494A0'
 if 'tc_data'      not in st.session_state: st.session_state.tc_data      = '#111118'
 if 'tc_sidebar'   not in st.session_state: st.session_state.tc_sidebar   = '#2D2D2D'
+if '_ls_loaded'   not in st.session_state: st.session_state._ls_loaded   = False
+
+# ==========================================
+# localStorage 영속화 레이어
+# ==========================================
+_LS_KEYS = {
+    "amls_portfolio":  None,
+    "amls_goal":       None,
+    "amls_layout":     None,
+    "amls_theme":      None,
+    "amls_dispmode":   None,
+}
+
+_LS_SCRIPT = """
+<script>
+(function() {
+    // ── 읽기: localStorage → Streamlit query params ──────
+    function pushToST() {
+        var keys = ["amls_portfolio","amls_goal","amls_layout","amls_theme","amls_dispmode"];
+        var out = {};
+        keys.forEach(function(k){
+            var v = localStorage.getItem(k);
+            if (v) out[k] = v;
+        });
+        // Streamlit에 postMessage로 전달
+        window.parent.postMessage({type:"streamlit:setComponentValue", value: JSON.stringify(out)}, "*");
+    }
+
+    // ── 쓰기: Streamlit → localStorage ──────────────────
+    window.addEventListener("message", function(e) {
+        if (e.data && e.data.type === "amls_save") {
+            try {
+                var d = e.data.payload;
+                Object.keys(d).forEach(function(k){ localStorage.setItem(k, d[k]); });
+            } catch(err) {}
+        }
+    });
+
+    pushToST();
+})();
+</script>
+"""
+
+def _ls_save_all():
+    """현재 session_state 전체를 localStorage에 기록하는 JS를 주입."""
+    _layout = json.dumps({
+        "display_mode": st.session_state.display_mode,
+        "lc_lr_split":  st.session_state.lc_lr_split,
+        "lc_delta_wt":  st.session_state.lc_delta_wt,
+        "lc_editor_h":  st.session_state.lc_editor_h,
+        "lc_goal_inp":  st.session_state.lc_goal_inp,
+        "lc_pie_h":     st.session_state.lc_pie_h,
+        "lc_pie_split": st.session_state.lc_pie_split,
+        "lc_bar_h":     st.session_state.lc_bar_h,
+        "lc_show_lp":   st.session_state.lc_show_lp,
+        "lc_show_qo":   st.session_state.lc_show_qo,
+        "lc_show_reg":  st.session_state.lc_show_reg,
+    })
+    _theme = json.dumps({
+        "main_color": st.session_state.main_color,
+        "bg_color":   st.session_state.bg_color,
+        "tc_heading": st.session_state.tc_heading,
+        "tc_body":    st.session_state.tc_body,
+        "tc_muted":   st.session_state.tc_muted,
+        "tc_label":   st.session_state.tc_label,
+        "tc_data":    st.session_state.tc_data,
+        "tc_sidebar": st.session_state.tc_sidebar,
+    })
+    _pf   = json.dumps(st.session_state.portfolio)
+    _goal = str(st.session_state.goal_usd)
+    _dm   = st.session_state.display_mode
+
+    # 이중 따옴표 이스케이프
+    def _esc(s): return s.replace("\\", "\\\\").replace("`", "\\`")
+
+    st.markdown(f"""<script>
+    (function(){{
+        try {{
+            var p = {{
+                amls_portfolio: `{_esc(_pf)}`,
+                amls_goal:      `{_esc(_goal)}`,
+                amls_layout:    `{_esc(_layout)}`,
+                amls_theme:     `{_esc(_theme)}`,
+                amls_dispmode:  `{_esc(_dm)}`
+            }};
+            Object.keys(p).forEach(function(k){{ localStorage.setItem(k, p[k]); }});
+        }} catch(e) {{}}
+    }})();
+    </script>""", unsafe_allow_html=True)
+
+def _ls_load():
+    """localStorage 값을 읽어 session_state에 반영. 앱 최상단에서 1회 실행."""
+    if st.session_state._ls_loaded:
+        return
+
+    # query_params를 임시 채널로 사용해 JS→Python 통신
+    _qp = st.query_params.to_dict()
+
+    # JS 인젝션으로 localStorage 값을 query_param에 기록
+    st.markdown("""<script>
+    (function(){
+        var keys = ["amls_portfolio","amls_goal","amls_layout","amls_theme","amls_dispmode"];
+        var changed = false;
+        var params = new URLSearchParams(window.location.search);
+        keys.forEach(function(k){
+            var v = localStorage.getItem(k);
+            if (v && !params.has(k)) {
+                params.set(k, encodeURIComponent(v));
+                changed = true;
+            }
+        });
+        if (changed) {
+            var newUrl = window.location.pathname + "?" + params.toString();
+            window.history.replaceState(null, "", newUrl);
+            window.location.reload();
+        }
+    })();
+    </script>""", unsafe_allow_html=True)
+
+    st.session_state._ls_loaded = True
+
+# ── query_params에서 localStorage 데이터 복원 (JS reload 후) ──
+def _restore_from_qp():
+    _qp = st.query_params.to_dict()
+    _changed = False
+
+    # 포트폴리오
+    if "amls_portfolio" in _qp:
+        try:
+            _pf = json.loads(_qp["amls_portfolio"])
+            if 'portfolio' not in st.session_state or not any(
+                st.session_state.portfolio[a]['shares'] for a in ASSET_LIST if a != 'CASH'
+            ):
+                for k, v in _pf.items():
+                    st.session_state.portfolio[k] = v
+                _changed = True
+        except: pass
+
+    # Goal
+    if "amls_goal" in _qp:
+        try:
+            _g = float(_qp["amls_goal"])
+            if st.session_state.goal_usd == 100000.0:
+                st.session_state.goal_usd = _g
+                _changed = True
+        except: pass
+
+    # Layout
+    if "amls_layout" in _qp:
+        try:
+            _lay = json.loads(_qp["amls_layout"])
+            _lc_defaults = {
+                "display_mode": "PC", "lc_lr_split": 38, "lc_delta_wt": 52,
+                "lc_editor_h": 355,   "lc_goal_inp": 22, "lc_pie_h": 200,
+                "lc_pie_split": 50,   "lc_bar_h": 185,   "lc_show_lp": True,
+                "lc_show_qo": True,   "lc_show_reg": True,
+            }
+            for _k, _dv in _lc_defaults.items():
+                if _k in _lay:
+                    _cur = getattr(st.session_state, _k)
+                    _new = _lay[_k]
+                    if isinstance(_dv, bool): _new = bool(_new)
+                    elif isinstance(_dv, int): _new = int(_new)
+                    if _cur == _dv and _cur != _new:
+                        setattr(st.session_state, _k, _new)
+                        _changed = True
+        except: pass
+
+    # Theme
+    if "amls_theme" in _qp:
+        try:
+            _th = json.loads(_qp["amls_theme"])
+            for _k in ["main_color","bg_color","tc_heading","tc_body",
+                       "tc_muted","tc_label","tc_data","tc_sidebar"]:
+                if _k in _th and getattr(st.session_state, _k) == {
+                    "main_color":"#10B981","bg_color":"#F7F6F2","tc_heading":"#111118",
+                    "tc_body":"#2D2D2D","tc_muted":"#6B6B7A","tc_label":"#9494A0",
+                    "tc_data":"#111118","tc_sidebar":"#2D2D2D"
+                }.get(_k):
+                    setattr(st.session_state, _k, _th[_k])
+                    _changed = True
+        except: pass
+
+    # Display mode
+    if "amls_dispmode" in _qp:
+        _dm = _qp["amls_dispmode"]
+        if _dm in ("PC","Tablet","Mobile") and st.session_state.display_mode == "PC":
+            st.session_state.display_mode = _dm
+
+    # query_params 정리 (URL을 깔끔하게 유지)
+    if any(k in _qp for k in ["amls_portfolio","amls_goal","amls_layout","amls_theme","amls_dispmode"]):
+        for _k in ["amls_portfolio","amls_goal","amls_layout","amls_theme","amls_dispmode"]:
+            if _k in st.query_params:
+                del st.query_params[_k]
+        if _changed:
+            st.rerun()
+
+_restore_from_qp()
 
 main_color = st.session_state.main_color
 bg_color   = st.session_state.bg_color
@@ -98,10 +296,13 @@ if 'portfolio' not in st.session_state:
 sanitize_portfolio()
 
 def save_portfolio_to_disk():
+    """디스크(fallback) + localStorage(primary) 양쪽에 저장."""
     try:
         with open(PORTFOLIO_FILE, 'w') as f:
             json.dump(st.session_state.portfolio, f)
     except: pass
+    # localStorage 전체 동기화는 메인 루프 끝에서 처리
+    st.session_state['_needs_ls_save'] = True
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_data():
@@ -812,6 +1013,7 @@ with col2:
     new_color = st.color_picker("메인 컬러", st.session_state.main_color, label_visibility="collapsed", key="cp_theme")
     if new_color != st.session_state.main_color:
         st.session_state.main_color = new_color
+        st.session_state['_needs_ls_save'] = True
         st.rerun()
 
 st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 15px 4px; border-top:1px solid rgba(0,0,0,0.08);">배경 색상</div>""", unsafe_allow_html=True)
@@ -820,6 +1022,7 @@ with _bg_c2:
     _new_bg = st.color_picker("배경색", st.session_state.bg_color, label_visibility="collapsed", key="cp_bg")
     if _new_bg != st.session_state.bg_color:
         st.session_state.bg_color = _new_bg
+        st.session_state['_needs_ls_save'] = True
         st.rerun()
 
 with st.sidebar.expander("🎨  글씨 색상 설정", expanded=False):
@@ -842,6 +1045,7 @@ with st.sidebar.expander("🎨  글씨 색상 설정", expanded=False):
                                     label_visibility="collapsed", key=_widget_key)
         if _picked != getattr(st.session_state, _key):
             setattr(st.session_state, _key, _picked)
+            st.session_state['_needs_ls_save'] = True
             st.rerun()
 
     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
@@ -851,6 +1055,7 @@ with st.sidebar.expander("🎨  글씨 색상 설정", expanded=False):
                         ("tc_muted","#6B6B7A"),("tc_label","#9494A0"),
                         ("tc_data","#111118"),("tc_sidebar","#2D2D2D")]:
             setattr(st.session_state, _k, _v)
+        st.session_state['_needs_ls_save'] = True
         st.rerun()
 
 st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:6px 15px;">Bookmarks</div>""", unsafe_allow_html=True)
@@ -913,29 +1118,29 @@ with st.sidebar.expander("⚙️  Layout Controls  (PC 모드)", expanded=False)
     # ── A. 열 분할 ────────────────────────────────────────
     _lc_sec("① 열 분할")
     _v = st.slider("좌열 너비 %",  20, 60, st.session_state.lc_lr_split,  2, key="sl_lr",  help="Position Input 패널의 가로 너비")
-    if _v != st.session_state.lc_lr_split:  st.session_state.lc_lr_split  = _v; st.rerun()
+    if _v != st.session_state.lc_lr_split:  st.session_state.lc_lr_split  = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
 
     _v = st.slider("Goal 입력창 %", 10, 40, st.session_state.lc_goal_inp,  2, key="sl_gi",  help="목표금액 입력란의 너비. 나머지는 진행바")
-    if _v != st.session_state.lc_goal_inp:  st.session_state.lc_goal_inp  = _v; st.rerun()
+    if _v != st.session_state.lc_goal_inp:  st.session_state.lc_goal_inp  = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
 
     # ── B. 높이 조절 ──────────────────────────────────────
     _lc_sec("② 컴포넌트 높이")
     _v = st.slider("에디터 높이 px", 200, 600, st.session_state.lc_editor_h, 20, key="sl_eh",  help="Position Input 테이블 세로 크기")
-    if _v != st.session_state.lc_editor_h:  st.session_state.lc_editor_h  = _v; st.rerun()
+    if _v != st.session_state.lc_editor_h:  st.session_state.lc_editor_h  = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
 
     _v = st.slider("파이차트 높이 px", 140, 340, st.session_state.lc_pie_h,  20, key="sl_ph",  help="Current / Target 도넛 차트 높이")
-    if _v != st.session_state.lc_pie_h:     st.session_state.lc_pie_h     = _v; st.rerun()
+    if _v != st.session_state.lc_pie_h:     st.session_state.lc_pie_h     = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
 
     _v = st.slider("Delta Bar 높이 px", 120, 320, st.session_state.lc_bar_h, 20, key="sl_bh",  help="Δ Rebalancing 바 차트 높이")
-    if _v != st.session_state.lc_bar_h:     st.session_state.lc_bar_h     = _v; st.rerun()
+    if _v != st.session_state.lc_bar_h:     st.session_state.lc_bar_h     = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
 
     # ── C. 비율 조절 ──────────────────────────────────────
     _lc_sec("③ 내부 비율")
     _v = st.slider("파이 Current/Target %", 30, 70, st.session_state.lc_pie_split, 5, key="sl_ps",  help="Current 파이와 Target 파이의 가로 비율")
-    if _v != st.session_state.lc_pie_split: st.session_state.lc_pie_split = _v; st.rerun()
+    if _v != st.session_state.lc_pie_split: st.session_state.lc_pie_split = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
 
     _v = st.slider("Delta Bar / Weights %",  30, 70, st.session_state.lc_delta_wt,  5, key="sl_dw",  help="Delta Bar와 Target Weights 비율")
-    if _v != st.session_state.lc_delta_wt:  st.session_state.lc_delta_wt  = _v; st.rerun()
+    if _v != st.session_state.lc_delta_wt:  st.session_state.lc_delta_wt  = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
 
     # ── D. 패널 표시/숨기기 ───────────────────────────────
     _lc_sec("④ 패널 표시")
@@ -943,9 +1148,9 @@ with st.sidebar.expander("⚙️  Layout Controls  (PC 모드)", expanded=False)
     _nreg = _c1.checkbox("Regime", value=st.session_state.lc_show_reg, key="ck_reg")
     _nlp  = _c2.checkbox("Live Px", value=st.session_state.lc_show_lp,  key="ck_lp")
     _nqo  = _c3.checkbox("Orders", value=st.session_state.lc_show_qo,  key="ck_qo")
-    if _nreg != st.session_state.lc_show_reg: st.session_state.lc_show_reg = _nreg; st.rerun()
-    if _nlp  != st.session_state.lc_show_lp:  st.session_state.lc_show_lp  = _nlp;  st.rerun()
-    if _nqo  != st.session_state.lc_show_qo:  st.session_state.lc_show_qo  = _nqo;  st.rerun()
+    if _nreg != st.session_state.lc_show_reg: st.session_state.lc_show_reg = _nreg; st.session_state['_needs_ls_save'] = True; st.rerun()
+    if _nlp  != st.session_state.lc_show_lp:  st.session_state.lc_show_lp  = _nlp;  st.session_state['_needs_ls_save'] = True; st.rerun()
+    if _nqo  != st.session_state.lc_show_qo:  st.session_state.lc_show_qo  = _nqo;  st.session_state['_needs_ls_save'] = True; st.rerun()
 
     # ── 초기화 ────────────────────────────────────────────
     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
@@ -956,6 +1161,7 @@ with st.sidebar.expander("⚙️  Layout Controls  (PC 모드)", expanded=False)
             ("lc_delta_wt", 52), ("lc_show_reg", True), ("lc_show_lp", True), ("lc_show_qo", True),
         ]:
             setattr(st.session_state, _k, _dv)
+        st.session_state['_needs_ls_save'] = True
         st.rerun()
 
 # ── Display Mode 선택기 (사이드바 맨 아래) ────────────────────
@@ -980,6 +1186,7 @@ _dm_c1, _dm_c2, _dm_c3 = st.sidebar.columns(3)
 for _dmc, _dmnm in [(_dm_c1,"PC"), (_dm_c2,"Tablet"), (_dm_c3,"Mobile")]:
     if _dmc.button(_dmnm, key=f"dm_{_dmnm}", use_container_width=True):
         st.session_state.display_mode = _dmnm
+        st.session_state['_needs_ls_save'] = True
         st.rerun()
 
 # ==========================================
@@ -2917,3 +3124,11 @@ elif page == "📰 Macro News":
                 f'뉴스를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.</span></div>',
                 unsafe_allow_html=True
             )
+
+# ══════════════════════════════════════════════════════════════
+# 최하단: localStorage 영속화 저장
+# 매 렌더링마다 최신 상태를 localStorage에 기록.
+# _needs_ls_save 플래그와 무관하게 항상 실행하여
+# 페이지 최초 진입 후에도 데이터가 즉시 보호된다.
+# ══════════════════════════════════════════════════════════════
+_ls_save_all()
