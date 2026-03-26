@@ -794,24 +794,6 @@ page = st.sidebar.radio("MENU",
     ["📊 Dashboard", "💼 Portfolio", "🍫 12-Pack Radar", "📈 Backtest Lab", "📰 Macro News"],
     label_visibility="collapsed")
 
-# ── Display Mode 선택기 ───────────────────────────────────────
-st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 15px 6px; border-top:1px solid rgba(0,0,0,0.08);">Display Mode</div>""", unsafe_allow_html=True)
-_dm_cols = st.sidebar.columns(3)
-_dm_labels = [("🖥", "PC"), ("📱", "Tablet"), ("📲", "Mobile")]
-for _dmi, (_dmic, _dml) in enumerate(zip(_dm_cols, _dm_labels)):
-    _dm_icon, _dm_name = _dml
-    _dm_active = st.session_state.display_mode == _dm_name
-    _dm_bg   = f"background:rgba({r_c},{g_c},{b_c},0.12);border:1px solid rgba({r_c},{g_c},{b_c},0.4);color:{main_color};" if _dm_active else "background:transparent;border:1px solid rgba(0,0,0,0.12);color:#6B6B7A;"
-    _dmic.markdown(
-        f'<div style="{_dm_bg}padding:6px 0;text-align:center;cursor:pointer;'
-        f'font-family:DM Mono,monospace;font-size:0.62em;font-weight:{"700" if _dm_active else "400"};">'
-        f'{_dm_icon} {_dm_name}</div>',
-        unsafe_allow_html=True
-    )
-    if _dmic.button(_dm_name, key=f"dm_{_dm_name}", use_container_width=True):
-        st.session_state.display_mode = _dm_name
-        st.rerun()
-
 display_mode = st.session_state.display_mode
 
 st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:6px 15px;">Theme Color</div>""", unsafe_allow_html=True)
@@ -905,6 +887,30 @@ if _sidebar_upload is not None:
         st.rerun()
     except:
         st.sidebar.error("❌ 파일 형식 오류")
+
+# ── Display Mode 선택기 (사이드바 맨 아래) ────────────────────
+st.sidebar.markdown(apply_theme(f"""
+<div style="font-family:'DM Mono';font-size:0.62em;font-weight:400;color:#4A5568;
+letter-spacing:0.2em;text-transform:uppercase;padding:14px 20px 8px;
+border-top:1px solid rgba(0,0,0,0.08);">Display Mode</div>
+<div style="padding:0 12px 6px;display:flex;gap:4px;">
+{"".join([
+    f'<div style="flex:1;padding:7px 0;text-align:center;'
+    f'background:{"rgba("+str(r_c)+","+str(g_c)+","+str(b_c)+",0.12)" if st.session_state.display_mode==nm else "rgba(0,0,0,0.03)"};'
+    f'border:1px solid {"rgba("+str(r_c)+","+str(g_c)+","+str(b_c)+",0.4)" if st.session_state.display_mode==nm else "rgba(0,0,0,0.10)"};'
+    f'font-family:DM Mono,monospace;font-size:0.68em;font-weight:{"700" if st.session_state.display_mode==nm else "400"};'
+    f'color:{"#10B981" if st.session_state.display_mode==nm else "#6B6B7A"};">'
+    f'{ic} {nm}</div>'
+    for ic, nm in [("🖥","PC"),("📱","Tablet"),("📲","Mobile")]
+])}
+</div>
+"""), unsafe_allow_html=True)
+
+_dm_c1, _dm_c2, _dm_c3 = st.sidebar.columns(3)
+for _dmc, _dmnm in [(_dm_c1,"PC"), (_dm_c2,"Tablet"), (_dm_c3,"Mobile")]:
+    if _dmc.button(_dmnm, key=f"dm_{_dmnm}", use_container_width=True):
+        st.session_state.display_mode = _dmnm
+        st.rerun()
 
 # ==========================================
 # 5. 메인 헤더
@@ -1949,12 +1955,11 @@ elif page == "💼 Portfolio":
 
         st.markdown(f"""<style>
         .main .block-container {{ max-width: 1340px !important; padding: 1rem 0.8rem !important; }}
-        [data-testid="stMetricValue"] > div {{ font-size: 1.6em !important; }}
-        [data-testid="stMetricLabel"] > div > div > p {{ font-size: 0.75em !important; }}
-        [data-testid="stButton"] > button {{ padding: 10px 18px !important; font-size: 0.85em !important; }}
-        [data-testid="stDataEditor"] td, [data-testid="stDataEditor"] th {{ font-size: 0.9em !important; padding: 8px 10px !important; }}
-        .mint-table td {{ padding: 12px 14px !important; font-size: 0.86em !important; }}
-        .mint-table th {{ padding: 10px 14px !important; font-size: 0.74em !important; }}
+        .stApp {{ font-size: 12px !important; }}
+        [data-testid="stButton"] > button {{ padding: 8px 12px !important; }}
+        [data-testid="stDataEditor"] td, [data-testid="stDataEditor"] th {{ font-size: 0.88em !important; padding: 6px 8px !important; }}
+        .mint-table td {{ padding: 9px 10px !important; font-size: 0.84em !important; }}
+        .mint-table th {{ padding: 8px 10px !important; font-size: 0.7em !important; }}
         </style>""", unsafe_allow_html=True)
 
         # Goal Tracker — 전체 너비 2열
@@ -2018,12 +2023,13 @@ elif page == "💼 Portfolio":
     elif display_mode == "Mobile":
 
         st.markdown(f"""<style>
-        .main .block-container {{ max-width: 480px !important; padding: 0.5rem 0.4rem 2rem !important; margin: 0 auto !important; }}
-        [data-testid="stDataEditor"] td, [data-testid="stDataEditor"] th {{ font-size: 0.95em !important; padding: 10px 8px !important; }}
-        [data-testid="stButton"] > button {{ padding: 12px 20px !important; font-size: 0.9em !important; min-height: 44px !important; }}
-        [data-testid="stNumberInput"] input {{ font-size: 1.1em !important; min-height: 44px !important; }}
-        .mint-table td {{ padding: 11px 10px !important; font-size: 0.82em !important; }}
-        .mint-table th {{ padding: 9px 10px !important; font-size: 0.7em !important; }}
+        .main .block-container {{ max-width: 460px !important; padding: 0.4rem 0.3rem 2rem !important; margin: 0 auto !important; }}
+        .stApp {{ font-size: 11px !important; }}
+        [data-testid="stDataEditor"] td, [data-testid="stDataEditor"] th {{ font-size: 0.88em !important; padding: 8px 6px !important; }}
+        [data-testid="stButton"] > button {{ padding: 10px 14px !important; min-height: 40px !important; }}
+        [data-testid="stNumberInput"] input {{ font-size: 1em !important; min-height: 40px !important; }}
+        .mint-table td {{ padding: 9px 8px !important; font-size: 0.82em !important; }}
+        .mint-table th {{ padding: 7px 8px !important; font-size: 0.68em !important; }}
         </style>""", unsafe_allow_html=True)
 
         # Goal 입력 + 트래커 (세로 스택)
