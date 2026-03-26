@@ -22,6 +22,9 @@ st.set_page_config(page_title="AMLS V4.5 FINANCE STRATEGY", layout="wide", page_
 
 # --- 🎨 테마 커스텀 시스템 ---
 if 'display_mode' not in st.session_state: st.session_state.display_mode  = 'PC'
+if 'lc_lr_split'  not in st.session_state: st.session_state.lc_lr_split   = 38   # LEFT 열 비율 (%)
+if 'lc_delta_wt'  not in st.session_state: st.session_state.lc_delta_wt   = 52   # RIGHT 하단 Delta 너비 (%)
+if 'lc_editor_h'  not in st.session_state: st.session_state.lc_editor_h   = 355  # 에디터 높이 (px)
 if 'main_color'   not in st.session_state: st.session_state.main_color   = '#10B981'
 if 'bg_color'     not in st.session_state: st.session_state.bg_color     = '#F7F6F2'
 if 'tc_heading'   not in st.session_state: st.session_state.tc_heading   = '#111118'
@@ -887,6 +890,53 @@ if _sidebar_upload is not None:
         st.rerun()
     except:
         st.sidebar.error("❌ 파일 형식 오류")
+
+# ── Layout Controls (사이드바 맨 아래 - Display Mode 위) ──────
+with st.sidebar.expander("⚙️  Layout Controls  (PC 모드)", expanded=False):
+    st.markdown(
+        f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_label};'
+        f'letter-spacing:0.12em;margin-bottom:8px;">← 좌열 너비  /  우열 너비 →</div>',
+        unsafe_allow_html=True
+    )
+    _lc_lr = st.slider(
+        "좌 / 우 열 비율", min_value=20, max_value=60, step=2,
+        value=st.session_state.lc_lr_split, key="sl_lr",
+        help="왼쪽 패널(Position Input)의 너비 %. 나머지는 오른쪽 패널."
+    )
+    if _lc_lr != st.session_state.lc_lr_split:
+        st.session_state.lc_lr_split = _lc_lr; st.rerun()
+
+    st.markdown(
+        f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_label};'
+        f'letter-spacing:0.12em;margin:10px 0 8px;">← Δ 바  /  Target Weights →</div>',
+        unsafe_allow_html=True
+    )
+    _lc_dw = st.slider(
+        "Delta Bar / Weights 비율", min_value=30, max_value=70, step=5,
+        value=st.session_state.lc_delta_wt, key="sl_dw",
+        help="우열 하단: Delta Bar와 Target Weights 비율."
+    )
+    if _lc_dw != st.session_state.lc_delta_wt:
+        st.session_state.lc_delta_wt = _lc_dw; st.rerun()
+
+    st.markdown(
+        f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_label};'
+        f'letter-spacing:0.12em;margin:10px 0 8px;">Position 에디터 높이</div>',
+        unsafe_allow_html=True
+    )
+    _lc_eh = st.slider(
+        "에디터 높이 (px)", min_value=200, max_value=600, step=20,
+        value=st.session_state.lc_editor_h, key="sl_eh",
+        help="Position Input 테이블의 세로 높이."
+    )
+    if _lc_eh != st.session_state.lc_editor_h:
+        st.session_state.lc_editor_h = _lc_eh; st.rerun()
+
+    if st.button("↺  레이아웃 초기화", use_container_width=True, key="lc_reset"):
+        st.session_state.lc_lr_split = 38
+        st.session_state.lc_delta_wt = 52
+        st.session_state.lc_editor_h = 355
+        st.rerun()
 
 # ── Display Mode 선택기 (사이드바 맨 아래) ────────────────────
 st.sidebar.markdown(apply_theme(f"""
@@ -1909,12 +1959,14 @@ elif page == "💼 Portfolio":
 
         st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-        # ROW 2 — 2열 [LEFT | RIGHT]
-        _col_l, _col_r = st.columns([1, 1.65])
+        # ROW 2 — 2열 [LEFT | RIGHT]  (비율: lc_lr_split / 100-lc_lr_split)
+        _lc_l_w = st.session_state.lc_lr_split
+        _lc_r_w = 100 - _lc_l_w
+        _col_l, _col_r = st.columns([_lc_l_w, _lc_r_w])
         with _col_l:
             with st.container(border=True):
                 st.markdown(_sl("Position Input"), unsafe_allow_html=True)
-                _pf_editor(355)
+                _pf_editor(st.session_state.lc_editor_h)
                 st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
                 st.markdown(_sl("Live Prices"), unsafe_allow_html=True)
                 st.markdown(_lp_build(), unsafe_allow_html=True)
@@ -1930,7 +1982,9 @@ elif page == "💼 Portfolio":
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             _pie_charts()
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-            _rc1, _rc2 = st.columns([1.1, 1])
+            _lc_d_w = st.session_state.lc_delta_wt
+            _lc_w_w = 100 - _lc_d_w
+            _rc1, _rc2 = st.columns([_lc_d_w, _lc_w_w])
             with _rc1: _delta_bar()
             with _rc2: _target_weights_block()
 
