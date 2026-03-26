@@ -21,6 +21,7 @@ warnings.filterwarnings('ignore')
 st.set_page_config(page_title="AMLS V4.5 FINANCE STRATEGY", layout="wide", page_icon="🌿", initial_sidebar_state="expanded")
 
 # --- 🎨 테마 커스텀 시스템 ---
+if 'display_mode' not in st.session_state: st.session_state.display_mode  = 'PC'
 if 'main_color'   not in st.session_state: st.session_state.main_color   = '#10B981'
 if 'bg_color'     not in st.session_state: st.session_state.bg_color     = '#F7F6F2'
 if 'tc_heading'   not in st.session_state: st.session_state.tc_heading   = '#111118'
@@ -793,6 +794,26 @@ page = st.sidebar.radio("MENU",
     ["📊 Dashboard", "💼 Portfolio", "🍫 12-Pack Radar", "📈 Backtest Lab", "📰 Macro News"],
     label_visibility="collapsed")
 
+# ── Display Mode 선택기 ───────────────────────────────────────
+st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 15px 6px; border-top:1px solid rgba(0,0,0,0.08);">Display Mode</div>""", unsafe_allow_html=True)
+_dm_cols = st.sidebar.columns(3)
+_dm_labels = [("🖥", "PC"), ("📱", "Tablet"), ("📲", "Mobile")]
+for _dmi, (_dmic, _dml) in enumerate(zip(_dm_cols, _dm_labels)):
+    _dm_icon, _dm_name = _dml
+    _dm_active = st.session_state.display_mode == _dm_name
+    _dm_bg   = f"background:rgba({r_c},{g_c},{b_c},0.12);border:1px solid rgba({r_c},{g_c},{b_c},0.4);color:{main_color};" if _dm_active else "background:transparent;border:1px solid rgba(0,0,0,0.12);color:#6B6B7A;"
+    _dmic.markdown(
+        f'<div style="{_dm_bg}padding:6px 0;text-align:center;cursor:pointer;'
+        f'font-family:DM Mono,monospace;font-size:0.62em;font-weight:{"700" if _dm_active else "400"};">'
+        f'{_dm_icon} {_dm_name}</div>',
+        unsafe_allow_html=True
+    )
+    if _dmic.button(_dm_name, key=f"dm_{_dm_name}", use_container_width=True, label_visibility="collapsed"):
+        st.session_state.display_mode = _dm_name
+        st.rerun()
+
+display_mode = st.session_state.display_mode
+
 st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:6px 15px;">Theme Color</div>""", unsafe_allow_html=True)
 col1, col2, col3 = st.sidebar.columns([0.1, 1, 0.1])
 with col2:
@@ -1475,7 +1496,7 @@ if page == "📊 Dashboard":
 # ──────────────────────────────────────────
 elif page == "💼 Portfolio":
 
-    # ── 데이터 계산
+    # ── 데이터 계산 ─────────────────────────────────────────
     current_prices = {}
     for t in ASSET_LIST:
         if t == 'CASH': current_prices[t] = 1.0
@@ -1501,7 +1522,7 @@ elif page == "💼 Portfolio":
     r_acc   = {1: main_color, 2: "#D97706", 3: "#DC2626", 4: "#7C3AED"}[curr_regime]
     _smh_passed = sum([smh_c1, smh_c2, smh_c3])
 
-    # ── 공통 섹션 레이블
+    # ── 공통 헬퍼 ──────────────────────────────────────────
     def _sl(text):
         return apply_theme(
             f'<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px;'
@@ -1512,9 +1533,6 @@ elif page == "💼 Portfolio":
             f'</div>'
         )
 
-    # ══════════════════════════════════════════════════════
-    # ROW 0 — KPI 마스트헤드 (풀 너비)
-    # ══════════════════════════════════════════════════════
     def _kv(label, val, color, sub=""):
         sub_html = f'<span style="font-family:DM Mono,monospace;font-size:0.6em;color:rgba(255,255,255,0.3);">{sub}</span>' if sub else ""
         return (
@@ -1527,46 +1545,75 @@ elif page == "💼 Portfolio":
             f'{sub_html}</div>'
         )
 
-    _pnl_s = "▲" if pnl_pct >= 0 else "▼"
-    st.markdown(apply_theme(
-        f'<div style="background:#111118;border-left:4px solid {r_acc};padding:13px 0;'
-        f'margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;">'
-        f'<div style="padding:0 20px 0 16px;border-right:1px solid rgba(255,255,255,0.06);flex-shrink:0;">'
-        f'<div style="font-family:DM Mono,monospace;font-size:0.52em;color:rgba(255,255,255,0.3);'
-        f'letter-spacing:0.22em;text-transform:uppercase;margin-bottom:2px;">AMLS V4.5</div>'
-        f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.1em;font-weight:800;'
-        f'color:#FFFFFF;letter-spacing:-0.3px;line-height:1;">Portfolio</div>'
-        f'</div>'
-        + _kv("Total NAV", f"${total_val_usd:,.2f}", "#FFFFFF", f"₩{total_val_krw:,.0f}")
-        + _kv("USD / KRW", f"₩{cur_fx:,.0f}", "rgba(255,255,255,0.65)", "환율")
-        + _kv("P & L", f"{pnl_pct:+.2f}%", "#6EE7B7" if pnl_pct >= 0 else "#FCA5A5", f"{_pnl_s} ${pnl_usd:,.0f}")
-        + _kv("Regime", f"R{curr_regime}  {regime_info[curr_regime][1]}", r_acc)
-        + _kv("투자원금", f"${invested_cost:,.0f}", "rgba(255,255,255,0.65)", "취득원가")
-        + f'<div style="margin-left:auto;padding:0 16px;flex-shrink:0;">'
-        + f'<span class="live-pulse" style="font-family:DM Mono,monospace;font-size:0.58em;'
-        + f'color:#6EE7B7;letter-spacing:0.06em;">{rt_label}</span></div></div>'
-    ), unsafe_allow_html=True)
-
-    # ══════════════════════════════════════════════════════
-    # ROW 1 — Goal Tracker (풀 너비, 컴팩트 1줄)
-    # ══════════════════════════════════════════════════════
-    _gi_col, _gb_col = st.columns([1, 3.5])
-    with _gi_col:
-        new_goal = st.number_input(
-            "목표금액", min_value=1000.0, max_value=100_000_000.0,
-            value=st.session_state.goal_usd, step=1000.0, format="%.0f",
-            key="goal_input", label_visibility="collapsed"
-        )
-        if new_goal != st.session_state.goal_usd:
-            st.session_state.goal_usd = new_goal
-            st.rerun()
-        st.markdown(
-            f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_label};'
-            f'text-align:center;margin-top:-4px;">목표 금액 (USD)</div>',
-            unsafe_allow_html=True
+    def _kv_m(label, val, color, sub=""):
+        """모바일/태블릿용 KPI 셀"""
+        sub_html = f'<div style="font-family:DM Mono,monospace;font-size:0.62em;color:rgba(255,255,255,0.35);">{sub}</div>' if sub else ""
+        return (
+            f'<div style="padding:10px 14px;border-right:1px solid rgba(255,255,255,0.06);">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.54em;'
+            f'color:rgba(255,255,255,0.38);letter-spacing:0.18em;text-transform:uppercase;margin-bottom:3px;">{label}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.96em;font-weight:500;'
+            f'color:{color};font-variant-numeric:tabular-nums;">{val}</div>'
+            f'{sub_html}</div>'
         )
 
-    with _gb_col:
+    def _lp_build():
+        """Live Prices 그리드 HTML 생성"""
+        _html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px;">'
+        for _asset in ASSET_LIST:
+            _lp_p   = current_prices.get(_asset, 0.0) if _asset != 'CASH' else 1.0
+            _lp_str = f"${_lp_p:,.2f}" if _lp_p > 0 else "—"
+            _avg    = st.session_state.portfolio[_asset].get('avg_price', 0.0)
+            _shs    = st.session_state.portfolio[_asset].get('shares', 0.0)
+            if _asset != 'CASH' and _avg > 0 and _lp_p > 0:
+                _lr = (_lp_p / _avg - 1) * 100
+                _lc, _ls = ("#059669" if _lr >= 0 else "#DC2626"), f"{_lr:+.1f}%"
+            elif _asset == 'CASH' and _shs > 0:
+                _lc, _ls = tc_muted, f"${_shs:,.0f}"
+            else:
+                _lc, _ls = "#BBBBBB", "—"
+            _html += (
+                f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.08);'
+                f'border-left:2px solid {_lc};padding:5px 8px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.72em;font-weight:700;color:{tc_body};">{_asset}</span>'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.7em;color:{tc_body};font-variant-numeric:tabular-nums;">{_lp_str}</span>'
+                f'</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{_lc};text-align:right;">{_ls}</div>'
+                f'</div>'
+            )
+        _html += f'</div><div style="text-align:right;margin-top:3px;"><span style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};">⏱ {last_update_time}</span></div>'
+        return _html
+
+    def _qo_build(col, title, items, accent, bg):
+        _rows = "".join([
+            f'<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(0,0,0,0.04);">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:700;color:{tc_body};">{a}</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.74em;color:{accent};font-variant-numeric:tabular-nums;">{v}</span></div>'
+            for a, v in items
+        ]) or f'<div style="padding:6px 0;text-align:center;font-family:DM Mono,monospace;font-size:0.68em;color:#CCCCCC;">— 없음</div>'
+        col.markdown(
+            f'<div style="background:{bg};border:1px solid rgba(0,0,0,0.07);border-top:2px solid {accent};padding:8px 10px;">'
+            f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.76em;font-weight:700;color:{accent};margin-bottom:5px;">{title}</div>'
+            f'{_rows}</div>', unsafe_allow_html=True
+        )
+
+    def _sells_buys():
+        _sells, _buys = [], []
+        for asset in ASSET_LIST:
+            _cp = current_prices[asset] if current_prices[asset] > 0 else 1.0
+            _dv = diff_vals[asset]
+            if asset != 'CASH' and _dv < -_cp * 0.05:
+                _sells.append((asset, f"{abs(_dv)/_cp:,.2f}주 매도"))
+            elif asset == 'CASH' and _dv < -1.0:
+                _sells.append(("CASH", f"${abs(_dv):,.0f} 사용"))
+            if asset != 'CASH' and _dv > _cp * 0.05:
+                _buys.append((asset, f"{_dv/_cp:,.2f}주 매수"))
+            elif asset == 'CASH' and _dv > 1.0:
+                _buys.append(("CASH", f"${_dv:,.0f} 확보"))
+        return _sells, _buys
+
+    def _goal_tracker_html():
         _goal    = st.session_state.goal_usd
         _pct_raw = (total_val_usd / _goal * 100) if _goal > 0 else 0.0
         _pct     = min(_pct_raw, 100.0)
@@ -1578,200 +1625,108 @@ elif page == "💼 Portfolio":
         else:            _gc, _gbadge = "#94A3B8",  "GROWING"
         _gr, _gg, _gb = hex_to_rgb(_gc)
         _seg = "".join([
-            f'<div style="position:absolute;left:{m}%;top:0;bottom:-18px;width:1px;'
-            f'background:rgba(0,0,0,0.08);">'
-            f'<span style="position:absolute;top:calc(100% + 2px);left:50%;'
-            f'transform:translateX(-50%);font-family:DM Mono,monospace;font-size:0.5em;'
-            f'color:#BBBBBB;white-space:nowrap;">{m}%</span></div>'
+            f'<div style="position:absolute;left:{m}%;top:0;bottom:-18px;width:1px;background:rgba(0,0,0,0.08);">'
+            f'<span style="position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);'
+            f'font-family:DM Mono,monospace;font-size:0.5em;color:#BBBBBB;white-space:nowrap;">{m}%</span></div>'
             for m in [25, 50, 75, 100]
         ])
-        st.markdown(apply_theme(
+        return apply_theme(
             f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);'
             f'border-left:4px solid {_gc};padding:10px 18px;display:flex;align-items:center;gap:18px;">'
             f'<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">'
-            f'<span style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};'
-            f'letter-spacing:0.18em;text-transform:uppercase;">Goal Tracker</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;">Goal Tracker</span>'
             f'<span style="background:rgba({_gr},{_gg},{_gb},0.1);border:1px solid rgba({_gr},{_gg},{_gb},0.28);'
             f'color:{_gc};font-family:DM Mono,monospace;font-size:0.55em;padding:1px 8px;">{_gbadge}</span>'
             f'</div>'
             f'<div style="flex:1;position:relative;padding-bottom:18px;">'
             + _seg +
             f'<div style="height:8px;background:rgba(0,0,0,0.07);">'
-            f'<div style="height:8px;width:{_pct:.2f}%;'
-            f'background:linear-gradient(90deg,rgba({_gr},{_gg},{_gb},0.4),{_gc});"></div>'
+            f'<div style="height:8px;width:{_pct:.2f}%;background:linear-gradient(90deg,rgba({_gr},{_gg},{_gb},0.4),{_gc});"></div>'
             f'</div></div>'
             f'<div style="display:flex;gap:20px;flex-shrink:0;align-items:center;">'
             f'<div style="text-align:center;">'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.5em;color:{tc_label};'
-            f'text-transform:uppercase;letter-spacing:0.1em;">현재</div>'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.82em;color:{tc_body};'
-            f'font-variant-numeric:tabular-nums;">${total_val_usd:,.0f}</div></div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.5em;color:{tc_label};text-transform:uppercase;letter-spacing:0.1em;">현재</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.82em;color:{tc_body};font-variant-numeric:tabular-nums;">${total_val_usd:,.0f}</div></div>'
             f'<div style="text-align:center;">'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.5em;color:{tc_label};'
-            f'text-transform:uppercase;letter-spacing:0.1em;">목표</div>'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.82em;color:{tc_body};'
-            f'font-variant-numeric:tabular-nums;">${_goal:,.0f}</div></div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.5em;color:{tc_label};text-transform:uppercase;letter-spacing:0.1em;">목표</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.82em;color:{tc_body};font-variant-numeric:tabular-nums;">${_goal:,.0f}</div></div>'
             f'<div style="text-align:right;padding-left:14px;border-left:1px solid rgba(0,0,0,0.08);">'
             f'<span style="font-family:DM Mono,monospace;font-size:1.8em;font-weight:400;'
             f'color:{_gc};font-variant-numeric:tabular-nums;letter-spacing:-1.5px;line-height:1;">'
             f'{_pct_raw:.1f}%</span></div></div></div>'
-        ), unsafe_allow_html=True)
+        )
 
-    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-
-    # ══════════════════════════════════════════════════════
-    # ROW 2 — 2열 메인 그리드 [LEFT | RIGHT]
-    # LEFT ≈ RIGHT 높이 맞춤:
-    #   LEFT  = editor(355) + orders(≈130) + labels/padding ≈ 570px
-    #   RIGHT = row_A(≈130) + row_B(≈210) + row_C(≈185) + gaps ≈ 570px
-    # ══════════════════════════════════════════════════════
-    _col_l, _col_r = st.columns([1, 1.65])
-
-    # ── LEFT ────────────────────────────────────────────────
-    with _col_l:
-        with st.container(border=True):
-            st.markdown(_sl("Position Input"), unsafe_allow_html=True)
-            _edata = []
-            for asset in ASSET_LIST:
-                v = st.session_state.portfolio.get(asset, {})
-                _edata.append({
-                    "Asset":        asset,
-                    "Shares":       float(v.get('shares', 0.0)),
-                    "Avg Price($)": float(v.get('avg_price', 1.0 if asset == 'CASH' else 0.0)),
-                    "FX Rate(₩)":  float(v.get('fx', 1350.0))
-                })
-            _df_ed = pd.DataFrame(_edata)
-            _df_edited = st.data_editor(
-                _df_ed, disabled=["Asset"], hide_index=True,
-                use_container_width=True, key="pf_editor", height=355,
-                column_config={
-                    "Shares":       st.column_config.NumberColumn("Shares", format="%.4f"),
-                    "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"),
-                    "FX Rate(₩)":  st.column_config.NumberColumn("FX(₩)",  format="%.0f"),
-                }
-            )
-            if not _df_edited.equals(_df_ed):
-                for _, row in _df_edited.iterrows():
-                    st.session_state.portfolio[row["Asset"]] = {
-                        'shares':    float(row["Shares"]),
-                        'avg_price': float(row["Avg Price($)"]),
-                        'fx':        float(row["FX Rate(₩)"])
-                    }
-                save_portfolio_to_disk()
-                st.rerun()
-
-            # ── Live Prices 인라인 (에디터 바로 아래) ──────────
-            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-            st.markdown(_sl("Live Prices"), unsafe_allow_html=True)
-
-            _lp_html = (
-                f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px;">'
-            )
-            for _asset in ASSET_LIST:
-                _lp_p   = current_prices.get(_asset, 0.0) if _asset != 'CASH' else 1.0
-                _lp_str = f"${_lp_p:,.2f}" if _lp_p > 0 else "—"
-                _avg    = st.session_state.portfolio[_asset].get('avg_price', 0.0)
-                _shs    = st.session_state.portfolio[_asset].get('shares', 0.0)
-                if _asset != 'CASH' and _avg > 0 and _lp_p > 0:
-                    _lr = (_lp_p / _avg - 1) * 100
-                    _lc, _ls = ("#059669" if _lr >= 0 else "#DC2626"), f"{_lr:+.1f}%"
-                elif _asset == 'CASH' and _shs > 0:
-                    _lc, _ls = tc_muted, f"${_shs:,.0f}"
-                else:
-                    _lc, _ls = "#BBBBBB", "—"
-                _lp_html += (
-                    f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.08);'
-                    f'border-left:2px solid {_lc};padding:5px 8px;">'
-                    f'<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;">'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.72em;'
-                    f'font-weight:700;color:{tc_body};">{_asset}</span>'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.7em;'
-                    f'color:{tc_body};font-variant-numeric:tabular-nums;">{_lp_str}</span>'
-                    f'</div>'
-                    f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{_lc};'
-                    f'text-align:right;">{_ls}</div>'
-                    f'</div>'
-                )
-            _lp_html += (
+    def _regime_card_html(horizontal=False):
+        if horizontal:
+            return apply_theme(
+                f'<div style="background:rgba({r_c},{g_c},{b_c},0.07);'
+                f'border:1px solid rgba({r_c},{g_c},{b_c},0.22);border-left:4px solid {r_acc};'
+                f'padding:12px 20px;display:flex;align-items:center;gap:32px;">'
+                f'<div style="flex:1;">'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.53em;color:{tc_label};'
+                f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:3px;">Current Regime</div>'
+                f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.5em;'
+                f'font-weight:800;color:{r_acc};letter-spacing:-0.5px;line-height:1;margin-bottom:1px;">'
+                f'{regime_info[curr_regime][0]}</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_muted};'
+                f'letter-spacing:0.1em;text-transform:uppercase;">{regime_info[curr_regime][1]}</div>'
                 f'</div>'
-                f'<div style="text-align:right;margin-top:3px;">'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};">'
-                f'⏱ {last_update_time}</span></div>'
+                f'<div style="width:1px;height:48px;background:rgba({r_c},{g_c},{b_c},0.2);flex-shrink:0;"></div>'
+                f'<div style="flex:1;font-family:DM Mono,monospace;font-size:0.64em;color:{tc_muted};">{regime_committee_msg}</div>'
+                f'</div>'
             )
-            st.markdown(_lp_html, unsafe_allow_html=True)
+        else:
+            return apply_theme(
+                f'<div style="background:rgba({r_c},{g_c},{b_c},0.07);'
+                f'border:1px solid rgba({r_c},{g_c},{b_c},0.22);border-left:4px solid {r_acc};'
+                f'padding:14px 16px;margin-bottom:10px;">'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.53em;color:{tc_label};'
+                f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px;">Current Regime</div>'
+                f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.45em;'
+                f'font-weight:800;color:{r_acc};letter-spacing:-0.5px;line-height:1;margin-bottom:2px;">'
+                f'{regime_info[curr_regime][0]}</div>'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_muted};'
+                f'letter-spacing:0.1em;text-transform:uppercase;">{regime_info[curr_regime][1]}</div>'
+                f'<div style="margin-top:7px;padding-top:7px;border-top:1px solid rgba({r_c},{g_c},{b_c},0.18);'
+                f'font-family:DM Mono,monospace;font-size:0.58em;color:{tc_muted};">{regime_committee_msg}</div>'
+                f'</div>'
+            )
 
-            st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-            st.markdown(_sl("Quick Orders"), unsafe_allow_html=True)
+    def _pf_editor(height=355):
+        _edata = []
+        for asset in ASSET_LIST:
+            v = st.session_state.portfolio.get(asset, {})
+            _edata.append({
+                "Asset":        asset,
+                "Shares":       float(v.get('shares', 0.0)),
+                "Avg Price($)": float(v.get('avg_price', 1.0 if asset == 'CASH' else 0.0)),
+                "FX Rate(₩)":  float(v.get('fx', 1350.0))
+            })
+        _df_ed = pd.DataFrame(_edata)
+        _df_edited = st.data_editor(
+            _df_ed, disabled=["Asset"], hide_index=True,
+            use_container_width=True, key="pf_editor", height=height,
+            column_config={
+                "Shares":       st.column_config.NumberColumn("Shares", format="%.4f"),
+                "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"),
+                "FX Rate(₩)":  st.column_config.NumberColumn("FX(₩)",  format="%.0f"),
+            }
+        )
+        if not _df_edited.equals(_df_ed):
+            for _, row in _df_edited.iterrows():
+                st.session_state.portfolio[row["Asset"]] = {
+                    'shares':    float(row["Shares"]),
+                    'avg_price': float(row["Avg Price($)"]),
+                    'fx':        float(row["FX Rate(₩)"])
+                }
+            save_portfolio_to_disk()
+            st.rerun()
 
-            _sells, _buys = [], []
-            for asset in ASSET_LIST:
-                _cp = current_prices[asset] if current_prices[asset] > 0 else 1.0
-                _dv = diff_vals[asset]
-                if asset != 'CASH' and _dv < -_cp * 0.05:
-                    _sells.append((asset, f"{abs(_dv)/_cp:,.2f}주 매도"))
-                elif asset == 'CASH' and _dv < -1.0:
-                    _sells.append(("CASH", f"${abs(_dv):,.0f} 사용"))
-                if asset != 'CASH' and _dv > _cp * 0.05:
-                    _buys.append((asset, f"{_dv/_cp:,.2f}주 매수"))
-                elif asset == 'CASH' and _dv > 1.0:
-                    _buys.append(("CASH", f"${_dv:,.0f} 확보"))
-
-            _qo1, _qo2 = st.columns(2)
-            def _qo_block(col, title, items, accent, bg):
-                _rows = "".join([
-                    f'<div style="display:flex;justify-content:space-between;padding:5px 0;'
-                    f'border-bottom:1px solid rgba(0,0,0,0.04);">'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:700;'
-                    f'color:{tc_body};">{a}</span>'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.74em;color:{accent};'
-                    f'font-variant-numeric:tabular-nums;">{v}</span></div>'
-                    for a, v in items
-                ]) or f'<div style="padding:6px 0;text-align:center;font-family:DM Mono,monospace;font-size:0.68em;color:#CCCCCC;">— 없음</div>'
-                col.markdown(
-                    f'<div style="background:{bg};border:1px solid rgba(0,0,0,0.07);'
-                    f'border-top:2px solid {accent};padding:8px 10px;">'
-                    f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.76em;'
-                    f'font-weight:700;color:{accent};margin-bottom:5px;">{title}</div>'
-                    f'{_rows}</div>',
-                    unsafe_allow_html=True
-                )
-            with _qo1: _qo_block(_qo1, "🔴  SELL", _sells, "#DC2626", "rgba(220,38,38,0.03)")
-            with _qo2: _qo_block(_qo2, "🟢  BUY",  _buys,  "#059669", "rgba(5,150,105,0.03)")
-
-    # ── RIGHT — 3개 서브 행 ─────────────────────────────────
-    with _col_r:
-
-        # Sub-row A: Regime 카드 (풀 너비)
-        st.markdown(apply_theme(
-            f'<div style="background:rgba({r_c},{g_c},{b_c},0.07);'
-            f'border:1px solid rgba({r_c},{g_c},{b_c},0.22);border-left:4px solid {r_acc};'
-            f'padding:12px 20px;display:flex;align-items:center;gap:32px;">'
-            # 레짐 이름 + 상태
-            f'<div style="flex:1;">'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.53em;color:{tc_label};'
-            f'letter-spacing:0.18em;text-transform:uppercase;margin-bottom:3px;">Current Regime</div>'
-            f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.5em;'
-            f'font-weight:800;color:{r_acc};letter-spacing:-0.5px;line-height:1;margin-bottom:1px;">'
-            f'{regime_info[curr_regime][0]}</div>'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_muted};'
-            f'letter-spacing:0.1em;text-transform:uppercase;">{regime_info[curr_regime][1]}</div>'
-            f'</div>'
-            # 구분선
-            f'<div style="width:1px;height:48px;background:rgba({r_c},{g_c},{b_c},0.2);flex-shrink:0;"></div>'
-            # 레짐 위원회 메시지
-            f'<div style="flex:1;font-family:DM Mono,monospace;font-size:0.64em;color:{tc_muted};">'
-            f'{regime_committee_msg}</div>'
-            f'</div>'
-        ), unsafe_allow_html=True)
-
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-        # Sub-row B: 파이 2개 [높이 ≈ 210px]
+    def _pie_charts():
         _pie_colors = [line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0','#059669','#047857','#065F46','#D1FAE5']
         _pie_cfg = dict(
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(family="DM Mono", color=t_color),
-            showlegend=True,
+            font=dict(family="DM Mono", color=t_color), showlegend=True,
             legend=dict(orientation='v', x=1.0, y=0.5, font=dict(size=8, family='DM Mono'), bgcolor='rgba(0,0,0,0)'),
             margin=dict(l=0, r=70, t=28, b=0), height=200
         )
@@ -1786,12 +1741,7 @@ elif page == "💼 Portfolio":
                 _fc.update_layout(title=dict(text="Current", font=dict(family="DM Mono", size=11, color=t_color), x=0), **_pie_cfg)
                 with st.container(border=True): st.plotly_chart(_fc, use_container_width=True)
             else:
-                st.markdown(
-                    f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);height:200px;'
-                    f'display:flex;align-items:center;justify-content:center;">'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.7em;color:#CCCCCC;">포지션 없음</span></div>',
-                    unsafe_allow_html=True
-                )
+                st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);height:200px;display:flex;align-items:center;justify-content:center;"><span style="font-family:DM Mono,monospace;font-size:0.7em;color:#CCCCCC;">포지션 없음</span></div>', unsafe_allow_html=True)
         _ltgt = [a for a in ASSET_LIST if target_weights.get(a, 0) > 0]
         _vtgt = [target_weights[a] for a in _ltgt]
         with _rb2:
@@ -1801,89 +1751,61 @@ elif page == "💼 Portfolio":
             _ft.update_layout(title=dict(text=f"Target  R{curr_regime}", font=dict(family="DM Mono", size=11, color=t_color), x=0), **_pie_cfg)
             with st.container(border=True): st.plotly_chart(_ft, use_container_width=True)
 
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    def _delta_bar():
+        _dlabels = [a for a in ASSET_LIST if abs(diff_vals[a]) >= 1.0]
+        _dvals   = [diff_vals[a] for a in _dlabels]
+        if _dlabels:
+            _fd = go.Figure(go.Bar(x=_dlabels, y=_dvals,
+                marker_color=[C_GREEN if v > 0 else C_RED for v in _dvals],
+                text=[f"${v:+,.0f}" for v in _dvals],
+                textposition='outside', textfont=dict(size=8, family='DM Mono'), marker_line_width=0))
+            _fd.update_layout(
+                title=dict(text="Δ Rebalancing ($)", font=dict(family='DM Mono', size=10, color=t_color)),
+                height=185, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(color=t_color, family="DM Mono", size=8),
+                showlegend=False, margin=dict(t=24, b=4, l=0, r=0))
+            _fd.update_xaxes(**_ax_r, tickfont=dict(size=8))
+            _fd.update_yaxes(**_ax_r)
+            with st.container(border=True): st.plotly_chart(_fd, use_container_width=True)
+        else:
+            st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);height:185px;display:flex;align-items:center;justify-content:center;"><span style="font-family:DM Mono,monospace;font-size:0.68em;color:#CCCCCC;">Δ 없음</span></div>', unsafe_allow_html=True)
 
-        # Sub-row C: Delta Bar | Target Weights  [높이 ≈ 185px]
-        _rc1, _rc2 = st.columns([1.1, 1])
+    def _target_weights_block():
+        _wt_items = sorted([(k, v) for k, v in target_weights.items() if v > 0], key=lambda x: x[1], reverse=True)
+        _max_wt   = max(v for _, v in _wt_items) if _wt_items else 1
+        _wt_rows  = ""
+        for _wk, _wv in _wt_items:
+            _wpct = _wv * 100
+            _bw   = int(_wv / _max_wt * 100)
+            _cp2  = (curr_vals.get(_wk, 0) / total_val_usd * 100) if total_val_usd > 0 else 0
+            _dp   = _wpct - _cp2
+            _dc   = "#059669" if _dp > 0.5 else ("#DC2626" if _dp < -0.5 else "#9494A0")
+            _ds   = f"{_dp:+.1f}%" if abs(_dp) > 0.5 else "—"
+            _wt_rows += (
+                f'<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04);">'
+                f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:700;color:{tc_body};">{_wk}</span>'
+                f'<div style="display:flex;gap:3px;align-items:baseline;">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.84em;font-weight:600;color:{main_color};">{_wpct:.0f}%</span>'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.58em;color:{_dc};">{_ds}</span>'
+                f'</div></div>'
+                f'<div style="height:4px;background:rgba(0,0,0,0.07);">'
+                f'<div style="height:4px;width:{_bw}%;background:{main_color};"></div>'
+                f'</div></div>'
+            )
+        with st.container(border=True):
+            st.markdown(
+                f'<div style="font-family:DM Mono,monospace;font-size:0.55em;font-weight:600;'
+                f'color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;'
+                f'margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid rgba(0,0,0,0.08);">'
+                f'Target Weights · R{curr_regime}</div><div>{_wt_rows}</div>',
+                unsafe_allow_html=True
+            )
 
-        with _rc1:
-            _dlabels = [a for a in ASSET_LIST if abs(diff_vals[a]) >= 1.0]
-            _dvals   = [diff_vals[a] for a in _dlabels]
-            if _dlabels:
-                _fd = go.Figure(go.Bar(
-                    x=_dlabels, y=_dvals,
-                    marker_color=[C_GREEN if v > 0 else C_RED for v in _dvals],
-                    text=[f"${v:+,.0f}" for v in _dvals],
-                    textposition='outside', textfont=dict(size=8, family='DM Mono'),
-                    marker_line_width=0
-                ))
-                _fd.update_layout(
-                    title=dict(text="Δ Rebalancing ($)", font=dict(family='DM Mono', size=10, color=t_color)),
-                    height=185,
-                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(color=t_color, family="DM Mono", size=8),
-                    showlegend=False, margin=dict(t=24, b=4, l=0, r=0)
-                )
-                _fd.update_xaxes(**_ax_r, tickfont=dict(size=8))
-                _fd.update_yaxes(**_ax_r)
-                with st.container(border=True): st.plotly_chart(_fd, use_container_width=True)
-            else:
-                st.markdown(
-                    f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);height:185px;'
-                    f'display:flex;align-items:center;justify-content:center;">'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.68em;color:#CCCCCC;">Δ 없음</span></div>',
-                    unsafe_allow_html=True
-                )
-
-        with _rc2:
-            _wt_items = sorted([(k, v) for k, v in target_weights.items() if v > 0], key=lambda x: x[1], reverse=True)
-            _max_wt   = max(v for _, v in _wt_items) if _wt_items else 1
-            _wt_rows  = ""
-            for _wk, _wv in _wt_items:
-                _wpct = _wv * 100
-                _bw   = int(_wv / _max_wt * 100)
-                _cp2  = (curr_vals.get(_wk, 0) / total_val_usd * 100) if total_val_usd > 0 else 0
-                _dp   = _wpct - _cp2
-                _dc   = "#059669" if _dp > 0.5 else ("#DC2626" if _dp < -0.5 else "#9494A0")
-                _ds   = f"{_dp:+.1f}%" if abs(_dp) > 0.5 else "—"
-                _wt_rows += (
-                    f'<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04);">'
-                    f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:700;color:{tc_body};">{_wk}</span>'
-                    f'<div style="display:flex;gap:3px;align-items:baseline;">'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.84em;font-weight:600;color:{main_color};">{_wpct:.0f}%</span>'
-                    f'<span style="font-family:DM Mono,monospace;font-size:0.58em;color:{_dc};">{_ds}</span>'
-                    f'</div></div>'
-                    f'<div style="height:4px;background:rgba(0,0,0,0.07);">'
-                    f'<div style="height:4px;width:{_bw}%;background:{main_color};"></div>'
-                    f'</div></div>'
-                )
-            with st.container(border=True):
-                st.markdown(
-                    f'<div style="font-family:DM Mono,monospace;font-size:0.55em;font-weight:600;'
-                    f'color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;'
-                    f'margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid rgba(0,0,0,0.08);">'
-                    f'Target Weights · R{curr_regime}</div>'
-                    f'<div>{_wt_rows}</div>',
-                    unsafe_allow_html=True
-                )
-
-    # ══════════════════════════════════════════════════════
-    # ROW 3 — Rebalancing Matrix (풀 너비)
-    # ══════════════════════════════════════════════════════
-    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-    st.markdown(apply_theme(
-        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
-        f'<div style="width:2px;height:12px;background:{main_color};flex-shrink:0;"></div>'
-        f'<span style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:600;'
-        f'color:{tc_heading};letter-spacing:0.2em;text-transform:uppercase;">Rebalancing Matrix</span>'
-        f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.09);"></div>'
-        f'<span style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};">'
-        f'R{curr_regime} · {regime_info[curr_regime][1]} · ⏱ {last_update_time}</span>'
-        f'</div>'
-    ), unsafe_allow_html=True)
-
-    if total_val_usd > 0:
+    def _rebalancing_matrix():
+        if total_val_usd <= 0:
+            st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);padding:28px;text-align:center;"><span style="font-family:DM Mono,monospace;font-size:0.8em;color:#CCCCCC;">포지션을 입력하면 리밸런싱 매트릭스가 표시됩니다.</span></div>', unsafe_allow_html=True)
+            return
         _rhtml = (
             '<div style="overflow-x:auto;"><table class="mint-table"><thead><tr>'
             '<th style="text-align:left;">Asset</th><th>현재가</th><th>평균단가</th>'
@@ -1915,15 +1837,11 @@ elif page == "💼 Portfolio":
                 _act = f"<span style='font-family:DM Mono,monospace;font-size:0.72em;color:#9494A0;'>HOLD</span>"
                 _dstr, _rbg = "<span style='color:#9494A0;'>—</span>", "#FAFAF7"
             elif _diff > 0:
-                _act  = (f"<span style='font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;"
-                         f"color:#059669;background:rgba(5,150,105,0.09);padding:2px 8px;"
-                         f"border-left:2px solid #059669;'>▲ BUY</span>")
+                _act  = f"<span style='font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;color:#059669;background:rgba(5,150,105,0.09);padding:2px 8px;border-left:2px solid #059669;'>▲ BUY</span>"
                 _dstr = f"<span style='color:#059669;font-weight:600;'>+${_diff:,.0f}</span>"
                 _rbg  = "rgba(5,150,105,0.025)"
             else:
-                _act  = (f"<span style='font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;"
-                         f"color:#DC2626;background:rgba(220,38,38,0.08);padding:2px 8px;"
-                         f"border-left:2px solid #DC2626;'>▼ SELL</span>")
+                _act  = f"<span style='font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;color:#DC2626;background:rgba(220,38,38,0.08);padding:2px 8px;border-left:2px solid #DC2626;'>▼ SELL</span>"
                 _dstr = f"<span style='color:#DC2626;font-weight:600;'>-${abs(_diff):,.0f}</span>"
                 _rbg  = "rgba(220,38,38,0.025)"
             if _tgtw > 0 or _curv > 0 or _shs > 0:
@@ -1944,17 +1862,322 @@ elif page == "💼 Portfolio":
         _rhtml += "</tbody></table></div>"
         with st.container(border=True):
             st.markdown(apply_theme(_rhtml), unsafe_allow_html=True)
-    else:
-        st.markdown(
-            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);'
-            f'padding:28px;text-align:center;">'
-            f'<span style="font-family:DM Mono,monospace;font-size:0.8em;color:#CCCCCC;">'
-            f'포지션을 입력하면 리밸런싱 매트릭스가 표시됩니다.</span></div>',
-            unsafe_allow_html=True
+
+    # ── ROW 0: KPI 마스트헤드 (공통) ──────────────────────────
+    _pnl_s = "▲" if pnl_pct >= 0 else "▼"
+    st.markdown(apply_theme(
+        f'<div style="background:#111118;border-left:4px solid {r_acc};padding:13px 0;'
+        f'margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;">'
+        f'<div style="padding:0 20px 0 16px;border-right:1px solid rgba(255,255,255,0.06);flex-shrink:0;">'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.52em;color:rgba(255,255,255,0.3);'
+        f'letter-spacing:0.22em;text-transform:uppercase;margin-bottom:2px;">AMLS V4.5</div>'
+        f'<div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.1em;font-weight:800;'
+        f'color:#FFFFFF;letter-spacing:-0.3px;line-height:1;">Portfolio</div>'
+        f'</div>'
+        + _kv("Total NAV", f"${total_val_usd:,.2f}", "#FFFFFF", f"₩{total_val_krw:,.0f}")
+        + _kv("USD / KRW", f"₩{cur_fx:,.0f}", "rgba(255,255,255,0.65)", "환율")
+        + _kv("P & L", f"{pnl_pct:+.2f}%", "#6EE7B7" if pnl_pct >= 0 else "#FCA5A5", f"{_pnl_s} ${pnl_usd:,.0f}")
+        + _kv("Regime", f"R{curr_regime}  {regime_info[curr_regime][1]}", r_acc)
+        + _kv("투자원금", f"${invested_cost:,.0f}", "rgba(255,255,255,0.65)", "취득원가")
+        + f'<div style="margin-left:auto;padding:0 16px;flex-shrink:0;">'
+        + f'<span class="live-pulse" style="font-family:DM Mono,monospace;font-size:0.58em;'
+        + f'color:#6EE7B7;letter-spacing:0.06em;">{rt_label}</span></div></div>'
+    ), unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════════════
+    # 💻 PC MODE
+    # ══════════════════════════════════════════════════════
+    if display_mode == "PC":
+
+        # ROW 1 — Goal Tracker
+        _gi_col, _gb_col = st.columns([1, 3.5])
+        with _gi_col:
+            new_goal = st.number_input("목표금액", min_value=1000.0, max_value=100_000_000.0,
+                value=st.session_state.goal_usd, step=1000.0, format="%.0f",
+                key="goal_input", label_visibility="collapsed")
+            if new_goal != st.session_state.goal_usd:
+                st.session_state.goal_usd = new_goal; st.rerun()
+            st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_label};text-align:center;margin-top:-4px;">목표 금액 (USD)</div>', unsafe_allow_html=True)
+        with _gb_col:
+            st.markdown(_goal_tracker_html(), unsafe_allow_html=True)
+
+        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+        # ROW 2 — 2열 [LEFT | RIGHT]
+        _col_l, _col_r = st.columns([1, 1.65])
+        with _col_l:
+            with st.container(border=True):
+                st.markdown(_sl("Position Input"), unsafe_allow_html=True)
+                _pf_editor(355)
+                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+                st.markdown(_sl("Live Prices"), unsafe_allow_html=True)
+                st.markdown(_lp_build(), unsafe_allow_html=True)
+                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+                st.markdown(_sl("Quick Orders"), unsafe_allow_html=True)
+                _sells, _buys = _sells_buys()
+                _qo1, _qo2 = st.columns(2)
+                with _qo1: _qo_build(_qo1, "🔴  SELL", _sells, "#DC2626", "rgba(220,38,38,0.03)")
+                with _qo2: _qo_build(_qo2, "🟢  BUY",  _buys,  "#059669", "rgba(5,150,105,0.03)")
+
+        with _col_r:
+            st.markdown(_regime_card_html(horizontal=True), unsafe_allow_html=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            _pie_charts()
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            _rc1, _rc2 = st.columns([1.1, 1])
+            with _rc1: _delta_bar()
+            with _rc2: _target_weights_block()
+
+        # ROW 3 — Rebalancing Matrix
+        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+        st.markdown(apply_theme(
+            f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+            f'<div style="width:2px;height:12px;background:{main_color};flex-shrink:0;"></div>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:600;'
+            f'color:{tc_heading};letter-spacing:0.2em;text-transform:uppercase;">Rebalancing Matrix</span>'
+            f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.09);"></div>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};">'
+            f'R{curr_regime} · {regime_info[curr_regime][1]} · ⏱ {last_update_time}</span></div>'
+        ), unsafe_allow_html=True)
+        _rebalancing_matrix()
+
+    # ══════════════════════════════════════════════════════
+    # 📱 TABLET MODE  — Galaxy Tab S9 Ultra 최적화
+    # 레이아웃: 2열 (좌 입력 / 우 시각화), 글씨 크게, 터치 영역 넓게
+    # ══════════════════════════════════════════════════════
+    elif display_mode == "Tablet":
+
+        st.markdown(f"""<style>
+        .main .block-container {{ max-width: 1340px !important; padding: 1rem 0.8rem !important; }}
+        [data-testid="stMetricValue"] > div {{ font-size: 1.6em !important; }}
+        [data-testid="stMetricLabel"] > div > div > p {{ font-size: 0.75em !important; }}
+        [data-testid="stButton"] > button {{ padding: 10px 18px !important; font-size: 0.85em !important; }}
+        [data-testid="stDataEditor"] td, [data-testid="stDataEditor"] th {{ font-size: 0.9em !important; padding: 8px 10px !important; }}
+        .mint-table td {{ padding: 12px 14px !important; font-size: 0.86em !important; }}
+        .mint-table th {{ padding: 10px 14px !important; font-size: 0.74em !important; }}
+        </style>""", unsafe_allow_html=True)
+
+        # Goal Tracker — 전체 너비 2열
+        _tgi, _tgb = st.columns([1, 3.5])
+        with _tgi:
+            new_goal = st.number_input("목표금액", min_value=1000.0, max_value=100_000_000.0,
+                value=st.session_state.goal_usd, step=1000.0, format="%.0f",
+                key="goal_input", label_visibility="collapsed")
+            if new_goal != st.session_state.goal_usd:
+                st.session_state.goal_usd = new_goal; st.rerun()
+            st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.68em;color:{tc_label};text-align:center;margin-top:-4px;">목표 금액 (USD)</div>', unsafe_allow_html=True)
+        with _tgb:
+            st.markdown(_goal_tracker_html(), unsafe_allow_html=True)
+
+        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+        # Regime 카드 — 풀 너비
+        st.markdown(_regime_card_html(horizontal=True), unsafe_allow_html=True)
+        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+        # 2열 [LEFT | RIGHT]
+        _tc_l, _tc_r = st.columns([1, 1.4])
+
+        with _tc_l:
+            with st.container(border=True):
+                st.markdown(_sl("Position Input"), unsafe_allow_html=True)
+                _pf_editor(400)
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                st.markdown(_sl("Live Prices"), unsafe_allow_html=True)
+                st.markdown(_lp_build(), unsafe_allow_html=True)
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                st.markdown(_sl("Quick Orders"), unsafe_allow_html=True)
+                _sells, _buys = _sells_buys()
+                _tqo1, _tqo2 = st.columns(2)
+                with _tqo1: _qo_build(_tqo1, "🔴  SELL", _sells, "#DC2626", "rgba(220,38,38,0.03)")
+                with _tqo2: _qo_build(_tqo2, "🟢  BUY",  _buys,  "#059669", "rgba(5,150,105,0.03)")
+
+        with _tc_r:
+            _pie_charts()
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            _tr1, _tr2 = st.columns(2)
+            with _tr1: _delta_bar()
+            with _tr2: _target_weights_block()
+
+        st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+        st.markdown(apply_theme(
+            f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+            f'<div style="width:2px;height:14px;background:{main_color};flex-shrink:0;"></div>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.66em;font-weight:600;'
+            f'color:{tc_heading};letter-spacing:0.18em;text-transform:uppercase;">Rebalancing Matrix</span>'
+            f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.09);"></div>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.62em;color:{tc_label};">'
+            f'R{curr_regime} · {regime_info[curr_regime][1]}</span></div>'
+        ), unsafe_allow_html=True)
+        _rebalancing_matrix()
+
+    # ══════════════════════════════════════════════════════
+    # 📲 MOBILE MODE  — iPhone 15 Pro Max 최적화
+    # 레이아웃: 단일 컬럼, 스택, 카드형, 큰 터치 영역
+    # ══════════════════════════════════════════════════════
+    elif display_mode == "Mobile":
+
+        st.markdown(f"""<style>
+        .main .block-container {{ max-width: 480px !important; padding: 0.5rem 0.4rem 2rem !important; margin: 0 auto !important; }}
+        [data-testid="stDataEditor"] td, [data-testid="stDataEditor"] th {{ font-size: 0.95em !important; padding: 10px 8px !important; }}
+        [data-testid="stButton"] > button {{ padding: 12px 20px !important; font-size: 0.9em !important; min-height: 44px !important; }}
+        [data-testid="stNumberInput"] input {{ font-size: 1.1em !important; min-height: 44px !important; }}
+        .mint-table td {{ padding: 11px 10px !important; font-size: 0.82em !important; }}
+        .mint-table th {{ padding: 9px 10px !important; font-size: 0.7em !important; }}
+        </style>""", unsafe_allow_html=True)
+
+        # Goal 입력 + 트래커 (세로 스택)
+        new_goal = st.number_input("🎯 목표 금액 (USD)", min_value=1000.0, max_value=100_000_000.0,
+            value=st.session_state.goal_usd, step=1000.0, format="%.0f", key="goal_input")
+        if new_goal != st.session_state.goal_usd:
+            st.session_state.goal_usd = new_goal; st.rerun()
+
+        _goal    = st.session_state.goal_usd
+        _pct_raw = (total_val_usd / _goal * 100) if _goal > 0 else 0.0
+        _pct     = min(_pct_raw, 100.0)
+        _over    = _pct_raw > 100.0
+        if _over:        _gc, _gbadge = "#059669", "🏆 ACHIEVED"
+        elif _pct >= 75: _gc, _gbadge = main_color, "⚡ 75%+"
+        elif _pct >= 50: _gc, _gbadge = "#D97706",  "📈 ON TRACK"
+        else:            _gc, _gbadge = "#94A3B8",  "🌱 GROWING"
+        _gr, _gg, _gb = hex_to_rgb(_gc)
+
+        st.markdown(apply_theme(
+            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);'
+            f'border-left:4px solid {_gc};padding:14px 16px;margin-bottom:10px;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.62em;color:{tc_label};letter-spacing:0.16em;text-transform:uppercase;">Goal Tracker</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.6em;background:rgba({_gr},{_gg},{_gb},0.1);border:1px solid rgba({_gr},{_gg},{_gb},0.28);color:{_gc};padding:2px 10px;">{_gbadge}</span>'
+            f'</div>'
+            f'<div style="height:10px;background:rgba(0,0,0,0.07);margin-bottom:8px;">'
+            f'<div style="height:10px;width:{_pct:.2f}%;background:linear-gradient(90deg,rgba({_gr},{_gg},{_gb},0.4),{_gc});"></div>'
+            f'</div>'
+            f'<div style="display:flex;justify-content:space-between;align-items:baseline;">'
+            f'<div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.54em;color:{tc_label};text-transform:uppercase;">현재 / 목표</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.9em;color:{tc_body};font-variant-numeric:tabular-nums;">'
+            f'${total_val_usd:,.0f} / ${_goal:,.0f}</div>'
+            f'</div>'
+            f'<span style="font-family:DM Mono,monospace;font-size:2.2em;font-weight:400;'
+            f'color:{_gc};font-variant-numeric:tabular-nums;letter-spacing:-1.5px;line-height:1;">'
+            f'{_pct_raw:.1f}%</span>'
+            f'</div></div>'
+        ), unsafe_allow_html=True)
+
+        # Regime 카드
+        st.markdown(_regime_card_html(horizontal=False), unsafe_allow_html=True)
+
+        # Position Input
+        with st.container(border=True):
+            st.markdown(_sl("Position Input"), unsafe_allow_html=True)
+            _pf_editor(400)
+
+        # Live Prices
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown(_sl("Live Prices"), unsafe_allow_html=True)
+            st.markdown(_lp_build(), unsafe_allow_html=True)
+
+        # Quick Orders
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.markdown(_sl("Quick Orders"), unsafe_allow_html=True)
+            _sells, _buys = _sells_buys()
+            _mqo1, _mqo2 = st.columns(2)
+            with _mqo1: _qo_build(_mqo1, "🔴  SELL", _sells, "#DC2626", "rgba(220,38,38,0.03)")
+            with _mqo2: _qo_build(_mqo2, "🟢  BUY",  _buys,  "#059669", "rgba(5,150,105,0.03)")
+
+        # Target Weights
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        _target_weights_block()
+
+        # 파이 차트 (단일 컬럼)
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        _pie_colors_m = [line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0','#059669','#047857','#065F46','#D1FAE5']
+        _pie_cfg_m = dict(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(family="DM Mono", color=t_color), showlegend=True,
+            legend=dict(orientation='h', x=0.5, xanchor='center', y=-0.12, font=dict(size=9, family='DM Mono'), bgcolor='rgba(0,0,0,0)'),
+            margin=dict(l=0, r=0, t=28, b=50), height=240
         )
+        _lcur_m = [a for a in ASSET_LIST if curr_vals[a] > 0]
+        _vcur_m = [curr_vals[a] for a in _lcur_m]
+        if sum(_vcur_m) > 0:
+            _fm = go.Figure(go.Pie(labels=_lcur_m, values=_vcur_m, hole=.52,
+                textinfo='percent', textfont=dict(size=9),
+                marker=dict(colors=_pie_colors_m, line=dict(color='#FAFAF7', width=1.5))))
+            _fm.update_layout(title=dict(text="Current Allocation", font=dict(family="DM Mono", size=12, color=t_color), x=0.5, xanchor='center'), **_pie_cfg_m)
+            with st.container(border=True): st.plotly_chart(_fm, use_container_width=True)
+
+        _ltgt_m = [a for a in ASSET_LIST if target_weights.get(a, 0) > 0]
+        _vtgt_m = [target_weights[a] for a in _ltgt_m]
+        _ft_m = go.Figure(go.Pie(labels=_ltgt_m, values=_vtgt_m, hole=.52,
+            textinfo='percent', textfont=dict(size=9),
+            marker=dict(colors=_pie_colors_m, line=dict(color='#FAFAF7', width=1.5))))
+        _ft_m.update_layout(title=dict(text=f"Target  R{curr_regime}", font=dict(family="DM Mono", size=12, color=t_color), x=0.5, xanchor='center'), **_pie_cfg_m)
+        with st.container(border=True): st.plotly_chart(_ft_m, use_container_width=True)
+
+        # Rebalancing Matrix (간소화 — Action 컬럼 강조)
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        st.markdown(apply_theme(
+            f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+            f'<div style="width:2px;height:12px;background:{main_color};flex-shrink:0;"></div>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.62em;font-weight:600;'
+            f'color:{tc_heading};letter-spacing:0.18em;text-transform:uppercase;">Rebalancing</span>'
+            f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.09);"></div></div>'
+        ), unsafe_allow_html=True)
+
+        if total_val_usd > 0:
+            # 모바일: 간소화된 카드 리스트
+            for asset in ASSET_LIST:
+                _shs  = st.session_state.portfolio[asset]['shares']
+                _avgp = st.session_state.portfolio[asset]['avg_price']
+                _curp = current_prices[asset] if current_prices[asset] > 0 else 1.0
+                _curv = curr_vals[asset]
+                _tgtw = target_weights.get(asset, 0.0)
+                _tgtv = total_val_usd * _tgtw
+                _diff = diff_vals[asset]
+                _curw = (_curv / total_val_usd * 100) if total_val_usd > 0 else 0
+                if _tgtw == 0 and _curv == 0 and _shs == 0:
+                    continue
+                if asset == 'CASH':
+                    _ret, _retstr, _retc = 0.0, "—", "#9494A0"
+                else:
+                    _ret    = (_curp / _avgp - 1) * 100 if _avgp > 0 else 0.0
+                    _retstr = f"{_ret:+.1f}%"
+                    _retc   = C_GREEN if _ret >= 0 else C_RED
+                if abs(_diff) < _curp * 0.05 and asset != 'CASH':
+                    _act_txt, _act_c, _rbg = "HOLD", "#9494A0", "#FAFAF7"
+                elif abs(_diff) < 1.0 and asset == 'CASH':
+                    _act_txt, _act_c, _rbg = "HOLD", "#9494A0", "#FAFAF7"
+                elif _diff > 0:
+                    _act_txt, _act_c, _rbg = "▲ BUY",  "#059669", "rgba(5,150,105,0.035)"
+                else:
+                    _act_txt, _act_c, _rbg = "▼ SELL", "#DC2626", "rgba(220,38,38,0.035)"
+                _delta_str = f"+${_diff:,.0f}" if _diff > 0 else f"-${abs(_diff):,.0f}" if _diff < 0 else "—"
+                st.markdown(apply_theme(
+                    f'<div style="background:{_rbg};border:1px solid rgba(0,0,0,0.09);'
+                    f'border-left:3px solid {_act_c};padding:10px 14px;margin-bottom:5px;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.88em;font-weight:700;color:#059669;">{asset}</span>'
+                    f'<span style="font-family:DM Mono,monospace;font-size:0.76em;font-weight:700;'
+                    f'color:{_act_c};background:rgba(0,0,0,0.04);padding:3px 10px;border:1px solid {_act_c}40;">{_act_txt}</span>'
+                    f'</div>'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;">'
+                    f'<div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">평가액</div>'
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.78em;color:{tc_body};font-variant-numeric:tabular-nums;">${_curv:,.0f} <span style="font-size:0.7em;color:{tc_label};">({_curw:.0f}%)</span></div></div>'
+                    f'<div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">목표 %</div>'
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.78em;color:{main_color};font-weight:600;">{_tgtw*100:.0f}%</div></div>'
+                    f'<div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">수익률</div>'
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.78em;color:{_retc};font-weight:600;">{_retstr}</div></div>'
+                    f'<div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">Δ 금액</div>'
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.78em;color:{_act_c};font-weight:600;font-variant-numeric:tabular-nums;">{_delta_str}</div></div>'
+                    f'</div></div>'
+                ), unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);padding:28px;text-align:center;"><span style="font-family:DM Mono,monospace;font-size:0.8em;color:#CCCCCC;">포지션을 입력하면 리밸런싱 정보가 표시됩니다.</span></div>', unsafe_allow_html=True)
 
 
-# ──────────────────────────────────────────
 elif page == "🍫 12-Pack Radar":
 
     df_view  = df.iloc[-120:]
