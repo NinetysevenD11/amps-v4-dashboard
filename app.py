@@ -2826,6 +2826,176 @@ elif page == "🍫 12-Pack Radar":
             fig12.update_xaxes(**_ax_r); fig12.update_yaxes(**_ax_r)
             st.plotly_chart(fig12, use_container_width=True)
 
+    # ══════════════════════════════════════════════════════════════
+    # AI 종합 투자의견 섹션
+    # ══════════════════════════════════════════════════════════════
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+    st.markdown(apply_theme(
+        f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">'
+        f'<div style="width:2px;height:14px;background:{main_color};flex-shrink:0;"></div>'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:600;'
+        f'color:{tc_heading};letter-spacing:0.2em;text-transform:uppercase;">'
+        f'AI  Quant  Analyst  ·  12-Signal Synthesis</span>'
+        f'<div style="flex:1;height:1px;background:rgba(0,0,0,0.10);"></div>'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};">'
+        f'Powered by Google Gemini</span>'
+        f'</div>'
+    ), unsafe_allow_html=True)
+
+    _ai_col_l, _ai_col_r = st.columns([1, 2])
+
+    with _ai_col_l:
+        # 12개 지표 현황 요약 카드
+        _sig_data = [
+            ("01 DCA·RSI",      "BUY" if qqq_rsi<40 else ("OVER" if qqq_rsi>70 else "NEUTRAL"),
+             f"QQQ RSI {qqq_rsi:.1f}",
+             main_color if qqq_rsi<40 else ("#DC2626" if qqq_rsi>70 else "#9494A0")),
+            ("02 Drawdown",     "BEAR" if qqq_dd<-0.20 else ("CORR" if qqq_dd<-0.10 else "SAFE"),
+             f"DD {qqq_dd*100:.1f}%",
+             "#DC2626" if qqq_dd<-0.10 else main_color),
+            ("03 Fear&Greed",   "FEAR" if fg_score<30 else ("GREED" if fg_score>70 else "NEUTRAL"),
+             f"FGI {fg_score:.0f}",
+             main_color if fg_score<30 else ("#DC2626" if fg_score>70 else "#9494A0")),
+            ("04 Sector",       f"▲{top_sec}",
+             f"▼{bot_sec}",
+             main_color if top_sec not in ['UTIL','STAPLE','HEALTH'] else "#D97706"),
+            ("05 Credit",       "RISK-OFF" if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else "RISK-ON",
+             f"HYG/IEF ratio",
+             "#DC2626" if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else main_color),
+            ("06 Breadth",      "NARROW" if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else "BROAD",
+             "QQQ vs QQQE",
+             "#D97706" if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else main_color),
+            ("07 Gold/Equity",  "GOLD↑" if last_row['GLD_SPY_Ratio']>last_row['GLD_SPY_MA50'] else "EQUITY↑",
+             "GLD/SPY ratio",
+             "#D97706" if last_row['GLD_SPY_Ratio']>last_row['GLD_SPY_MA50'] else main_color),
+            ("08 USD",          "USD↑" if last_row['UUP']>last_row['UUP_MA50'] else "USD↓",
+             f"UUP vs 50MA",
+             "#DC2626" if last_row['UUP']>last_row['UUP_MA50'] else main_color),
+            ("09 10Y Yield",    "YIELD↑" if last_row['^TNX']>last_row['TNX_MA50'] else "YIELD↓",
+             f"TNX {last_row['^TNX']:.2f}%",
+             "#DC2626" if last_row['^TNX']>last_row['TNX_MA50'] else main_color),
+            ("10 Bitcoin",      "RISK-OFF" if last_row['BTC-USD']<last_row['BTC_MA50'] else "RISK-ON",
+             f"BTC vs 50MA",
+             "#DC2626" if last_row['BTC-USD']<last_row['BTC_MA50'] else main_color),
+            ("11 Russell/SP",   "NARROW" if last_row['IWM_SPY_Ratio']<last_row['IWM_SPY_MA50'] else "BROAD",
+             "IWM/SPY ratio",
+             "#D97706" if last_row['IWM_SPY_Ratio']<last_row['IWM_SPY_MA50'] else main_color),
+            ("12 VIX Trend",    "EXPAND" if last_row['^VIX']>last_row['VIX_MA50'] else "SHRINK",
+             f"VIX {last_row['^VIX']:.1f}",
+             "#DC2626" if last_row['^VIX']>last_row['VIX_MA50'] else main_color),
+        ]
+
+        _sig_rows = ""
+        for _sn, _ss, _sv, _sc in _sig_data:
+            _sig_rows += (
+                f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                f'padding:5px 0;border-bottom:1px solid rgba(0,0,0,0.05);">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.66em;color:{tc_label};">{_sn}</span>'
+                f'<div style="text-align:right;">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;'
+                f'color:{_sc};">{_ss}</span>'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.58em;color:{tc_label};'
+                f'margin-left:6px;">{_sv}</span>'
+                f'</div></div>'
+            )
+
+        with st.container(border=True):
+            st.markdown(
+                f'<div style="font-family:DM Mono,monospace;font-size:0.56em;font-weight:600;'
+                f'color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;'
+                f'margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(0,0,0,0.09);">'
+                f'12 Signal Snapshot</div>'
+                f'<div>{_sig_rows}</div>'
+                f'<div style="display:flex;justify-content:space-between;'
+                f'margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.08);">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.58em;color:#DC2626;">'
+                f'Risk {risk_cnt}개</span>'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.58em;color:#D97706;">'
+                f'Warn {warn_cnt}개</span>'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.58em;color:{main_color};">'
+                f'Safe {safe_cnt}개</span>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+    with _ai_col_r:
+        if st.button("🤖  AI 종합 투자의견 생성", use_container_width=True, key="radar_ai_btn"):
+            try:
+                import google.generativeai as genai
+                _api_key = st.secrets["GEMINI_API_KEY"]
+                genai.configure(api_key=_api_key)
+                _models = [m.name for m in genai.list_models()
+                           if 'generateContent' in m.supported_generation_methods]
+                _model  = genai.GenerativeModel(_models[0].replace('models/', ''))
+
+                # 실시간 수치 포함 프롬프트
+                _prompt = f"""
+너는 월스트리트 출신 퀀트 애널리스트야. AMLS V4.5 시스템의 12개 매크로 신호를 분석해서 투자의견을 내줘.
+
+[현재 레짐] R{curr_regime} — {regime_info[curr_regime][1]}
+[신호 요약] Risk {risk_cnt}개 / Warn {warn_cnt}개 / Safe {safe_cnt}개
+
+[12개 실시간 신호]
+1. QQQ RSI: {qqq_rsi:.1f} → {"과매도(매수기회)" if qqq_rsi<40 else "과매수(주의)" if qqq_rsi>70 else "중립"}
+2. QQQ 고점대비 낙폭: {qqq_dd*100:.1f}% → {"약세장진입" if qqq_dd<-0.20 else "건전한조정" if qqq_dd<-0.10 else "안전"}
+3. CNN Fear&Greed: {fg_score:.0f} → {"극단적공포" if fg_score<30 else "극단적탐욕" if fg_score>70 else "중립"}
+4. 주도섹터: {top_sec} / 약세섹터: {bot_sec}
+5. 신용스프레드 HYG/IEF: {"위험신호(Risk-Off)" if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else "안전(Risk-On)"}
+6. 시장폭(QQQ vs QQQE): {"좁아짐(가짜상승경고)" if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else "넓음(건전)"}
+7. 금/주식 비율: {"금강세(Risk-Off전환)" if last_row['GLD_SPY_Ratio']>last_row['GLD_SPY_MA50'] else "주식강세(Risk-On)"}
+8. 달러(UUP): {"달러강세(기술주역풍)" if last_row['UUP']>last_row['UUP_MA50'] else "달러약세(기술주우호)"}
+9. 미10년물금리 {last_row['^TNX']:.2f}%: {"상승추세(나스닥역풍)" if last_row['^TNX']>last_row['TNX_MA50'] else "하락추세(나스닥우호)"}
+10. 비트코인: {"50MA하향(유동성위험)" if last_row['BTC-USD']<last_row['BTC_MA50'] else "50MA상향(위험선호)"}
+11. 러셀2000/S&P500: {"소형주약세(시장균열)" if last_row['IWM_SPY_Ratio']<last_row['IWM_SPY_MA50'] else "소형주강세(건전)"}
+12. VIX {last_row['^VIX']:.1f}: {"변동성확장(공포)" if last_row['^VIX']>last_row['VIX_MA50'] else "변동성축소(안정)"}
+
+아래 3개 섹션으로 구성해서 한국어로 작성해줘:
+
+**① 시장 환경 진단** (현재 매크로 환경을 2~3문장으로 압축)
+**② 핵심 리스크 & 기회 요인** (불리한 신호 vs 유리한 신호 각 2~3개씩)
+**③ AMLS 전략 투자의견** (현재 레짐 기준으로 지금 당장 취해야 할 행동을 구체적으로, 레버리지 비중·방어자산 비중 언급 포함)
+"""
+                with st.spinner("AI 분석 중..."):
+                    _response = _model.generate_content(_prompt)
+
+                st.markdown(apply_theme(
+                    f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);'
+                    f'border-left:4px solid {main_color};padding:20px 24px;">'
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};'
+                    f'letter-spacing:0.16em;text-transform:uppercase;margin-bottom:12px;">'
+                    f'AI Quant Analysis  ·  {last_update_time}</div>'
+                    f'<div style="font-family:DM Sans,sans-serif;font-size:0.88em;'
+                    f'color:{tc_body};line-height:1.8;">{_response.text}</div>'
+                    f'</div>'
+                ), unsafe_allow_html=True)
+
+            except KeyError:
+                st.error("🚨 GEMINI_API_KEY 누락 — Streamlit Cloud Secrets에 키를 등록해주세요.")
+            except Exception as _e:
+                st.error(f"🚨 오류: {str(_e)}")
+        else:
+            st.markdown(apply_theme(
+                f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
+                f'border-left:3px solid rgba(0,0,0,0.12);padding:24px 26px;">'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.58em;color:{tc_label};'
+                f'letter-spacing:0.14em;text-transform:uppercase;margin-bottom:12px;">How It Works</div>'
+                f'<div style="font-family:DM Sans,sans-serif;font-size:0.86em;color:{tc_muted};line-height:1.75;">'
+                f'버튼을 누르면 Google Gemini AI가 위 12개 실시간 지표를<br>'
+                f'<b style="color:{tc_body};">① 시장환경 진단</b> →  '
+                f'<b style="color:{tc_body};">② 리스크·기회 요인</b> →  '
+                f'<b style="color:{tc_body};">③ AMLS 투자의견</b><br>'
+                f'3단계로 종합 분석합니다.'
+                f'</div>'
+                f'<div style="margin-top:16px;padding:10px 14px;'
+                f'background:rgba({r_c},{g_c},{b_c},0.07);border-left:2px solid {main_color};">'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.68em;color:{tc_body};">'
+                f'현재 레짐: <b style="color:{main_color};">R{curr_regime}</b>  ·  '
+                f'Risk <b style="color:#DC2626;">{risk_cnt}</b>  '
+                f'Warn <b style="color:#D97706;">{warn_cnt}</b>  '
+                f'Safe <b style="color:{main_color};">{safe_cnt}</b>'
+                f'</span></div></div>'
+            ), unsafe_allow_html=True)
+
 
 elif page == "📈 Backtest Lab":
     st.markdown(apply_theme("""
