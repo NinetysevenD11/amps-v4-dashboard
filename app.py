@@ -660,43 +660,44 @@ css_block = f"""<style>
     }}
 
     [data-testid="stSidebar"] {{
-        background: var(--paper-2) !important;
-        border-right: 1px solid var(--rule-strong) !important;
+        background: #0F1117 !important;
+        border-right: 1px solid rgba(255,255,255,0.06) !important;
         box-shadow: none !important;
     }}
-    [data-testid="stSidebar"]::after {{
-        content:'';
-        position:absolute; top:15%; right:0; width:2px; height:70%;
-        background:linear-gradient(180deg, transparent, var(--acc-line), transparent);
-        pointer-events:none;
+
+    /* 사이드바 전체 텍스트 기본색 */
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] div {{
+        color: rgba(255,255,255,0.75);
     }}
 
+    /* ── 네비게이션 라디오 ─────────────────────────────── */
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] > div:first-child {{ display:none !important; }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {{
         gap:0px !important; padding:0 !important; background:transparent !important;
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] {{
         display:flex !important; align-items:center !important;
-        padding:10px 20px !important; margin:0 !important;
-        border-radius:0 !important;
-        border:none !important;
-        border-bottom:1px solid var(--rule) !important;
+        padding:11px 20px !important; margin:0 !important;
+        border-radius:0 !important; border:none !important;
+        border-bottom:1px solid rgba(255,255,255,0.05) !important;
         background:transparent !important;
         cursor:pointer !important; width:100% !important;
         transition:background 0.15s ease !important;
         position:relative;
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] p {{
-        color:var(--ink-3) !important; font-weight:500 !important;
-        font-size:0.82rem !important; margin:0 !important;
+        color:rgba(255,255,255,0.55) !important; font-weight:400 !important;
+        font-size:0.84rem !important; margin:0 !important;
         font-family:'DM Sans' !important; letter-spacing:0.01em !important;
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:hover {{
-        background:var(--paper-3) !important;
+        background:rgba(255,255,255,0.04) !important;
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {{
-        background:var(--paper) !important;
-        border-bottom:1px solid var(--rule) !important;
+        background:rgba(16,185,129,0.10) !important;
+        border-bottom:1px solid rgba(255,255,255,0.05) !important;
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked)::before {{
         content:'';
@@ -704,24 +705,129 @@ css_block = f"""<style>
         background:var(--acc);
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) p {{
-        color:var(--ink) !important; font-weight:700 !important;
+        color:#FFFFFF !important; font-weight:600 !important;
     }}
 
+    /* ── 북마크 링크 ───────────────────────────────────── */
     .sidebar-link {{
         display:flex; align-items:center; gap:10px;
-        padding:10px 20px; margin:0;
-        border-bottom:1px solid var(--rule);
+        padding:9px 20px; margin:0;
+        border-bottom:1px solid rgba(255,255,255,0.05);
         text-decoration:none !important;
-        color:var(--ink-3) !important;
-        font-weight:500; font-size:0.82rem;
-        transition:background 0.15s; background:transparent;
+        color:rgba(255,255,255,0.50) !important;
+        font-weight:400; font-size:0.82rem;
+        transition:background 0.15s, color 0.15s;
+        background:transparent;
         font-family:'DM Sans';
         position:relative;
     }}
     .sidebar-link:hover {{
-        background:var(--paper-3) !important;
-        color:var(--ink) !important;
+        background:rgba(255,255,255,0.05) !important;
+        color:rgba(255,255,255,0.90) !important;
     }}
+
+    /* ── 사이드바 버튼 ─────────────────────────────────── */
+    [data-testid="stSidebar"] [data-testid="stButton"] > button {{
+        background: rgba(255,255,255,0.05) !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+        color: rgba(255,255,255,0.65) !important;
+        border-radius: 0 !important;
+        padding: 7px 14px !important;
+        font-weight: 400 !important; font-size: 0.76em !important;
+        transition: all 0.15s ease !important;
+        font-family:'DM Mono', monospace !important;
+        letter-spacing: 0.05em; text-transform: uppercase;
+    }}
+    [data-testid="stSidebar"] [data-testid="stButton"] > button:hover {{
+        background: rgba(16,185,129,0.12) !important;
+        border-color: rgba(16,185,129,0.35) !important;
+        color: #6EE7B7 !important;
+    }}
+
+    /* ── 사이드바 색상 선택기 / 슬라이더 / 체크박스 ──── */
+    [data-testid="stSidebar"] [data-testid="stSlider"] > div > div > div {{
+        background: rgba(255,255,255,0.10) !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stSlider"] label p {{
+        color: rgba(255,255,255,0.55) !important;
+        font-family: 'DM Mono', monospace !important;
+        font-size: 0.72em !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stCheckbox"] label p {{
+        color: rgba(255,255,255,0.60) !important;
+        font-size: 0.78em !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stDownloadButton"] > button {{
+        background: rgba(255,255,255,0.05) !important;
+        border: 1px solid rgba(255,255,255,0.10) !important;
+        color: rgba(255,255,255,0.60) !important;
+        border-radius: 0 !important;
+        font-family: 'DM Mono', monospace !important;
+        font-size: 0.74em !important;
+        padding: 7px 14px !important;
+        text-transform: uppercase; letter-spacing: 0.05em;
+    }}
+    [data-testid="stSidebar"] [data-testid="stDownloadButton"] > button:hover {{
+        background: rgba(16,185,129,0.10) !important;
+        border-color: rgba(16,185,129,0.30) !important;
+        color: #6EE7B7 !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] {{
+        background: rgba(255,255,255,0.03) !important;
+        border: 1px dashed rgba(255,255,255,0.12) !important;
+        border-radius: 0 !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] span {{
+        color: rgba(255,255,255,0.40) !important;
+        font-size: 0.75em !important;
+    }}
+
+    /* ── 사이드바 expander ─────────────────────────────── */
+    [data-testid="stSidebar"] [data-testid="stExpander"] {{
+        background: rgba(255,255,255,0.03) !important;
+        border: none !important;
+        border-top: 1px solid rgba(255,255,255,0.06) !important;
+        border-radius: 0 !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary {{
+        padding: 10px 16px !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary p {{
+        color: rgba(255,255,255,0.50) !important;
+        font-family: 'DM Mono', monospace !important;
+        font-size: 0.74em !important;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+    }}
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary:hover {{
+        background: rgba(255,255,255,0.04) !important;
+    }}
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary svg {{
+        fill: rgba(255,255,255,0.35) !important;
+    }}
+
+    /* ── 사이드바 입력창 ───────────────────────────────── */
+    [data-testid="stSidebar"] [data-testid="stNumberInput"] > div > div,
+    [data-testid="stSidebar"] [data-testid="stTextInput"] > div > div {{
+        background: rgba(255,255,255,0.06) !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+        border-radius: 0 !important;
+        color: rgba(255,255,255,0.85) !important;
+    }}
+
+    /* ── 사이드바 섹션 헤더 공통 ───────────────────────── */
+    .sb-section {{
+        padding: 10px 20px 6px;
+        font-family: 'DM Mono', monospace;
+        font-size: 0.58em;
+        font-weight: 500;
+        color: rgba(255,255,255,0.28);
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        border-top: 1px solid rgba(255,255,255,0.06);
+        margin-top: 2px;
+    }}
+    .sb-section:first-child {{ border-top: none; }}
 
     .glass-card {{
         background: #FAFAF7 !important;
@@ -991,82 +1097,116 @@ css_block = f"""<style>
 st.markdown(apply_theme(css_block), unsafe_allow_html=True)
 
 # ==========================================
-# 4. 사이드바 UI
+# 4. 사이드바 UI  —  Unified Dark Terminal
 # ==========================================
-sidebar_top = st.sidebar.container()
-sidebar_top.markdown(apply_theme(f"""
-<div style="padding:20px 20px 14px; border-bottom:1px solid rgba(0,0,0,0.10);">
-    <div style="font-family:'DM Mono'; font-size:0.58em; color:#9494A0; letter-spacing:0.22em; text-transform:uppercase; margin-bottom:8px;">Quantitative Engine</div>
-    <div style="font-family:'Plus Jakarta Sans',sans-serif; font-size:1.5em; font-weight:800; color:#111118; letter-spacing:-0.5px; letter-spacing:-0.3px; line-height:1.1; margin-bottom:12px;">
+
+# ── 헤더 ────────────────────────────────────────────────────
+st.sidebar.markdown(apply_theme(f"""
+<div style="padding:22px 20px 16px;background:linear-gradient(160deg,#111118 60%,rgba({r_c},{g_c},{b_c},0.15));
+border-bottom:1px solid rgba(255,255,255,0.06);">
+    <div style="font-family:'DM Mono';font-size:0.52em;color:rgba(255,255,255,0.28);
+    letter-spacing:0.26em;text-transform:uppercase;margin-bottom:8px;">
+        Quantitative Engine
+    </div>
+    <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:1.65em;font-weight:800;
+    color:#FFFFFF;letter-spacing:-1px;line-height:1;margin-bottom:14px;">
         AMLS <span style="color:#10B981;">V4.5</span>
     </div>
-    <div class="live-pulse" style="display:inline-flex; align-items:center; gap:5px; font-family:'DM Mono'; font-size:0.65em; color:#059669; padding:4px 10px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); letter-spacing:0.06em;">
-        {rt_label}
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div class="live-pulse" style="display:inline-flex;align-items:center;gap:5px;
+        font-family:'DM Mono';font-size:0.6em;color:#6EE7B7;
+        padding:3px 10px;background:rgba(16,185,129,0.12);
+        border:1px solid rgba(16,185,129,0.28);letter-spacing:0.06em;">
+            {rt_label}
+        </div>
+        <div style="font-family:'DM Mono';font-size:0.58em;
+        color:rgba(255,255,255,0.25);letter-spacing:0.04em;">
+            R{curr_regime}  ·  {regime_info[curr_regime][1]}
+        </div>
     </div>
 </div>
 """), unsafe_allow_html=True)
 
-st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 15px 6px;">Navigation</div>""", unsafe_allow_html=True)
+# ── Navigation ───────────────────────────────────────────────
+st.sidebar.markdown('<div class="sb-section" style="border-top:none;">Navigation</div>',
+                    unsafe_allow_html=True)
 page = st.sidebar.radio("MENU",
     ["📊 Dashboard", "💼 Portfolio", "🍫 12-Pack Radar", "📈 Backtest Lab", "📰 Macro News"],
     label_visibility="collapsed")
 
 display_mode = st.session_state.display_mode
 
-st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:6px 15px;">Theme Color</div>""", unsafe_allow_html=True)
-col1, col2, col3 = st.sidebar.columns([0.1, 1, 0.1])
-with col2:
-    new_color = st.color_picker("메인 컬러", st.session_state.main_color, label_visibility="collapsed", key="cp_theme")
-    if new_color != st.session_state.main_color:
-        st.session_state.main_color = new_color
-        st.session_state['_needs_ls_save'] = True
-        st.rerun()
+# ── Appearance ───────────────────────────────────────────────
+with st.sidebar.expander("🎨  Appearance", expanded=False):
 
-st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 15px 4px; border-top:1px solid rgba(0,0,0,0.08);">배경 색상</div>""", unsafe_allow_html=True)
-_bg_c1, _bg_c2, _bg_c3 = st.sidebar.columns([0.1, 1, 0.1])
-with _bg_c2:
-    _new_bg = st.color_picker("배경색", st.session_state.bg_color, label_visibility="collapsed", key="cp_bg")
-    if _new_bg != st.session_state.bg_color:
-        st.session_state.bg_color = _new_bg
-        st.session_state['_needs_ls_save'] = True
-        st.rerun()
+    # 메인 컬러 + 배경색 한 줄로
+    _ac1, _ac2 = st.columns(2)
+    with _ac1:
+        st.markdown('<div style="font-family:DM Mono,monospace;font-size:0.65em;color:rgba(255,255,255,0.35);margin-bottom:4px;">Accent</div>', unsafe_allow_html=True)
+        new_color = st.color_picker("Accent", st.session_state.main_color,
+                                    label_visibility="collapsed", key="cp_theme")
+        if new_color != st.session_state.main_color:
+            st.session_state.main_color = new_color
+            st.session_state['_needs_ls_save'] = True; st.rerun()
+    with _ac2:
+        st.markdown('<div style="font-family:DM Mono,monospace;font-size:0.65em;color:rgba(255,255,255,0.35);margin-bottom:4px;">Background</div>', unsafe_allow_html=True)
+        _new_bg = st.color_picker("BG", st.session_state.bg_color,
+                                   label_visibility="collapsed", key="cp_bg")
+        if _new_bg != st.session_state.bg_color:
+            st.session_state.bg_color = _new_bg
+            st.session_state['_needs_ls_save'] = True; st.rerun()
 
-with st.sidebar.expander("🎨  글씨 색상 설정", expanded=False):
+    st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
+
+    # 글씨 색상 (접기 안에 또 expander 금지 → 그냥 인라인)
     _tc_defs = [
-        ("heading",  "헤딩  (제목·큰 숫자)",    "tc_heading",  "cp_tc_heading"),
-        ("body",     "본문  (설명·라벨)",        "tc_body",     "cp_tc_body"),
-        ("muted",    "뮤트  (보조 텍스트)",      "tc_muted",    "cp_tc_muted"),
-        ("label",    "서브라벨  (캡션·단위)",    "tc_label",    "cp_tc_label"),
-        ("data",     "데이터  (숫자·표)",        "tc_data",     "cp_tc_data"),
-        ("sidebar",  "사이드바  (메뉴)",         "tc_sidebar",  "cp_tc_sidebar"),
+        ("헤딩",   "tc_heading",  "cp_tc_heading"),
+        ("본문",   "tc_body",     "cp_tc_body"),
+        ("뮤트",   "tc_muted",    "cp_tc_muted"),
+        ("레이블", "tc_label",    "cp_tc_label"),
+        ("데이터", "tc_data",     "cp_tc_data"),
+        ("사이드", "tc_sidebar",  "cp_tc_sidebar"),
     ]
-    for _role, _disp, _key, _widget_key in _tc_defs:
-        _lc, _rc = st.columns([2, 1])
-        _lc.markdown(
-            f'<div style="font-family:DM Mono,monospace;font-size:0.72em;'
-            f'color:{getattr(st.session_state, _key)};padding:6px 0 0 2px;">{_disp}</div>',
-            unsafe_allow_html=True
-        )
-        _picked = _rc.color_picker("", getattr(st.session_state, _key),
-                                    label_visibility="collapsed", key=_widget_key)
-        if _picked != getattr(st.session_state, _key):
-            setattr(st.session_state, _key, _picked)
-            st.session_state['_needs_ls_save'] = True
-            st.rerun()
+    _tc_pairs = [(_tc_defs[i], _tc_defs[i+1]) for i in range(0, len(_tc_defs)-1, 2)]
+    for (_d1, _k1, _w1), (_d2, _k2, _w2) in _tc_pairs:
+        _cc1, _cc2 = st.columns(2)
+        with _cc1:
+            st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.65em;color:rgba(255,255,255,0.35);margin-bottom:4px;">{_d1}</div>', unsafe_allow_html=True)
+            _p1 = st.color_picker("", getattr(st.session_state, _k1),
+                                   label_visibility="collapsed", key=_w1)
+            if _p1 != getattr(st.session_state, _k1):
+                setattr(st.session_state, _k1, _p1)
+                st.session_state['_needs_ls_save'] = True; st.rerun()
+        with _cc2:
+            st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.65em;color:rgba(255,255,255,0.35);margin-bottom:4px;">{_d2}</div>', unsafe_allow_html=True)
+            _p2 = st.color_picker("", getattr(st.session_state, _k2),
+                                   label_visibility="collapsed", key=_w2)
+            if _p2 != getattr(st.session_state, _k2):
+                setattr(st.session_state, _k2, _p2)
+                st.session_state['_needs_ls_save'] = True; st.rerun()
 
-    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
-    if st.button("↺  색상 전체 초기화", use_container_width=True, key="reset_colors"):
+    # 남은 하나 (tc_sidebar)
+    if len(_tc_defs) % 2 != 0:
+        _d_, _k_, _w_ = _tc_defs[-1]
+        st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.65em;color:rgba(255,255,255,0.35);margin-bottom:4px;">{_d_}</div>', unsafe_allow_html=True)
+        _p_ = st.color_picker("", getattr(st.session_state, _k_),
+                               label_visibility="collapsed", key=_w_)
+        if _p_ != getattr(st.session_state, _k_):
+            setattr(st.session_state, _k_, _p_)
+            st.session_state['_needs_ls_save'] = True; st.rerun()
+
+    if st.button("↺  초기화", use_container_width=True, key="reset_colors"):
         for _k, _v in [("main_color","#10B981"),("bg_color","#F7F6F2"),
                         ("tc_heading","#111118"),("tc_body","#2D2D2D"),
                         ("tc_muted","#6B6B7A"),("tc_label","#9494A0"),
                         ("tc_data","#111118"),("tc_sidebar","#2D2D2D")]:
             setattr(st.session_state, _k, _v)
-        st.session_state['_needs_ls_save'] = True
-        st.rerun()
+        st.session_state['_needs_ls_save'] = True; st.rerun()
 
-st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:6px 15px;">Bookmarks</div>""", unsafe_allow_html=True)
-st.sidebar.markdown("""
-<div style="display:flex; flex-direction:column; gap:0px; padding:0 12px;">
+# ── Bookmarks ────────────────────────────────────────────────
+with st.sidebar.expander("🔗  Bookmarks", expanded=False):
+    st.markdown("""
+<div style="display:flex;flex-direction:column;gap:0;">
     <a href="https://www.youtube.com/@JB_Insight" target="_blank" class="sidebar-link">📊 JB 인사이트</a>
     <a href="https://www.youtube.com/@odokgod" target="_blank" class="sidebar-link">📻 오독</a>
     <a href="https://www.youtube.com/@TQQQCRAZY" target="_blank" class="sidebar-link">🔥 TQQQ 미친놈</a>
@@ -1075,42 +1215,38 @@ st.sidebar.markdown("""
     <a href="https://kr.tradingview.com/" target="_blank" class="sidebar-link">📉 트레이딩뷰</a>
     <a href="https://claude.ai/" target="_blank" class="sidebar-link">🧠 클로드</a>
     <a href="https://gemini.google.com/" target="_blank" class="sidebar-link">✨ 제미나이</a>
-</div>
-""", unsafe_allow_html=True)
+</div>""", unsafe_allow_html=True)
 
-st.sidebar.markdown("""<div style="font-family:'DM Mono'; font-size:0.62em; font-weight:400; color:#4A5568; letter-spacing:0.2em; text-transform:uppercase; padding:14px 20px 6px; border-top:1px solid rgba(0,0,0,0.08);">Portfolio Data</div>""", unsafe_allow_html=True)
+# ── Portfolio Data ───────────────────────────────────────────
+with st.sidebar.expander("💾  Portfolio Data", expanded=False):
+    import json as _json2
+    _sb_json = _json2.dumps(st.session_state.portfolio)
+    st.download_button(
+        "⬇  Backup (JSON)",
+        data=_sb_json, file_name="portfolio.json",
+        mime="application/json",
+        use_container_width=True, key="sb_backup"
+    )
+    st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
+    _sidebar_upload = st.file_uploader(
+        "⬆  Restore (JSON)",
+        type="json", key="sb_uploader",
+        label_visibility="visible"
+    )
+    if _sidebar_upload is not None:
+        try:
+            import json as _json
+            _loaded = _json.load(_sidebar_upload)
+            st.session_state.portfolio.update(_loaded)
+            sanitize_portfolio()
+            save_portfolio_to_disk()
+            st.success("✅ 복구 완료")
+            st.rerun()
+        except:
+            st.error("❌ 파일 형식 오류")
 
-import json as _json2
-_sb_json = _json2.dumps(st.session_state.portfolio)
-st.sidebar.download_button(
-    "💾  Backup (JSON 저장)",
-    data=_sb_json,
-    file_name="portfolio.json",
-    mime="application/json",
-    use_container_width=True,
-    key="sb_backup"
-)
-
-_sidebar_upload = st.sidebar.file_uploader(
-    "📂  Restore (JSON 불러오기)",
-    type="json",
-    key="sb_uploader",
-    label_visibility="visible"
-)
-if _sidebar_upload is not None:
-    try:
-        import json as _json
-        _loaded = _json.load(_sidebar_upload)
-        st.session_state.portfolio.update(_loaded)
-        sanitize_portfolio()
-        save_portfolio_to_disk()
-        st.sidebar.success("✅ 복구 완료")
-        st.rerun()
-    except:
-        st.sidebar.error("❌ 파일 형식 오류")
-
-# ── Layout Controls (사이드바 맨 아래 - Display Mode 위) ──────
-with st.sidebar.expander("⚙️  Layout Controls  (PC 모드)", expanded=False):
+# ── Layout Controls + Display Mode ──────────────────────────
+with st.sidebar.expander("⚙️  Layout Controls  (PC)", expanded=False):
 
     # 섹션 구분 헬퍼
     def _lc_sec(title):
@@ -1170,21 +1306,23 @@ with st.sidebar.expander("⚙️  Layout Controls  (PC 모드)", expanded=False)
         st.session_state['_needs_ls_save'] = True
         st.rerun()
 
-# ── Display Mode 선택기 (사이드바 맨 아래) ────────────────────
+# ── Display Mode ─────────────────────────────────────────────
 st.sidebar.markdown(apply_theme(f"""
-<div style="font-family:'DM Mono';font-size:0.62em;font-weight:400;color:#4A5568;
-letter-spacing:0.2em;text-transform:uppercase;padding:14px 20px 8px;
-border-top:1px solid rgba(0,0,0,0.08);">Display Mode</div>
-<div style="padding:0 12px 6px;display:flex;gap:4px;">
+<div style="padding:10px 20px 6px;border-top:1px solid rgba(255,255,255,0.06);">
+<div style="font-family:'DM Mono';font-size:0.52em;color:rgba(255,255,255,0.28);
+letter-spacing:0.22em;text-transform:uppercase;margin-bottom:8px;">Display Mode</div>
+<div style="display:flex;gap:4px;">
 {"".join([
     f'<div style="flex:1;padding:7px 0;text-align:center;'
-    f'background:{"rgba("+str(r_c)+","+str(g_c)+","+str(b_c)+",0.12)" if st.session_state.display_mode==nm else "rgba(0,0,0,0.03)"};'
-    f'border:1px solid {"rgba("+str(r_c)+","+str(g_c)+","+str(b_c)+",0.4)" if st.session_state.display_mode==nm else "rgba(0,0,0,0.10)"};'
-    f'font-family:DM Mono,monospace;font-size:0.68em;font-weight:{"700" if st.session_state.display_mode==nm else "400"};'
-    f'color:{"#10B981" if st.session_state.display_mode==nm else "#6B6B7A"};">'
+    f'background:{"rgba("+str(r_c)+","+str(g_c)+","+str(b_c)+",0.18)" if st.session_state.display_mode==nm else "rgba(255,255,255,0.04)"};'
+    f'border:1px solid {"rgba("+str(r_c)+","+str(g_c)+","+str(b_c)+",0.45)" if st.session_state.display_mode==nm else "rgba(255,255,255,0.08)"};'
+    f'font-family:DM Mono,monospace;font-size:0.68em;'
+    f'font-weight:{"700" if st.session_state.display_mode==nm else "400"};'
+    f'color:{"#6EE7B7" if st.session_state.display_mode==nm else "rgba(255,255,255,0.38)"};">'
     f'{ic} {nm}</div>'
     for ic, nm in [("🖥","PC"),("📱","Tablet"),("📲","Mobile")]
 ])}
+</div>
 </div>
 """), unsafe_allow_html=True)
 
