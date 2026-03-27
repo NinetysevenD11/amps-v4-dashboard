@@ -660,8 +660,8 @@ css_block = f"""<style>
     }}
 
     [data-testid="stSidebar"] {{
-        background: #0F1117 !important;
-        border-right: 1px solid rgba(255,255,255,0.06) !important;
+        background: {bg_color} !important;
+        border-right: 1px solid var(--rule-strong) !important;
         box-shadow: none !important;
     }}
 
@@ -669,7 +669,7 @@ css_block = f"""<style>
     [data-testid="stSidebar"] p,
     [data-testid="stSidebar"] span,
     [data-testid="stSidebar"] div {{
-        color: rgba(255,255,255,0.75);
+        color: {tc_sidebar};
     }}
 
     /* ── 네비게이션 라디오 ─────────────────────────────── */
@@ -681,23 +681,23 @@ css_block = f"""<style>
         display:flex !important; align-items:center !important;
         padding:11px 20px !important; margin:0 !important;
         border-radius:0 !important; border:none !important;
-        border-bottom:1px solid rgba(255,255,255,0.05) !important;
+        border-bottom:1px solid var(--rule) !important;
         background:transparent !important;
         cursor:pointer !important; width:100% !important;
         transition:background 0.15s ease !important;
         position:relative;
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] p {{
-        color:rgba(255,255,255,0.55) !important; font-weight:400 !important;
+        color:{tc_sidebar} !important; font-weight:400 !important;
         font-size:0.84rem !important; margin:0 !important;
         font-family:'DM Sans' !important; letter-spacing:0.01em !important;
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:hover {{
-        background:rgba(255,255,255,0.04) !important;
+        background:var(--paper-3) !important;
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {{
-        background:rgba(16,185,129,0.10) !important;
-        border-bottom:1px solid rgba(255,255,255,0.05) !important;
+        background:var(--acc-pale) !important;
+        border-bottom:1px solid var(--rule) !important;
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked)::before {{
         content:'';
@@ -705,16 +705,16 @@ css_block = f"""<style>
         background:var(--acc);
     }}
     [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) p {{
-        color:#FFFFFF !important; font-weight:600 !important;
+        color:{tc_heading} !important; font-weight:600 !important;
     }}
 
     /* ── 북마크 링크 ───────────────────────────────────── */
     .sidebar-link {{
         display:flex; align-items:center; gap:10px;
         padding:9px 20px; margin:0;
-        border-bottom:1px solid rgba(255,255,255,0.05);
+        border-bottom:1px solid var(--rule);
         text-decoration:none !important;
-        color:rgba(255,255,255,0.50) !important;
+        color:{tc_sidebar} !important;
         font-weight:400; font-size:0.82rem;
         transition:background 0.15s, color 0.15s;
         background:transparent;
@@ -722,15 +722,15 @@ css_block = f"""<style>
         position:relative;
     }}
     .sidebar-link:hover {{
-        background:rgba(255,255,255,0.05) !important;
-        color:rgba(255,255,255,0.90) !important;
+        background:var(--paper-3) !important;
+        color:{tc_heading} !important;
     }}
 
     /* ── 사이드바 버튼 ─────────────────────────────────── */
     [data-testid="stSidebar"] [data-testid="stButton"] > button {{
-        background: rgba(255,255,255,0.05) !important;
-        border: 1px solid rgba(255,255,255,0.12) !important;
-        color: rgba(255,255,255,0.65) !important;
+        background: transparent !important;
+        border: 1px solid var(--rule-strong) !important;
+        color: {tc_sidebar} !important;
         border-radius: 0 !important;
         padding: 7px 14px !important;
         font-weight: 400 !important; font-size: 0.76em !important;
@@ -739,28 +739,25 @@ css_block = f"""<style>
         letter-spacing: 0.05em; text-transform: uppercase;
     }}
     [data-testid="stSidebar"] [data-testid="stButton"] > button:hover {{
-        background: rgba(16,185,129,0.12) !important;
-        border-color: rgba(16,185,129,0.35) !important;
-        color: #6EE7B7 !important;
+        background: var(--acc-pale) !important;
+        border-color: var(--acc-line) !important;
+        color: var(--bull) !important;
     }}
 
-    /* ── 사이드바 색상 선택기 / 슬라이더 / 체크박스 ──── */
-    [data-testid="stSidebar"] [data-testid="stSlider"] > div > div > div {{
-        background: rgba(255,255,255,0.10) !important;
-    }}
+    /* ── 사이드바 슬라이더 / 체크박스 ──────────────────── */
     [data-testid="stSidebar"] [data-testid="stSlider"] label p {{
-        color: rgba(255,255,255,0.55) !important;
+        color: {tc_label} !important;
         font-family: 'DM Mono', monospace !important;
         font-size: 0.72em !important;
     }}
     [data-testid="stSidebar"] [data-testid="stCheckbox"] label p {{
-        color: rgba(255,255,255,0.60) !important;
+        color: {tc_body} !important;
         font-size: 0.78em !important;
     }}
     [data-testid="stSidebar"] [data-testid="stDownloadButton"] > button {{
-        background: rgba(255,255,255,0.05) !important;
-        border: 1px solid rgba(255,255,255,0.10) !important;
-        color: rgba(255,255,255,0.60) !important;
+        background: transparent !important;
+        border: 1px solid var(--rule-strong) !important;
+        color: {tc_sidebar} !important;
         border-radius: 0 !important;
         font-family: 'DM Mono', monospace !important;
         font-size: 0.74em !important;
@@ -768,51 +765,32 @@ css_block = f"""<style>
         text-transform: uppercase; letter-spacing: 0.05em;
     }}
     [data-testid="stSidebar"] [data-testid="stDownloadButton"] > button:hover {{
-        background: rgba(16,185,129,0.10) !important;
-        border-color: rgba(16,185,129,0.30) !important;
-        color: #6EE7B7 !important;
+        background: var(--acc-pale) !important;
+        border-color: var(--acc-line) !important;
+        color: var(--bull) !important;
     }}
     [data-testid="stSidebar"] [data-testid="stFileUploader"] {{
-        background: rgba(255,255,255,0.03) !important;
-        border: 1px dashed rgba(255,255,255,0.12) !important;
+        background: var(--paper-2) !important;
+        border: 1px dashed var(--rule-strong) !important;
         border-radius: 0 !important;
-    }}
-    [data-testid="stSidebar"] [data-testid="stFileUploader"] span {{
-        color: rgba(255,255,255,0.40) !important;
-        font-size: 0.75em !important;
     }}
 
     /* ── 사이드바 expander ─────────────────────────────── */
     [data-testid="stSidebar"] [data-testid="stExpander"] {{
-        background: rgba(255,255,255,0.03) !important;
+        background: transparent !important;
         border: none !important;
-        border-top: 1px solid rgba(255,255,255,0.06) !important;
+        border-top: 1px solid var(--rule) !important;
         border-radius: 0 !important;
     }}
-    [data-testid="stSidebar"] [data-testid="stExpander"] summary {{
-        padding: 10px 16px !important;
-    }}
     [data-testid="stSidebar"] [data-testid="stExpander"] summary p {{
-        color: rgba(255,255,255,0.50) !important;
+        color: {tc_label} !important;
         font-family: 'DM Mono', monospace !important;
         font-size: 0.74em !important;
         letter-spacing: 0.12em;
         text-transform: uppercase;
     }}
     [data-testid="stSidebar"] [data-testid="stExpander"] summary:hover {{
-        background: rgba(255,255,255,0.04) !important;
-    }}
-    [data-testid="stSidebar"] [data-testid="stExpander"] summary svg {{
-        fill: rgba(255,255,255,0.35) !important;
-    }}
-
-    /* ── 사이드바 입력창 ───────────────────────────────── */
-    [data-testid="stSidebar"] [data-testid="stNumberInput"] > div > div,
-    [data-testid="stSidebar"] [data-testid="stTextInput"] > div > div {{
-        background: rgba(255,255,255,0.06) !important;
-        border: 1px solid rgba(255,255,255,0.12) !important;
-        border-radius: 0 !important;
-        color: rgba(255,255,255,0.85) !important;
+        background: var(--paper-3) !important;
     }}
 
     /* ── 사이드바 섹션 헤더 공통 ───────────────────────── */
@@ -821,10 +799,10 @@ css_block = f"""<style>
         font-family: 'DM Mono', monospace;
         font-size: 0.58em;
         font-weight: 500;
-        color: rgba(255,255,255,0.28);
+        color: {tc_label};
         letter-spacing: 0.22em;
         text-transform: uppercase;
-        border-top: 1px solid rgba(255,255,255,0.06);
+        border-top: 1px solid var(--rule);
         margin-top: 2px;
     }}
     .sb-section:first-child {{ border-top: none; }}
@@ -1102,25 +1080,25 @@ st.markdown(apply_theme(css_block), unsafe_allow_html=True)
 
 # ── 헤더 ────────────────────────────────────────────────────
 st.sidebar.markdown(apply_theme(f"""
-<div style="padding:22px 20px 16px;background:linear-gradient(160deg,#111118 60%,rgba({r_c},{g_c},{b_c},0.15));
-border-bottom:1px solid rgba(255,255,255,0.06);">
-    <div style="font-family:'DM Mono';font-size:0.52em;color:rgba(255,255,255,0.28);
+<div style="padding:22px 20px 16px;background:{bg_color};
+border-bottom:1px solid rgba(0,0,0,0.09);">
+    <div style="font-family:'DM Mono';font-size:0.52em;color:{tc_label};
     letter-spacing:0.26em;text-transform:uppercase;margin-bottom:8px;">
         Quantitative Engine
     </div>
     <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:1.65em;font-weight:800;
-    color:#FFFFFF;letter-spacing:-1px;line-height:1;margin-bottom:14px;">
+    color:{tc_heading};letter-spacing:-1px;line-height:1;margin-bottom:14px;">
         AMLS <span style="color:#10B981;">V4.5</span>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;">
         <div class="live-pulse" style="display:inline-flex;align-items:center;gap:5px;
-        font-family:'DM Mono';font-size:0.6em;color:#6EE7B7;
-        padding:3px 10px;background:rgba(16,185,129,0.12);
-        border:1px solid rgba(16,185,129,0.28);letter-spacing:0.06em;">
+        font-family:'DM Mono';font-size:0.6em;color:#059669;
+        padding:3px 10px;background:rgba(16,185,129,0.08);
+        border:1px solid rgba(16,185,129,0.25);letter-spacing:0.06em;">
             {rt_label}
         </div>
         <div style="font-family:'DM Mono';font-size:0.58em;
-        color:rgba(255,255,255,0.25);letter-spacing:0.04em;">
+        color:{tc_label};letter-spacing:0.04em;">
             R{curr_regime}  ·  {regime_info[curr_regime][1]}
         </div>
     </div>
@@ -1308,17 +1286,17 @@ with st.sidebar.expander("⚙️  Layout Controls  (PC)", expanded=False):
 
 # ── Display Mode ─────────────────────────────────────────────
 st.sidebar.markdown(apply_theme(f"""
-<div style="padding:10px 20px 6px;border-top:1px solid rgba(255,255,255,0.06);">
-<div style="font-family:'DM Mono';font-size:0.52em;color:rgba(255,255,255,0.28);
+<div style="padding:10px 20px 6px;border-top:1px solid rgba(0,0,0,0.08);">
+<div style="font-family:'DM Mono';font-size:0.52em;color:{tc_label};
 letter-spacing:0.22em;text-transform:uppercase;margin-bottom:8px;">Display Mode</div>
 <div style="display:flex;gap:4px;">
 {"".join([
     f'<div style="flex:1;padding:7px 0;text-align:center;'
-    f'background:{"rgba("+str(r_c)+","+str(g_c)+","+str(b_c)+",0.18)" if st.session_state.display_mode==nm else "rgba(255,255,255,0.04)"};'
-    f'border:1px solid {"rgba("+str(r_c)+","+str(g_c)+","+str(b_c)+",0.45)" if st.session_state.display_mode==nm else "rgba(255,255,255,0.08)"};'
+    f'background:{"rgba("+str(r_c)+","+str(g_c)+","+str(b_c)+",0.10)" if st.session_state.display_mode==nm else "rgba(0,0,0,0.03)"};'
+    f'border:1px solid {"rgba("+str(r_c)+","+str(g_c)+","+str(b_c)+",0.35)" if st.session_state.display_mode==nm else "rgba(0,0,0,0.10)"};'
     f'font-family:DM Mono,monospace;font-size:0.68em;'
     f'font-weight:{"700" if st.session_state.display_mode==nm else "400"};'
-    f'color:{"#6EE7B7" if st.session_state.display_mode==nm else "rgba(255,255,255,0.38)"};">'
+    f'color:{main_color if st.session_state.display_mode==nm else tc_label};">'
     f'{ic} {nm}</div>'
     for ic, nm in [("🖥","PC"),("📱","Tablet"),("📲","Mobile")]
 ])}
