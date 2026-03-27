@@ -487,10 +487,14 @@ def fetch_global_markets():
     all_t = list(global_tickers.keys()) + list(asset_tickers.keys()) + list(leader_tickers.keys())
     results = {}
     try:
-        end = datetime.now()
+        end   = datetime.now()
         start = end - timedelta(days=5)
         raw = yf.download(all_t, start=start.strftime('%Y-%m-%d'),
-                          end=end.strftime('%Y-%m-%d'), progress=False, auto_adjust=True)['Close']
+                          end=end.strftime('%Y-%m-%d'),
+                          progress=False, auto_adjust=True)['Close']
+        # 단일 티커 시 Series → DataFrame으로 강제 변환
+        if isinstance(raw, pd.Series):
+            raw = raw.to_frame(name=all_t[0])
         for t in all_t:
             if t in raw.columns:
                 s = raw[t].dropna()
@@ -1658,25 +1662,30 @@ if page == "📊 Dashboard":
     _qqq_missing = [t for t in _qqq_tlist if t not in _gm_data]
     if _qqq_missing:
         try:
-            _end_q = datetime.now()
+            _end_q   = datetime.now()
             _start_q = _end_q - timedelta(days=5)
-            _raw_q = yf.download(_qqq_missing,
-                                  start=_start_q.strftime('%Y-%m-%d'),
-                                  end=_end_q.strftime('%Y-%m-%d'),
-                                  progress=False, auto_adjust=True)['Close']
+            _raw_q   = yf.download(_qqq_missing,
+                                   start=_start_q.strftime('%Y-%m-%d'),
+                                   end=_end_q.strftime('%Y-%m-%d'),
+                                   progress=False, auto_adjust=True)['Close']
+            # 단일 티커 → DataFrame 강제 변환
+            if isinstance(_raw_q, pd.Series):
+                _raw_q = _raw_q.to_frame(name=_qqq_missing[0])
             for _t in _qqq_missing:
-                _col_q = _raw_q[_t] if _t in _raw_q.columns else None
-                if _col_q is not None:
-                    _s = _col_q.dropna()
-                    if len(_s) >= 2:
-                        _gm_data[_t] = {'price': float(_s.iloc[-1]),
-                                         'chg': float((_s.iloc[-1]/_s.iloc[-2]-1)*100)}
-                    elif len(_s) == 1:
-                        _gm_data[_t] = {'price': float(_s.iloc[-1]), 'chg': 0.0}
+                if _t not in _raw_q.columns:
+                    continue
+                _s = _raw_q[_t].dropna()
+                if len(_s) >= 2:
+                    _gm_data[_t] = {'price': float(_s.iloc[-1]),
+                                    'chg':   float((_s.iloc[-1]/_s.iloc[-2]-1)*100)}
+                elif len(_s) == 1:
+                    _gm_data[_t] = {'price': float(_s.iloc[-1]), 'chg': 0.0}
         except:
             pass
 
     _tm_labels, _tm_parents, _tm_values, _tm_colors, _tm_text = [], [], [], [], []
+
+    # 루트·섹터 노드는 values=0, branchvalues='remainder' 사용
     _tm_labels.append("Nasdaq 100"); _tm_parents.append(""); _tm_values.append(0); _tm_colors.append(0); _tm_text.append("")
 
     _sector_set = {}
@@ -1684,7 +1693,7 @@ if page == "📊 Dashboard":
         if _sec not in _sector_set:
             _sector_set[_sec] = True
             _tm_labels.append(_sec); _tm_parents.append("Nasdaq 100")
-            _tm_values.append(0); _tm_colors.append(0); _tm_text.append("")
+            _tm_values.append(0); _tm_colors.append(0); _tm_text.append(_sec)
 
     for _t, (_sec, _name) in _qqq_stocks.items():
         _d   = _gm_data.get(_t, {})
@@ -1723,7 +1732,7 @@ if page == "📊 Dashboard":
                 tickformat='+.1f',
             )
         ),
-        branchvalues='total',
+        branchvalues='remainder',
         tiling=dict(packing='squarify'),
     ))
     _tm_fig.update_layout(
