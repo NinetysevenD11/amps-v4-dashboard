@@ -428,18 +428,52 @@ def load_custom_backtest_data(start_date, end_date):
 
 REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPY','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=15)
 def fetch_realtime_prices():
     prices = {}
-    for ticker in REALTIME_TICKERS:
-        try:
-            info  = yf.Ticker(ticker).fast_info
-            price = info.get('last_price') or info.get('lastPrice')
-            if price and price > 0: prices[ticker] = float(price)
-        except: pass
     now_utc = datetime.now(timezone.utc)
     now_kst = now_utc + timedelta(hours=9)
     fetch_time = now_kst.strftime("%Y-%m-%d %H:%M:%S")
+    
+    try:
+        # 단 한 번의 호출로 17개 티커의 가장 최근 1분봉(interval='1m') 데이터를 가져옴
+        batch_data = yf.download(
+            REALTIME_TICKERS, 
+            period="1d", 
+            interval="1m", 
+            progress=False, 
+            auto_adjust=True,
+            threads=True
+        )['Close']
+        
+        # DataFrame 구조 처리 (단일 티커 반환과 다중 티커 반환 엣지 케이스 방어)
+        if isinstance(batch_data, pd.Series):
+            batch_data = batch_data.to_frame(name=REALTIME_TICKERS[0])
+            
+        if not batch_data.empty:
+            latest_row = batch_data.iloc[-1]
+            for ticker in REALTIME_TICKERS:
+                if ticker in latest_row.index and pd.notna(latest_row[ticker]):
+                    val = float(latest_row[ticker])
+                    if val > 0:
+                        prices[ticker] = val
+                        
+    except Exception as e:
+        # Batch 다운로드 실패 시 최후의 방어 로직 통과 처리
+        pass
+
+    # 누락된 티커 보완 (빠른 예외 복구)
+    missing_tickers = [t for t in REALTIME_TICKERS if t not in prices]
+    if missing_tickers:
+        for ticker in missing_tickers:
+            try:
+                info = yf.Ticker(ticker).fast_info
+                price = info.get('last_price') or info.get('lastPrice')
+                if price and price > 0: 
+                    prices[ticker] = float(price)
+            except: 
+                pass
+
     return prices, fetch_time
 
 @st.cache_data(ttl=1800)
@@ -2917,7 +2951,7 @@ elif page == "🍫 12-Pack Radar":
         radar_color  = "#DC2626"
     elif warn_cnt >= 4 or risk_cnt >= 1:
         radar_status = "변동성 주의 (Warning)"
-        radar_msg    = "시장 곳곳에서 균열의 조짐이 감지되고 있습니다. 표면적인 지수는 버티고 있을지 몰라도 내부 자금 흐름이나 심리 지표가 점차 악화되고 있습니다. 신규 매수는 철저히 보류하시고, 포트폴리오의 리스크 노출도를 점검하며 보수적인 관망 자세를 유지하는 것이 좋습니다."
+        radar_msg    = "시장 곳곳에서 균열의 조짐이 감지되고 풀 지표가 점차 악화되고 있습니다. 신규 매수는 철저히 보류하시고, 포트폴리오의 리스크 노출도를 점검하며 보수적인 관망 자세를 유지하는 것이 좋습니다."
         radar_color  = "#D97706"
     else:
         radar_status = "안정적 순항 (Safe)"
@@ -3363,280 +3397,4 @@ elif page == "📈 Backtest Lab":
                 daily_ret = bt_df[['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPY','SMH','GLD']].pct_change().fillna(0)
                 w_orig = get_weights_v45(bt_df['Regime'].iloc[0], False)
 
-                val_o, val_q, val_qld, val_tqqq = 10000, 10000, 10000, 10000
-                hist_o, hist_q, hist_qld, hist_tqqq = [val_o], [val_q], [val_qld], [val_tqqq]
-                invested = [10000]; curr_inv = 10000
-
-                for i in range(1, len(bt_df)):
-                    today     = bt_df.index[i]
-                    yesterday = bt_df.index[i-1]
-                    ret_o = sum(w_orig.get(t,0) * daily_ret[t].iloc[i] for t in w_orig if t in daily_ret.columns)
-                    val_o *= (1 + ret_o); val_q *= (1 + daily_ret['QQQ'].iloc[i])
-                    val_qld *= (1 + daily_ret['QLD'].iloc[i]); val_tqqq *= (1 + daily_ret['TQQQ'].iloc[i])
-                    if today.month != yesterday.month:
-                        val_o += monthly_cont; val_q += monthly_cont
-                        val_qld += monthly_cont; val_tqqq += monthly_cont
-                        curr_inv += monthly_cont
-                    hist_o.append(val_o); hist_q.append(val_q)
-                    hist_qld.append(val_qld); hist_tqqq.append(val_tqqq)
-                    invested.append(curr_inv)
-                    smh_cond_i = (bt_df['SMH'].iloc[i] > bt_df['SMH_MA50'].iloc[i]) and (bt_df['SMH_3M_Ret'].iloc[i] > 0.05) and (bt_df['SMH_RSI'].iloc[i] > 50)
-                    w_orig = get_weights_v45(bt_df['Regime'].iloc[i], smh_cond_i)
-
-                res_df = pd.DataFrame(index=bt_df.index)
-                res_df['V4.5'], res_df['QQQ'], res_df['QLD'], res_df['TQQQ'] = hist_o, hist_q, hist_qld, hist_tqqq
-                res_df['Invested'] = invested
-                days = (res_df.index[-1] - res_df.index[0]).days
-
-                def calc_metrics(series, inv_series):
-                    final_val = series.iloc[-1]; total_inv = inv_series.iloc[-1]
-                    ret  = (final_val / total_inv) - 1
-                    cagr = (final_val / total_inv) ** (365.25 / days) - 1 if days > 0 else 0
-                    mdd  = ((series / series.cummax()) - 1).min()
-                    return ret, cagr, mdd
-
-                ret_o, cagr_o, mdd_o       = calc_metrics(res_df['V4.5'], res_df['Invested'])
-                ret_q, cagr_q, mdd_q       = calc_metrics(res_df['QQQ'],  res_df['Invested'])
-                ret_qld, cagr_qld, mdd_qld = calc_metrics(res_df['QLD'],  res_df['Invested'])
-                ret_t, cagr_t, mdd_t       = calc_metrics(res_df['TQQQ'], res_df['Invested'])
-
-                mc1, mc2, mc3, mc4 = st.columns(4)
-
-                def _mc_html(title, ret, cagr, mdd, is_main=False):
-                    border_top = f"rgba({r_c},{g_c},{b_c},0.55)" if is_main else "rgba(0,0,0,0.12)"
-                    bg        = f"rgba({r_c},{g_c},{b_c},0.06)" if is_main else "#FFFFFF"
-                    tag_html  = (f'<span style="background:rgba({r_c},{g_c},{b_c},0.1);'
-                                 f'color:{main_color};border-radius:5px;padding:2px 8px;'
-                                 f'font-size:0.6em;font-family:DM Mono,monospace;'
-                                 f'border:1px solid rgba({r_c},{g_c},{b_c},0.25);'
-                                 f'letter-spacing:0.1em;">STRATEGY</span>') if is_main else ''
-                    ret_c     = "#059669" if ret >= 0 else "#EF4444"
-                    return (
-                        f'<div style="background:{bg};border:1px solid rgba(0,0,0,0.08);'
-                        f'border-top:2px solid {border_top};border-radius:14px;'
-                        f'padding:16px 18px;box-shadow:0 2px 12px rgba(0,0,0,0.05);'
-                        f'min-height:100px;">'
-                        f'<div style="font-family:DM Mono,monospace;font-size:0.62em;'
-                        f'color:#4A5568;letter-spacing:0.14em;text-transform:uppercase;'
-                        f'margin-bottom:6px;">{title}&nbsp;&nbsp;{tag_html}</div>'
-                        f'<div style="font-family:DM Mono,monospace;font-size:1.6em;'
-                        f'font-weight:400;color:#0F172A;letter-spacing:-0.5px;'
-                        f'margin-bottom:6px;">CAGR {cagr*100:.1f}%</div>'
-                        f'<div style="font-family:DM Mono,monospace;font-size:0.72em;'
-                        f'color:#4A5568;">'
-                        f'누적&nbsp;<b style="color:{ret_c};">{ret*100:.1f}%</b>'
-                        f'&nbsp;&nbsp;MDD&nbsp;<b style="color:#EF4444;">{mdd*100:.1f}%</b>'
-                        f'</div></div>'
-                    )
-
-                with mc1: st.markdown(_mc_html("✦ AMLS V4.5", ret_o,   cagr_o,   mdd_o,   True), unsafe_allow_html=True)
-                with mc2: st.markdown(_mc_html("QQQ",          ret_q,   cagr_q,   mdd_q),         unsafe_allow_html=True)
-                with mc3: st.markdown(_mc_html("QLD",          ret_qld, cagr_qld, mdd_qld),        unsafe_allow_html=True)
-                with mc4: st.markdown(_mc_html("TQQQ",         ret_t,   cagr_t,   mdd_t),          unsafe_allow_html=True)
-
-                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-                fig_eq = go.Figure()
-                fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['QQQ'],  name='QQQ',  line=dict(color='#CBD5E1', width=1.2, dash='dot')))
-                fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['QLD'],  name='QLD',  line=dict(color='#3B82F6', width=1.2, dash='dash')))
-                fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['TQQQ'], name='TQQQ', line=dict(color='#EF4444', width=1.2, dash='dash')))
-                fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['V4.5'], name='AMLS', line=dict(color=main_color, width=3)))
-                fig_eq.update_layout(
-                    title=dict(text="Equity Curve  ·  Log Scale", font=dict(family='DM Mono', size=13, color=t_color)),
-                    height=380, yaxis_type='log', **chart_layout
-                )
-                fig_eq.update_xaxes(**_ax)
-                fig_eq.update_yaxes(**_ax)
-                with st.container(border=True):
-                    st.plotly_chart(fig_eq, use_container_width=True)
-
-                st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-
-                def get_dd_series(s): return (s / s.cummax()) - 1
-                fig_dd = go.Figure()
-                fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['QQQ']),  name='QQQ',  line=dict(color='#CBD5E1', width=1)))
-                fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['QLD']),  name='QLD',  line=dict(color='#3B82F6', width=1)))
-                fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['TQQQ']), name='TQQQ', line=dict(color='#EF4444', width=1)))
-                fig_dd.add_trace(go.Scatter(x=res_df.index, y=get_dd_series(res_df['V4.5']), name='AMLS',
-                                             fill='tozeroy', fillcolor=f'rgba({r_c},{g_c},{b_c},0.1)',
-                                             line=dict(color=main_color, width=2.2)))
-                fig_dd.update_layout(
-                    title=dict(text="Drawdown Curve", font=dict(family='DM Mono', size=13, color=t_color)),
-                    height=260, **chart_layout
-                )
-                fig_dd.update_xaxes(**_ax)
-                fig_dd.update_yaxes(tickformat='.0%', **_ax)
-                with st.container(border=True):
-                    st.plotly_chart(fig_dd, use_container_width=True)
-
-                st.divider()
-            if st.button("✦ AI 추론 요약 실행", use_container_width=True):
-                try:
-                    import google.generativeai as genai
-                    api_key = st.secrets["GEMINI_API_KEY"]
-                    genai.configure(api_key=api_key)
-                    models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                    model  = genai.GenerativeModel(models[0].replace('models/',''))
-                    prompt = f"""너는 최고 퀀트 애널리스트야. AMLS V4.5 전략 백테스트 결과를 분석해.
-[AMLS] 누적수익률: {ret_o*100:.1f}%, CAGR: {cagr_o*100:.1f}%, MDD: {mdd_o*100:.1f}%
-[TQQQ] 누적수익률: {ret_t*100:.1f}%, CAGR: {cagr_t*100:.1f}%, MDD: {mdd_t*100:.1f}%
-AMLS 전략이 레버리지 MDD를 어떻게 회피하면서 수익을 냈는지 3단락으로 분석해."""
-                    with st.spinner("AI 분석 중..."):
-                        response = model.generate_content(prompt)
-                        st.markdown(apply_theme(f"""<div class="glass-card" style="height:auto !important; padding:28px !important; color:#CBD5E1; font-weight:400; line-height:1.75; font-size:0.95em;">{response.text}</div>"""), unsafe_allow_html=True)
-                except KeyError:
-                    st.error("🚨 GEMINI_API_KEY 누락")
-
-# ──────────────────────────────────────────
-elif page == "📰 Macro News":
-    headlines_for_ai, news_items = fetch_macro_news()
-
-    st.markdown(apply_theme(f"""
-    <div style="border-top:3px solid #111118;border-bottom:1px solid rgba(0,0,0,0.12);
-        padding:18px 0 14px;margin-bottom:24px;">
-        <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-            <div>
-                <div style="font-family:'DM Mono',monospace;font-size:0.6em;color:#9494A0;
-                    letter-spacing:0.22em;text-transform:uppercase;margin-bottom:6px;">
-                    Global Macro  ·  Wall Street Analysis Engine
-                </div>
-                <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:2.2em;
-                    font-weight:800;color:{tc_heading};
-                    letter-spacing:-1.5px;line-height:1;">
-                    Market Briefing
-                </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:12px;padding-bottom:4px;">
-                <div class="live-pulse" style="font-family:'DM Mono',monospace;font-size:0.65em;
-                    color:#059669;padding:4px 12px;
-                    background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);
-                    letter-spacing:0.06em;">{rt_label}</div>
-                <div style="font-family:'DM Mono',monospace;font-size:0.62em;color:#9494A0;
-                    letter-spacing:0.05em;">{last_update_time}</div>
-            </div>
-        </div>
-    </div>
-    """), unsafe_allow_html=True)
-
-    news_left, news_right = st.columns([1, 1.6])
-
-    with news_left:
-        st.markdown(
-            f'<div style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:500;'
-            f'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;'
-            f'padding-bottom:6px;border-bottom:2px solid #111118;margin-bottom:14px;">'
-            f'AI  Analyst  ·  System-2 Reasoning</div>',
-            unsafe_allow_html=True
-        )
-
-        if st.button("↻  심층 추론 요약 실행", use_container_width=True):
-            try:
-                import google.generativeai as genai
-                api_key = st.secrets["GEMINI_API_KEY"]
-                if not headlines_for_ai:
-                    st.warning("분석할 뉴스가 없습니다.")
-                else:
-                    with st.spinner("AI 분석 중..."):
-                        genai.configure(api_key=api_key)
-                        models = [m.name for m in genai.list_models()
-                                  if 'generateContent' in m.supported_generation_methods]
-                        model  = genai.GenerativeModel(models[0].replace('models/',''))
-                        prompt = ("너는 퀀트 애널리스트야. 다음 뉴스를 섹터별, 리스크 요소, "
-                                  "최종 투자 스탠스로 나누어 3문단으로 요약해.\n"
-                                  + "\n".join(headlines_for_ai))
-                        response = model.generate_content(prompt)
-                        st.markdown(
-                            f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);'
-                            f'border-left:3px solid {main_color};padding:20px 22px;'
-                            f'margin-top:12px;">'
-                            f'<div style="font-family:DM Mono,monospace;font-size:0.58em;'
-                            f'color:#9494A0;letter-spacing:0.16em;text-transform:uppercase;'
-                            f'margin-bottom:10px;">AI Summary</div>'
-                            f'<div style="font-family:DM Sans,sans-serif;font-size:0.9em;'
-                            f'color:{tc_body};line-height:1.75;">{response.text}</div>'
-                            f'</div>',
-                            unsafe_allow_html=True
-                        )
-            except KeyError:
-                st.error("🚨 GEMINI_API_KEY 누락")
-        else:
-            st.markdown(
-                f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);'
-                f'border-left:3px solid rgba(0,0,0,0.15);padding:20px 22px;margin-top:12px;">'
-                f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;'
-                f'letter-spacing:0.14em;text-transform:uppercase;margin-bottom:10px;">How It Works</div>'
-                f'<div style="font-family:DM Sans,sans-serif;font-size:0.85em;color:{tc_muted};'
-                f'line-height:1.7;">'
-                f'버튼을 누르면 Google Gemini AI가 최신 뉴스 헤드라인을<br>'
-                f'<b style="color:{tc_body};">① 섹터별 분류</b> → '
-                f'<b style="color:{tc_body};">② 리스크 요소 추출</b> → '
-                f'<b style="color:{tc_body};">③ 최종 투자 스탠스</b><br>'
-                f'3단계로 구조화해서 요약해 드립니다.'
-                f'</div></div>',
-                unsafe_allow_html=True
-            )
-
-        if news_items:
-            st.markdown(
-                f'<div style="margin-top:16px;padding:10px 14px;'
-                f'background:rgba(0,0,0,0.03);border-left:2px solid rgba(0,0,0,0.15);">'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.7em;color:#9494A0;">'
-                f'수집된 헤드라인  <b style="color:{tc_data};">{len(news_items)}건</b>'
-                f'  ·  Google News RSS</span>'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-
-    with news_right:
-        st.markdown(
-            f'<div style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:500;'
-            f'color:#6B6B7A;letter-spacing:0.2em;text-transform:uppercase;'
-            f'padding-bottom:6px;border-bottom:2px solid #111118;margin-bottom:14px;">'
-            f'Latest Headlines  ·  {len(news_items) if news_items else 0} items</div>',
-            unsafe_allow_html=True
-        )
-
-        if news_items:
-            for idx, item in enumerate(news_items):
-                _num_color  = main_color if idx < 3 else "#9494A0"
-                _top_border = f"2px solid {main_color}" if idx == 0 else "1px solid rgba(0,0,0,0.10)"
-                st.markdown(
-                    f'<div style="display:flex;gap:14px;padding:12px 0;'
-                    f'border-bottom:1px solid rgba(0,0,0,0.07);'
-                    f'border-top:{_top_border if idx == 0 else "none"};">'
-                    f'<div style="font-family:DM Mono,monospace;font-size:0.75em;'
-                    f'color:{_num_color};font-weight:600;min-width:22px;'
-                    f'padding-top:2px;font-variant-numeric:tabular-nums;">'
-                    f'{idx+1:02d}</div>'
-                    f'<div style="flex:1;">'
-                    f'<a href="{item["link"]}" target="_blank" style="text-decoration:none;">'
-                    f'<div style="font-family:DM Sans,sans-serif;font-size:0.88em;'
-                    f'color:{tc_body};line-height:1.5;font-weight:{"500" if idx < 3 else "400"};'
-                    f'transition:color 0.15s;"'
-                    f' onmouseover="this.style.color=\'{main_color}\'"'
-                    f' onmouseout="this.style.color=\'{tc_body}\'">'
-                    f'{item["title"]}'
-                    f'</div>'
-                    f'</a>'
-                    f'<div style="font-family:DM Mono,monospace;font-size:0.65em;'
-                    f'color:#9494A0;margin-top:4px;letter-spacing:0.04em;">'
-                    f'{item["date"]}</div>'
-                    f'</div>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-        else:
-            st.markdown(
-                f'<div style="padding:20px;background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);">'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.8em;color:#9494A0;">'
-                f'뉴스를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.</span></div>',
-                unsafe_allow_html=True
-            )
-
-# ══════════════════════════════════════════════════════════════
-# 최하단: localStorage 영속화 저장
-# 매 렌더링마다 최신 상태를 localStorage에 기록.
-# _needs_ls_save 플래그와 무관하게 항상 실행하여
-# 페이지 최초 진입 후에도 데이터가 즉시 보호된다.
-# ══════════════════════════════════════════════════════════════
-_ls_save_all()
+                val_o, val_q, val_qld, val_tqqq = 10000, 10
