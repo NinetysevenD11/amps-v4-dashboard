@@ -126,6 +126,7 @@ def _ls_save_all():
 def _ls_load():
     if st.session_state._ls_loaded:
         return
+    _qp = st.query_params.to_dict()
     st.markdown("""<script>
     (function(){
         var keys = ["amls_portfolio","amls_goal","amls_layout","amls_theme","amls_dispmode"];
@@ -285,10 +286,18 @@ def load_data():
         try:
             data = yf.download(TICKERS, start=start_date.strftime("%Y-%m-%d"), end=end_date.strftime("%Y-%m-%d"), progress=False, auto_adjust=True)['Close']
             if data.empty: continue
+            
+            # 💡 [CRITICAL FIX] 비트코인 등 주말 거래 자산으로 인한 캘린더 일수 왜곡을 방지하기 위해,
+            # QQQ가 거래된 날(정규 영업일)만 남기고 필터링합니다. 
+            if 'QQQ' in data.columns:
+                data = data.dropna(subset=['QQQ'])
+                
             df = pd.DataFrame(index=data.index)
             for t in TICKERS:
                 if t in data.columns: df[t] = data[t]
             df = df.ffill().bfill()
+            
+            # 이제 200일 이동평균선은 정확히 200 거래일(Trading Days)로 계산됩니다.
             df['QQQ_MA20']      = df['QQQ'].rolling(20).mean()
             df['QQQ_MA50']      = df['QQQ'].rolling(50).mean()
             df['QQQ_MA200']     = df['QQQ'].rolling(200).mean()
@@ -358,6 +367,10 @@ def apply_asymmetric_delay(targets):
 def load_custom_backtest_data(start_date, end_date):
     fetch_start = pd.to_datetime(start_date) - timedelta(days=400)
     data = yf.download(TICKERS, start=fetch_start.strftime("%Y-%m-%d"), end=(pd.to_datetime(end_date) + timedelta(days=1)).strftime("%Y-%m-%d"), progress=False, auto_adjust=True)['Close']
+    
+    if 'QQQ' in data.columns:
+        data = data.dropna(subset=['QQQ'])
+        
     bt_df = pd.DataFrame(index=data.index)
     for t in TICKERS: bt_df[t] = data[t]
     bt_df = bt_df.ffill().bfill()
@@ -396,7 +409,6 @@ def load_custom_backtest_data(start_date, end_date):
 
 REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPY','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
 
-# 💡 실시간 데이터 수집 최적화 함수 (프리장/애프터장 반영)
 @st.cache_data(ttl=15)
 def fetch_realtime_prices():
     prices = {}
@@ -515,7 +527,6 @@ df['Target'] = df.apply(get_target_v45, axis=1)
 df['Regime'] = apply_asymmetric_delay(df['Target'])
 
 live_regime   = get_target_v45(last_row)
-# 💡 과거 지연 버그 수정 (iloc[-2] -> iloc[-1])
 hist_regime   = int(df.iloc[-1]['Regime'])
 
 if live_regime > hist_regime:
@@ -764,6 +775,7 @@ with hdr_c2:
 st.markdown(apply_theme(f"""<div style="position:relative;margin:14px 0 24px;height:1px;background:rgba(0,0,0,0.07);"><div style="position:absolute;left:0;top:0;width:100%;height:1px;background:rgba(0,0,0,0.12);"></div><div style="position:absolute;left:0;top:-1px;width:80px;height:3px;background:var(--acc);"></div></div>"""), unsafe_allow_html=True)
 
 if page == "📊 Dashboard":
+    # 💡 UI 직관성 개선: 실제 시스템의 200일선, 50일선 기준값을 괄호 안에 명시적으로 표시합니다.
     def _lg_row(label, val, passed):
         icon, color = ("●", main_color) if passed else ("○", "#B0B0BE")
         val_str = f"${val:.2f}" if isinstance(val, (int, float)) and val > 5 else f"{val:.2f}" if isinstance(val, (int, float)) else str(val)
@@ -779,9 +791,11 @@ if page == "📊 Dashboard":
     left_col, right_col = st.columns([1, 2.4])
     with left_col:
         regime_accent = {1: main_color, 2: "#D97706", 3: "#DC2626", 4: "#7C3AED"}[curr_regime]
-        # 💡 UI 상에 숨겨진 Credit Stress 방어 로직 명시
+        
+        # 💡 숨겨져있던 신용경색(Credit Stress) 방어 지표 화면에 표기
         credit_check = last_row['HYG_IEF_Ratio'] >= last_row['HYG_IEF_MA20']
-        st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-top:3px solid {regime_accent};padding:20px 18px 16px;margin-bottom:10px;position:relative;overflow:hidden;"><div style="position:absolute;right:-4px;bottom:-16px;font-family:Plus Jakarta Sans,sans-serif;font-size:7em;font-weight:800;color:rgba(0,0,0,0.04);line-height:1;pointer-events:none;user-select:none;">{curr_regime}</div><div style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;">Market Regime</div><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:2em;font-weight:800;letter-spacing:-1px;color:{regime_accent};line-height:1;margin-bottom:4px;">{regime_info[curr_regime][0]}</div><div style="font-family:DM Mono,monospace;font-size:0.72em;color:#6B6B7A;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;">{regime_info[curr_regime][1]}</div>{_lg_row("VIX < 40", f"{vix_close:.2f}", vix_close<=40) + _lg_row("QQQ > 200MA", f"${qqq_close:.2f}", qqq_close>=qqq_ma200) + _lg_row("50MA ≥ 200MA", f"${qqq_ma50:.2f}", qqq_ma50>=qqq_ma200) + _lg_row("Credit Stress 방어", "안정" if credit_check else "경계", credit_check)}<div style="margin-top:8px;padding:6px 10px;background:rgba(16,185,129,0.07);border-left:2px solid {main_color};font-family:DM Mono,monospace;font-size:0.76em;color:#059669;">{regime_committee_msg}</div></div>'), unsafe_allow_html=True)
+        
+        st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-top:3px solid {regime_accent};padding:20px 18px 16px;margin-bottom:10px;position:relative;overflow:hidden;"><div style="position:absolute;right:-4px;bottom:-16px;font-family:Plus Jakarta Sans,sans-serif;font-size:7em;font-weight:800;color:rgba(0,0,0,0.04);line-height:1;pointer-events:none;user-select:none;">{curr_regime}</div><div style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;">Market Regime</div><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:2em;font-weight:800;letter-spacing:-1px;color:{regime_accent};line-height:1;margin-bottom:4px;">{regime_info[curr_regime][0]}</div><div style="font-family:DM Mono,monospace;font-size:0.72em;color:#6B6B7A;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;">{regime_info[curr_regime][1]}</div>{_lg_row("VIX < 40", f"{vix_close:.2f}", vix_close<=40) + _lg_row(f"QQQ > 200MA [{qqq_ma200:.2f}]", f"${qqq_close:.2f}", qqq_close>=qqq_ma200) + _lg_row(f"50MA ≥ 200MA [{qqq_ma200:.2f}]", f"${qqq_ma50:.2f}", qqq_ma50>=qqq_ma200) + _lg_row("Credit Stress 방어", "안정" if credit_check else "경계", credit_check)}<div style="margin-top:8px;padding:6px 10px;background:rgba(16,185,129,0.07);border-left:2px solid {main_color};font-family:DM Mono,monospace;font-size:0.76em;color:#059669;">{regime_committee_msg}</div></div>'), unsafe_allow_html=True)
         st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-top:3px solid {soxl_color};padding:18px 18px 14px;margin-bottom:10px;"><div style="font-family:DM Mono,monospace;font-size:0.68em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:8px;">Semi-Conductor Gate</div><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.6em;font-weight:400;color:{soxl_color};margin-bottom:4px;">{soxl_title}</div><div style="font-family:DM Mono,monospace;font-size:0.7em;color:#6B6B7A;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:12px;">{soxl_strat}</div>{_lg_row("SMH > 50MA", f"${smh_close:.2f}", smh_close > smh_ma50) + _lg_row("Momentum 1M >10%", f"{smh_1m*100:.1f}%", smh_3m > 0.05 or smh_1m > 0.10) + _lg_row("RSI > 50", f"{smh_rsi:.1f}", smh_rsi > 50)}</div>'), unsafe_allow_html=True)
         weight_bar_rows = ""
         for k, v in target_weights.items():
