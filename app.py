@@ -316,15 +316,25 @@ def get_target_v45(row):
     if bull_trend and low_vix and credit_ok: return 1
     return 2
 
+# 💡 수정된 비대칭 지연 로직 (R3 -> R2 상향 시 즉각 반영)
 def apply_asymmetric_delay(targets):
     res = []; hist_curr = 3; pend = None; cnt = 0
     for t in targets:
-        if t > hist_curr: hist_curr = t; pend = None; cnt = 0
+        if t > hist_curr:  
+            hist_curr = t; pend = None; cnt = 0
         elif t < hist_curr:
-            if t == pend:
-                cnt += 1
-                if cnt >= 5: hist_curr = t; pend = None; cnt = 0
-            else: pend = t; cnt = 1
+            # 💡 R3 -> R2 탈출 시 5일 대기 생략 (즉시 승급)
+            if hist_curr == 3 and t <= 2:
+                hist_curr = 2
+                if t == 1:
+                    pend = 1; cnt = 1  # 2로 즉시 올린 뒤, R1 대기 카운트 시작
+                else:
+                    pend = None; cnt = 0
+            else:
+                if t == pend:
+                    cnt += 1
+                    if cnt >= 5: hist_curr = t; pend = None; cnt = 0
+                else: pend = t; cnt = 1
         else: pend = None; cnt = 0
         res.append(hist_curr)
     return pd.Series(res, index=targets.index).shift(1).bfill()
@@ -371,7 +381,6 @@ def load_custom_backtest_data(start_date, end_date):
 
 REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPY','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
 
-# 💡 실시간 데이터 수집 최적화 함수 (프리장/애프터장 반영)
 @st.cache_data(ttl=15)
 def fetch_realtime_prices():
     prices = {}
@@ -491,7 +500,15 @@ df['Regime'] = apply_asymmetric_delay(df['Target'])
 
 live_regime   = get_target_v45(last_row)
 hist_regime   = int(df.iloc[-2]['Regime'])
-curr_regime   = live_regime if live_regime > hist_regime else hist_regime
+
+# 💡 현재 레짐 판단 로직에도 R3 -> R2 즉시 승급 반영
+if live_regime > hist_regime:
+    curr_regime = live_regime
+elif hist_regime == 3 and live_regime <= 2:
+    curr_regime = 2
+else:
+    curr_regime = hist_regime
+
 target_regime = live_regime
 
 smh_cond = (smh_close > smh_ma50) and (smh_3m > 0.05 or smh_1m > 0.10) and (smh_rsi > 50)
@@ -506,9 +523,15 @@ def get_weights_v45(reg, smh_ok):
     return w
 target_weights = get_weights_v45(curr_regime, smh_cond)
 
-if curr_regime == live_regime: regime_committee_msg = "🟢 조건 부합 (안정)"
-elif live_regime > curr_regime: regime_committee_msg = f"🔴 R{live_regime} 하향 즉시 반영"
-else: regime_committee_msg = f"🟡 R{live_regime} 승급 대기 (5일)"
+# 💡 대시보드 상태 메시지 업데이트
+if curr_regime == live_regime: 
+    regime_committee_msg = "🟢 조건 부합 (안정)"
+elif live_regime > curr_regime: 
+    regime_committee_msg = f"🔴 R{live_regime} 방어 즉시 반영"
+elif hist_regime == 3 and live_regime == 1 and curr_regime == 2:
+    regime_committee_msg = "🟡 R2 1차 회복 · R1 승급 대기 (5일)"
+else: 
+    regime_committee_msg = f"🟡 R{live_regime} 승급 대기 (5일)"
 
 b_color, t_color, line_c, dash_c, rsi_low_c = 'rgba(0,0,0,0)', '#4A4A57', main_color, '#B0B0BE', main_color
 chart_layout = dict(paper_bgcolor=b_color, plot_bgcolor=b_color, font=dict(family="DM Mono, DM Sans, monospace", color=t_color), margin=dict(l=0, r=0, t=40, b=0))
@@ -702,7 +725,6 @@ _dm_c1, _dm_c2, _dm_c3 = st.sidebar.columns(3)
 for _dmc, _dmnm in [(_dm_c1,"PC"), (_dm_c2,"Tablet"), (_dm_c3,"Mobile")]:
     if _dmc.button(_dmnm, key=f"dm_{_dmnm}", use_container_width=True): st.session_state.display_mode = _dmnm; st.session_state['_needs_ls_save'] = True; st.rerun()
 
-# 💡 상단 변수 할당 파트 복구 (NameError 해결)
 _qqq_chg  = (last_row['QQQ'] / last_row['QQQ_MA200'] - 1) * 100
 _vix_now  = last_row['^VIX']
 _smh_chg  = last_row['SMH_1M_Ret'] * 100
@@ -788,7 +810,6 @@ if page == "📊 Dashboard":
 
     _sec_label("② Rates  /  Commodities  /  Crypto")
     _asset_cols = st.columns(7)
-    # 💡 딕셔너리 내부 파싱 버그(f-string) 수정을 위해 외부 변수로 분리
     _ico_dict = {"^TNX":"📈","GLD":"🥇","SLV":"⚪","USO":"🛢","BTC-USD":"₿","ETH-USD":"Ξ","UUP":"💵"}
     for _i, (_t, _name) in enumerate(_asset_tickers.items()):
         _d = _gm_data.get(_t, {}); _chg, _px = _d.get('chg', 0.0), _d.get('price', 0.0)
