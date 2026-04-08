@@ -371,7 +371,7 @@ def load_custom_backtest_data(start_date, end_date):
 
 REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPY','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
 
-# 💡 실시간 데이터 수집 최적화 함수 
+# 💡 실시간 데이터 수집 최적화 함수 (프리장/애프터장 반영)
 @st.cache_data(ttl=15)
 def fetch_realtime_prices():
     prices = {}
@@ -702,7 +702,13 @@ _dm_c1, _dm_c2, _dm_c3 = st.sidebar.columns(3)
 for _dmc, _dmnm in [(_dm_c1,"PC"), (_dm_c2,"Tablet"), (_dm_c3,"Mobile")]:
     if _dmc.button(_dmnm, key=f"dm_{_dmnm}", use_container_width=True): st.session_state.display_mode = _dmnm; st.session_state['_needs_ls_save'] = True; st.rerun()
 
+# 💡 상단 변수 할당 파트 복구 (NameError 해결)
+_qqq_chg  = (last_row['QQQ'] / last_row['QQQ_MA200'] - 1) * 100
+_vix_now  = last_row['^VIX']
+_smh_chg  = last_row['SMH_1M_Ret'] * 100
+
 def _pill(label, value, color): return f'<div style="display:flex;flex-direction:column;align-items:center;padding:8px 18px;background:#FFFFFF;border:1px solid rgba(0,0,0,0.07);border-top:2px solid {color};border-radius:12px;min-width:90px;"><span style="font-family:\'DM Mono\';font-size:0.6em;color:#4A5568;letter-spacing:0.14em;text-transform:uppercase;">{label}</span><span style="font-family:\'DM Mono\';font-size:1.05em;font-weight:500;color:#0F172A;margin-top:2px;">{value}</span></div>'
+
 _p_qqq  = _pill("QQQ/200MA", f"{_qqq_chg:+.1f}%", main_color if _qqq_chg >= 0 else "#EF4444")
 _p_vix  = _pill("VIX", f"{_vix_now:.1f}", main_color if _vix_now < 20 else ("#F59E0B" if _vix_now < 30 else "#EF4444"))
 _p_smh  = _pill("SMH 1M", f"{_smh_chg:+.1f}%", main_color if _smh_chg >= 0 else "#EF4444")
@@ -782,6 +788,7 @@ if page == "📊 Dashboard":
 
     _sec_label("② Rates  /  Commodities  /  Crypto")
     _asset_cols = st.columns(7)
+    # 💡 딕셔너리 내부 파싱 버그(f-string) 수정을 위해 외부 변수로 분리
     _ico_dict = {"^TNX":"📈","GLD":"🥇","SLV":"⚪","USO":"🛢","BTC-USD":"₿","ETH-USD":"Ξ","UUP":"💵"}
     for _i, (_t, _name) in enumerate(_asset_tickers.items()):
         _d = _gm_data.get(_t, {}); _chg, _px = _d.get('chg', 0.0), _d.get('price', 0.0)
