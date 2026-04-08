@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
@@ -15,12 +14,8 @@ import os
 
 warnings.filterwarnings('ignore')
 
-# ==========================================
-# 1. 설정 및 데이터
-# ==========================================
 st.set_page_config(page_title="AMLS V4.5 FINANCE STRATEGY", layout="wide", page_icon="🌿", initial_sidebar_state="expanded")
 
-# --- 🎨 테마 커스텀 시스템 ---
 if 'display_mode' not in st.session_state: st.session_state.display_mode  = 'PC'
 if 'lc_lr_split'  not in st.session_state: st.session_state.lc_lr_split   = 38
 if 'lc_delta_wt'  not in st.session_state: st.session_state.lc_delta_wt   = 52
@@ -45,9 +40,6 @@ if '_ls_loaded'   not in st.session_state: st.session_state._ls_loaded   = False
 if 'rebal_locked' not in st.session_state: st.session_state.rebal_locked = False
 if 'rebal_plan'   not in st.session_state: st.session_state.rebal_plan   = None
 
-# ==========================================
-# localStorage 영속화 레이어
-# ==========================================
 def _ls_save_all():
     _layout = json.dumps({"display_mode": st.session_state.display_mode, "lc_lr_split": st.session_state.lc_lr_split, "lc_delta_wt": st.session_state.lc_delta_wt, "lc_editor_h": st.session_state.lc_editor_h, "lc_goal_inp": st.session_state.lc_goal_inp, "lc_pie_h": st.session_state.lc_pie_h, "lc_pie_split": st.session_state.lc_pie_split, "lc_bar_h": st.session_state.lc_bar_h, "lc_show_lp": st.session_state.lc_show_lp, "lc_show_qo": st.session_state.lc_show_qo, "lc_show_reg": st.session_state.lc_show_reg})
     _theme = json.dumps({"main_color": st.session_state.main_color, "bg_color": st.session_state.bg_color, "tc_heading": st.session_state.tc_heading, "tc_body": st.session_state.tc_body, "tc_muted": st.session_state.tc_muted, "tc_label": st.session_state.tc_label, "tc_data": st.session_state.tc_data, "tc_sidebar": st.session_state.tc_sidebar})
@@ -241,7 +233,6 @@ def load_custom_backtest_data(start_date, end_date):
     bt_df['VIX_MA50'] = bt_df['^VIX'].rolling(50).mean()
     bt_df['SMH_3M_Ret'] = bt_df['SMH'].pct_change(63)
     bt_df['SMH_1M_Ret'] = bt_df['SMH'].pct_change(21)
-    # 💡 백테스트 RSI 오타 픽스
     bt_df['SMH_RSI'] = ta.rsi(bt_df['SMH'], length=14)
     bt_df['HYG_IEF_Ratio'] = bt_df['HYG'] / bt_df['IEF']
     bt_df['HYG_IEF_MA20'] = bt_df['HYG_IEF_Ratio'].rolling(20).mean()
@@ -526,21 +517,21 @@ with st.sidebar.expander("💾  Portfolio Data", expanded=False):
 with st.sidebar.expander("⚙️  Layout Controls  (PC)", expanded=False):
     def _lc_sec(title): st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:600;color:{tc_label};letter-spacing:0.16em;text-transform:uppercase;margin:10px 0 6px;padding-bottom:4px;border-bottom:1px solid rgba(0,0,0,0.08);">{title}</div>', unsafe_allow_html=True)
     _lc_sec("① 열 분할")
-    _v = st.slider("좌열 너비 %", 20, 60, st.session_state.lc_lr_split, 2, key="sl_lr")
+    _v = st.slider("좌열 너비 %", 20, 60, st.session_state.lc_lr_split, 2, key="sl_lr"); 
     if _v != st.session_state.lc_lr_split: st.session_state.lc_lr_split = _v; st.session_state['_needs_ls_save'] = True
-    _v = st.slider("Goal 입력창 %", 10, 40, st.session_state.lc_goal_inp, 2, key="sl_gi")
+    _v = st.slider("Goal 입력창 %", 10, 40, st.session_state.lc_goal_inp, 2, key="sl_gi"); 
     if _v != st.session_state.lc_goal_inp: st.session_state.lc_goal_inp = _v; st.session_state['_needs_ls_save'] = True
     _lc_sec("② 컴포넌트 높이")
-    _v = st.slider("에디터 높이 px", 200, 600, st.session_state.lc_editor_h, 20, key="sl_eh")
+    _v = st.slider("에디터 높이 px", 200, 600, st.session_state.lc_editor_h, 20, key="sl_eh"); 
     if _v != st.session_state.lc_editor_h: st.session_state.lc_editor_h = _v; st.session_state['_needs_ls_save'] = True
-    _v = st.slider("파이차트 높이 px", 140, 340, st.session_state.lc_pie_h, 20, key="sl_ph")
+    _v = st.slider("파이차트 높이 px", 140, 340, st.session_state.lc_pie_h, 20, key="sl_ph"); 
     if _v != st.session_state.lc_pie_h: st.session_state.lc_pie_h = _v; st.session_state['_needs_ls_save'] = True
-    _v = st.slider("Delta Bar 높이 px", 120, 320, st.session_state.lc_bar_h, 20, key="sl_bh")
+    _v = st.slider("Delta Bar 높이 px", 120, 320, st.session_state.lc_bar_h, 20, key="sl_bh"); 
     if _v != st.session_state.lc_bar_h: st.session_state.lc_bar_h = _v; st.session_state['_needs_ls_save'] = True
     _lc_sec("③ 내부 비율")
-    _v = st.slider("파이 Current/Target %", 30, 70, st.session_state.lc_pie_split, 5, key="sl_ps")
+    _v = st.slider("파이 Current/Target %", 30, 70, st.session_state.lc_pie_split, 5, key="sl_ps"); 
     if _v != st.session_state.lc_pie_split: st.session_state.lc_pie_split = _v; st.session_state['_needs_ls_save'] = True
-    _v = st.slider("Delta Bar / Weights %", 30, 70, st.session_state.lc_delta_wt, 5, key="sl_dw")
+    _v = st.slider("Delta Bar / Weights %", 30, 70, st.session_state.lc_delta_wt, 5, key="sl_dw"); 
     if _v != st.session_state.lc_delta_wt: st.session_state.lc_delta_wt = _v; st.session_state['_needs_ls_save'] = True
     _lc_sec("④ 패널 표시")
     _c1, _c2, _c3 = st.columns(3)
@@ -627,6 +618,7 @@ if page == "📊 Dashboard":
             st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
     with st.spinner("글로벌 마켓 데이터 로딩..."): _gm_data, _gm_tickers, _asset_tickers, _leader_tickers = fetch_global_markets()
+
     def _sec_label(txt): st.markdown(f'<div style="display:flex;align-items:center;gap:12px;margin:24px 0 14px;"><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.1em;font-weight:700;color:{tc_heading};letter-spacing:-0.3px;white-space:nowrap;">{txt}</div><div style="flex:1;height:1px;background:rgba(0,0,0,0.12);"></div></div>', unsafe_allow_html=True)
 
     _sec_label("① Nasdaq 100  ·  Heatmap")
@@ -1080,7 +1072,7 @@ elif page == "🍫 12-Pack Radar":
 
     if risk_cnt >= 3: radar_status, radar_msg, radar_color = "극단적 위험 구간 (Risk-Off)", "시장에 극단적인 공포가 덮쳤습니다. 현재 복수의 매크로 지표가 시스템 리스크를 강하게 경고하고 있습니다. 단순한 조정을 넘어선 투매 구간일 확률이 높으니, 모든 레버리지 포지션을 해제하고 현금과 달러, 금 등 안전 자산 비중을 최대로 늘려 폭풍우가 지나가기를 기다리셔야 합니다.", "#DC2626"
     elif warn_cnt >= 4 or risk_cnt >= 1: radar_status, radar_msg, radar_color = "변동성 주의 (Warning)", "시장 곳곳에서 균열의 조짐이 감지되고 풀 지표가 점차 악화되고 있습니다. 신규 매수는 철저히 보류하시고, 포트폴리오의 리스크 노출도를 점검하며 보수적인 관망 자세를 유지하는 것이 좋습니다.", "#D97706"
-    else: radar_status, radar_msg, radar_color = "안정적 순항 (Safe)", "현재 글로벌 매크로 지표와 시장 심리가 모두 안정적인 궤도에 올라와 있습니다. 추세를 꺾을 만한 시스템 리스크가 보이지 않으니, AMLS 알고리즘이 제시하는 비중에 맞춰 자신감 있게 추세 추종 전략을 전개하시기 바랍니다.", main_color
+    else: radar_status, radar_msg, radar_color = "안정적 순항 (Safe)", "현재 글로벌 매크로 지표와 시장 심리가 모두 안정적인 궤도에 올라와 있습니다. 추세를 꺾을 만한 시스템 리스크가 보이지 않으니, AMLS 알고리즘이 제시하는 비중에 맞춰 자신감 있게 추세 추종 전략 전개하시기 바랍니다.", main_color
 
     total_signals = risk_cnt + warn_cnt + safe_cnt
     risk_pct  = int(risk_cnt  / total_signals * 100) if total_signals else 0
@@ -1176,10 +1168,20 @@ elif page == "🍫 12-Pack Radar":
             try:
                 import google.generativeai as genai
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                _model = genai.GenerativeModel('gemini-1.5-flash')
-                _prompt = f"너는 월스트리트 출신 퀀트 애널리스트야. AMLS V4.5 시스템의 12개 매크로 신호를 분석해서 투자의견을 내줘.\n[현재 레짐] R{curr_regime} — {regime_info[curr_regime][1]}\n[신호 요약] Risk {risk_cnt}개 / Warn {warn_cnt}개 / Safe {safe_cnt}개\n[12개 실시간 신호]\n1. QQQ RSI: {qqq_rsi:.1f}\n2. QQQ 고점대비 낙폭: {qqq_dd*100:.1f}%\n3. CNN Fear&Greed: {fg_score:.0f}\n4. 주도섹터: {top_sec} / 약세섹터: {bot_sec}\n5. 신용스프레드 HYG/IEF: {'위험' if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else '안전'}\n6. 시장폭: {'좁아짐' if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else '넓음'}\n7. 금/주식 비율: {'금강세' if last_row['GLD_SPY_Ratio']>last_row['GLD_SPY_MA50'] else '주식강세'}\n8. 달러: {'강세' if last_row['UUP']>last_row['UUP_MA50'] else '약세'}\n9. 미10년물금리 {last_row['^TNX']:.2f}%: {'상승' if last_row['^TNX']>last_row['TNX_MA50'] else '하락'}\n10. 비트코인: {'위험' if last_row['BTC-USD']<last_row['BTC_MA50'] else '안전'}\n11. 러셀2000/S&P500: {'약세' if last_row['IWM_SPY_Ratio']<last_row['IWM_SPY_MA50'] else '강세'}\n12. VIX {last_row['^VIX']:.1f}: {'확장' if last_row['^VIX']>last_row['VIX_MA50'] else '축소'}\n아래 3개 섹션으로 구성해서 한국어로 작성해줘:\n**① 시장 환경 진단**\n**② 핵심 리스크 & 기회 요인**\n**③ AMLS 전략 투자의견**"
-                with st.spinner("AI 분석 중..."): _response = _model.generate_content(_prompt)
-                st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);border-left:4px solid {main_color};padding:20px 24px;"><div style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};letter-spacing:0.16em;text-transform:uppercase;margin-bottom:12px;">AI Quant Analysis  ·  {last_update_time}</div><div style="font-family:DM Sans,sans-serif;font-size:0.88em;color:{tc_body};line-height:1.8;">{_response.text}</div></div>'), unsafe_allow_html=True)
+                _valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                if not _valid_models:
+                    st.error("활성화된 모델이 없습니다.")
+                else:
+                    _target_model = _valid_models[0]
+                    for _m in ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']:
+                        _match = [m for m in _valid_models if _m in m]
+                        if _match:
+                            _target_model = _match[0]
+                            break
+                    _model = genai.GenerativeModel(_target_model.replace('models/', ''))
+                    _prompt = f"너는 월스트리트 출신 퀀트 애널리스트야. AMLS V4.5 시스템의 12개 매크로 신호를 분석해서 투자의견을 내줘.\n[현재 레짐] R{curr_regime} — {regime_info[curr_regime][1]}\n[신호 요약] Risk {risk_cnt}개 / Warn {warn_cnt}개 / Safe {safe_cnt}개\n[12개 실시간 신호]\n1. QQQ RSI: {qqq_rsi:.1f}\n2. QQQ 고점대비 낙폭: {qqq_dd*100:.1f}%\n3. CNN Fear&Greed: {fg_score:.0f}\n4. 주도섹터: {top_sec} / 약세섹터: {bot_sec}\n5. 신용스프레드 HYG/IEF: {'위험' if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else '안전'}\n6. 시장폭: {'좁아짐' if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else '넓음'}\n7. 금/주식 비율: {'금강세' if last_row['GLD_SPY_Ratio']>last_row['GLD_SPY_MA50'] else '주식강세'}\n8. 달러: {'강세' if last_row['UUP']>last_row['UUP_MA50'] else '약세'}\n9. 미10년물금리 {last_row['^TNX']:.2f}%: {'상승' if last_row['^TNX']>last_row['TNX_MA50'] else '하락'}\n10. 비트코인: {'위험' if last_row['BTC-USD']<last_row['BTC_MA50'] else '안전'}\n11. 러셀2000/S&P500: {'약세' if last_row['IWM_SPY_Ratio']<last_row['IWM_SPY_MA50'] else '강세'}\n12. VIX {last_row['^VIX']:.1f}: {'확장' if last_row['^VIX']>last_row['VIX_MA50'] else '축소'}\n아래 3개 섹션으로 구성해서 한국어로 작성해줘:\n**① 시장 환경 진단**\n**② 핵심 리스크 & 기회 요인**\n**③ AMLS 전략 투자의견**"
+                    with st.spinner("AI 분석 중..."): _response = _model.generate_content(_prompt)
+                    st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);border-left:4px solid {main_color};padding:20px 24px;"><div style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};letter-spacing:0.16em;text-transform:uppercase;margin-bottom:12px;">AI Quant Analysis  ·  {last_update_time}</div><div style="font-family:DM Sans,sans-serif;font-size:0.88em;color:{tc_body};line-height:1.8;">{_response.text}</div></div>'), unsafe_allow_html=True)
             except KeyError: st.error("🚨 GEMINI_API_KEY 누락")
             except Exception as _e: st.error(f"🚨 오류: {str(_e)}")
         else:
@@ -1255,10 +1257,20 @@ elif page == "📰 Macro News":
                 else:
                     with st.spinner("AI 분석 중..."):
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        _model = genai.GenerativeModel('gemini-1.5-flash')
-                        _res = _model.generate_content("다음 뉴스를 섹터별, 리스크 요소, 최종 투자 스탠스로 나누어 요약해.\n" + "\n".join(headlines_for_ai))
-                        st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid {main_color};padding:20px 22px;margin-top:12px;"><div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:10px;">AI Summary</div><div style="font-family:DM Sans,sans-serif;font-size:0.9em;color:{tc_body};line-height:1.75;">{_res.text}</div></div>'), unsafe_allow_html=True)
+                        _valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                        if not _valid_models: st.error("활성화된 모델이 없습니다.")
+                        else:
+                            _target_model = _valid_models[0]
+                            for _m in ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']:
+                                _match = [m for m in _valid_models if _m in m]
+                                if _match:
+                                    _target_model = _match[0]
+                                    break
+                            _model = genai.GenerativeModel(_target_model.replace('models/',''))
+                            _res = _model.generate_content("다음 뉴스를 섹터별, 리스크 요소, 최종 투자 스탠스로 나누어 요약해.\n" + "\n".join(headlines_for_ai))
+                            st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid {main_color};padding:20px 22px;margin-top:12px;"><div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:10px;">AI Summary</div><div style="font-family:DM Sans,sans-serif;font-size:0.9em;color:{tc_body};line-height:1.75;">{_res.text}</div></div>'), unsafe_allow_html=True)
             except KeyError: st.error("🚨 GEMINI_API_KEY 누락")
+            except Exception as _e: st.error(f"🚨 오류: {str(_e)}")
         else: st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);border-left:3px solid rgba(0,0,0,0.15);padding:20px 22px;margin-top:12px;"><div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;margin-bottom:10px;">How It Works</div><div style="font-family:DM Sans,sans-serif;font-size:0.85em;color:{tc_muted};line-height:1.7;">버튼을 누르면 AI가 최신 뉴스를 3단계로 요약합니다.</div></div>'), unsafe_allow_html=True)
     with nr:
         for idx, item in enumerate(news_items):
