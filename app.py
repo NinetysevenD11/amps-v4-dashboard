@@ -782,10 +782,12 @@ if page == "📊 Dashboard":
 
     _sec_label("② Rates  /  Commodities  /  Crypto")
     _asset_cols = st.columns(7)
+    _ico_dict = {"^TNX":"📈","GLD":"🥇","SLV":"⚪","USO":"🛢","BTC-USD":"₿","ETH-USD":"Ξ","UUP":"💵"}
     for _i, (_t, _name) in enumerate(_asset_tickers.items()):
         _d = _gm_data.get(_t, {}); _chg, _px = _d.get('chg', 0.0), _d.get('price', 0.0)
         _clr = "#059669" if _chg >= 0 else "#DC2626"
-        with _asset_cols[_i]: st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);border-top:2px solid {_clr};padding:12px 10px;text-align:center;"><div style="font-size:1.1em;margin-bottom:4px;">{{"^TNX":"📈","GLD":"🥇","SLV":"⚪","USO":"🛢","BTC-USD":"₿","ETH-USD":"Ξ","UUP":"💵"}.get(_t, "")}</div><div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;letter-spacing:0.1em;text-transform:uppercase;">{_name}</div><div style="font-family:DM Mono,monospace;font-size:0.88em;color:#111118;margin:3px 0;">${_px:,.2f}</div><div style="font-family:DM Mono,monospace;font-size:0.8em;color:{_clr};font-weight:600;">{"▲" if _chg>=0 else "▼"} {_chg:+.2f}%</div></div>', unsafe_allow_html=True)
+        _ico = _ico_dict.get(_t, "")
+        with _asset_cols[_i]: st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);border-top:2px solid {_clr};padding:12px 10px;text-align:center;"><div style="font-size:1.1em;margin-bottom:4px;">{_ico}</div><div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;letter-spacing:0.1em;text-transform:uppercase;">{_name}</div><div style="font-family:DM Mono,monospace;font-size:0.88em;color:#111118;margin:3px 0;">${_px:,.2f}</div><div style="font-family:DM Mono,monospace;font-size:0.8em;color:{_clr};font-weight:600;">{"▲" if _chg>=0 else "▼"} {_chg:+.2f}%</div></div>', unsafe_allow_html=True)
 
     _sec_label("③ Market Leaders")
     _ld_cols = st.columns(5)
