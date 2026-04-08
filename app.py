@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
@@ -14,8 +15,12 @@ import os
 
 warnings.filterwarnings('ignore')
 
+# ==========================================
+# 1. 설정 및 데이터
+# ==========================================
 st.set_page_config(page_title="AMLS V4.5 FINANCE STRATEGY", layout="wide", page_icon="🌿", initial_sidebar_state="expanded")
 
+# --- 🎨 테마 커스텀 시스템 ---
 if 'display_mode' not in st.session_state: st.session_state.display_mode  = 'PC'
 if 'lc_lr_split'  not in st.session_state: st.session_state.lc_lr_split   = 38
 if 'lc_delta_wt'  not in st.session_state: st.session_state.lc_delta_wt   = 52
@@ -40,6 +45,9 @@ if '_ls_loaded'   not in st.session_state: st.session_state._ls_loaded   = False
 if 'rebal_locked' not in st.session_state: st.session_state.rebal_locked = False
 if 'rebal_plan'   not in st.session_state: st.session_state.rebal_plan   = None
 
+# ==========================================
+# localStorage 영속화 레이어
+# ==========================================
 def _ls_save_all():
     _layout = json.dumps({"display_mode": st.session_state.display_mode, "lc_lr_split": st.session_state.lc_lr_split, "lc_delta_wt": st.session_state.lc_delta_wt, "lc_editor_h": st.session_state.lc_editor_h, "lc_goal_inp": st.session_state.lc_goal_inp, "lc_pie_h": st.session_state.lc_pie_h, "lc_pie_split": st.session_state.lc_pie_split, "lc_bar_h": st.session_state.lc_bar_h, "lc_show_lp": st.session_state.lc_show_lp, "lc_show_qo": st.session_state.lc_show_qo, "lc_show_reg": st.session_state.lc_show_reg})
     _theme = json.dumps({"main_color": st.session_state.main_color, "bg_color": st.session_state.bg_color, "tc_heading": st.session_state.tc_heading, "tc_body": st.session_state.tc_body, "tc_muted": st.session_state.tc_muted, "tc_label": st.session_state.tc_label, "tc_data": st.session_state.tc_data, "tc_sidebar": st.session_state.tc_sidebar})
@@ -424,6 +432,7 @@ css_block = f"""<style>
     .glass-card {{ background:#FAFAF7 !important; border:1px solid var(--rule-strong) !important; border-top:2px solid var(--ink-2) !important; border-radius:0 !important; padding:20px 22px !important; box-shadow:none !important; height:100%; display:flex; flex-direction:column; justify-content:space-between; transition:border-top-color 0.2s ease; position:relative; }}
     .glass-card:hover {{ border-top-color:var(--acc) !important; transform:none !important; box-shadow:0 4px 24px rgba(0,0,0,0.06) !important; }}
     .glass-card h3 {{ font-family:'DM Mono', monospace !important; font-size:0.6em !important; font-weight:400 !important; color:var(--ink-4) !important; margin-bottom:14px !important; letter-spacing:0.20em; text-transform:uppercase; border-bottom:1px solid var(--rule); padding-bottom:9px; }}
+    .glass-inset {{ background:var(--paper-2) !important; border:1px solid var(--rule) !important; border-left:3px solid var(--acc) !important; border-radius:0 !important; padding:14px 16px 12px !important; text-align:left; margin-bottom:14px; box-shadow:none !important; }}
     div[data-testid="stVerticalBlockBorderWrapper"] > div {{ background:#FAFAF7 !important; border:1px solid var(--rule-strong) !important; border-top:2px solid var(--ink-2) !important; border-radius:0 !important; padding:20px 22px !important; box-shadow:none !important; transition:border-top-color 0.2s ease; position:relative; }}
     div[data-testid="stVerticalBlockBorderWrapper"] > div:hover {{ border-top-color:var(--acc) !important; box-shadow:0 4px 24px rgba(0,0,0,0.06) !important; transform:none !important; }}
     [data-testid="stMetric"] {{ background:#FAFAF7 !important; border:1px solid var(--rule-strong) !important; border-top:2px solid var(--ink-2) !important; border-radius:0 !important; padding:16px 18px !important; box-shadow:none !important; margin-bottom:8px; transition:border-top-color 0.2s; position:relative; }}
@@ -510,7 +519,7 @@ with st.sidebar.expander("💾  Portfolio Data", expanded=False):
     st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
     _sidebar_upload = st.file_uploader("⬆  Restore (JSON)", type="json", key="sb_uploader", label_visibility="visible")
     if _sidebar_upload is not None:
-        try: st.session_state.portfolio.update(json.load(_sidebar_upload)); sanitize_portfolio(); save_portfolio_to_disk(); st.success("✅ 복구 완료"); st.rerun()
+        try: st.session_state.portfolio.update(json.load(_sidebar_upload)); sanitize_portfolio(); save_portfolio_to_disk(); st.session_state.rebal_locked=False; st.success("✅ 복구 완료"); st.rerun()
         except: st.error("❌ 파일 형식 오류")
 
 with st.sidebar.expander("⚙️  Layout Controls  (PC)", expanded=False):
@@ -572,7 +581,6 @@ with hdr_c2:
         if st.button("↺ 동기화", use_container_width=True): fetch_realtime_prices.clear(); load_data.clear(); st.rerun()
     with c_sync1: st.markdown(_hdr_right, unsafe_allow_html=True)
 st.markdown(apply_theme(f"""<div style="position:relative;margin:14px 0 24px;height:1px;background:rgba(0,0,0,0.07);"><div style="position:absolute;left:0;top:0;width:100%;height:1px;background:rgba(0,0,0,0.12);"></div><div style="position:absolute;left:0;top:-1px;width:80px;height:3px;background:var(--acc);"></div></div>"""), unsafe_allow_html=True)
-
 
 # ==========================================
 # 라우팅 1. Dashboard
@@ -711,21 +719,18 @@ elif page == "💼 Portfolio":
     def _sells_buys():
         if st.session_state.rebal_locked and st.session_state.rebal_plan:
             p = st.session_state.rebal_plan
-            _s = [(a, f"{int(sh):,.0f}주 매도" if a!='CASH' else f"${abs(d):,.0f} 사용") for a, d, sh, cp in p['sells'] if a=='CASH' or int(sh) >= 1]
-            _b = [(a, f"{int(sh):,.0f}주 매수" if a!='CASH' else f"${d:,.0f} 확보") for a, d, sh, cp in p['buys'] if a=='CASH' or int(sh) >= 1]
+            _s = [(a, f"{int(sh):,.0f}주 매도") for a, d, sh, cp in p['sells'] if int(sh) >= 1]
+            _b = [(a, f"{int(sh):,.0f}주 매수") for a, d, sh, cp in p['buys'] if int(sh) >= 1]
             return _s, _b
         else:
             _sells, _buys = [], []
             for asset in ASSET_LIST:
+                if asset == 'CASH': continue
                 _cp = current_prices[asset] if current_prices[asset] > 0 else 1.0
                 _dv = live_diff_vals[asset]
-                if asset != 'CASH':
-                    _sh = int(abs(_dv) / _cp)
-                    if _dv < -_cp * 0.05 and _sh >= 1: _sells.append((asset, f"{_sh:,.0f}주 매도"))
-                    elif _dv > _cp * 0.05 and _sh >= 1: _buys.append((asset, f"{_sh:,.0f}주 매수"))
-                else:
-                    if _dv < -1.0: _sells.append(("CASH", f"${abs(_dv):,.0f} 사용"))
-                    elif _dv > 1.0: _buys.append(("CASH", f"${_dv:,.0f} 확보"))
+                _sh = int(abs(_dv) / _cp)
+                if _dv < -_cp * 0.05 and _sh >= 1: _sells.append((asset, f"{_sh:,.0f}주 매도"))
+                elif _dv > _cp * 0.05 and _sh >= 1: _buys.append((asset, f"{_sh:,.0f}주 매수"))
             return _sells, _buys
 
     def _goal_tracker_html():
@@ -750,7 +755,7 @@ elif page == "💼 Portfolio":
         _df_edited = st.data_editor(_df_ed, disabled=["Asset"], hide_index=True, use_container_width=True, key="pf_editor", height=height, column_config={"Shares": st.column_config.NumberColumn("Shares", format="%.4f"), "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"), "FX Rate(₩)": st.column_config.NumberColumn("FX(₩)", format="%.0f")})
         if not _df_edited.equals(_df_ed):
             for _, row in _df_edited.iterrows(): st.session_state.portfolio[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"]), 'fx': float(row["FX Rate(₩)"])}
-            save_portfolio_to_disk(); st.rerun()
+            save_portfolio_to_disk(); st.session_state.rebal_locked=False; st.rerun()
 
     def _pie_charts():
         _pie_colors, _pie_cfg = [line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0','#059669','#047857','#065F46','#D1FAE5'], dict(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="DM Mono", color=t_color), showlegend=True, legend=dict(orientation='v', x=1.0, y=0.5, font=dict(size=8, family='DM Mono'), bgcolor='rgba(0,0,0,0)'), margin=dict(l=0, r=70, t=28, b=0), height=200)
@@ -788,7 +793,7 @@ elif page == "💼 Portfolio":
             _wt_rows += f'<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04);"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:700;color:{tc_body};">{_wk}</span><div style="display:flex;gap:3px;align-items:baseline;"><span style="font-family:DM Mono,monospace;font-size:0.84em;font-weight:600;color:{main_color};">{_wpct:.0f}%</span><span style="font-family:DM Mono,monospace;font-size:0.58em;color:{_dc};">{_ds}</span></div></div><div style="height:4px;background:rgba(0,0,0,0.07);"><div style="height:4px;width:{_bw}%;background:{main_color};"></div></div></div>'
         with st.container(border=True): st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.55em;font-weight:600;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid rgba(0,0,0,0.08);">Target Weights · R{curr_regime}</div><div>{_wt_rows}</div>', unsafe_allow_html=True)
 
-    # 💡 고정 플랜 생성 시, 1주 미만은 과감히 매수/매도에서 제외하고 HOLD에 넣는다.
+    # 💡 고정 플랜 생성 시, CASH를 매수/매도 리스트에서 완벽하게 제외하고 주식만으로 계산
     def generate_rebal_plan():
         _s_px = dict(current_prices)
         _s_vals = dict(curr_vals)
@@ -798,22 +803,21 @@ elif page == "💼 Portfolio":
 
         _sell_list, _buy_list, _hold_list = [], [], []
         for asset in ASSET_LIST:
+            if asset == 'CASH': 
+                _hold_list.append(asset)
+                continue
+
             _cp = _s_px[asset] if _s_px[asset] > 0 else 1.0
             _diff = _s_diff[asset]
-            _threshold = _cp * 0.05 if asset != 'CASH' else 1.0
+            _threshold = _cp * 0.05 
             
-            if asset != 'CASH':
-                _sh = int(abs(_diff) / _cp)
-                if _diff < -_threshold and _sh >= 1: 
-                    _sell_list.append((asset, -(_sh * _cp), _sh, _cp))
-                elif _diff > _threshold and _sh >= 1: 
-                    _buy_list.append((asset, (_sh * _cp), _sh, _cp))
-                elif _s_vals[asset] > 0 or _s_tgtw.get(asset, 0) > 0: 
-                    _hold_list.append(asset)
-            else:
-                if _diff < -_threshold: _sell_list.append((asset, _diff, 0, _cp))
-                elif _diff > _threshold: _buy_list.append((asset, _diff, 0, _cp))
-                elif _s_vals[asset] > 0 or _s_tgtw.get(asset, 0) > 0: _hold_list.append(asset)
+            _sh = int(abs(_diff) / _cp)
+            if _diff < -_threshold and _sh >= 1: 
+                _sell_list.append((asset, -(_sh * _cp), _sh, _cp))
+            elif _diff > _threshold and _sh >= 1: 
+                _buy_list.append((asset, (_sh * _cp), _sh, _cp))
+            elif _s_vals[asset] > 0 or _s_tgtw.get(asset, 0) > 0: 
+                _hold_list.append(asset)
                 
         _sell_list.sort(key=lambda x: x[1])
         _buy_list.sort(key=lambda x: -x[1])
@@ -854,18 +858,18 @@ elif page == "💼 Portfolio":
         _s_total, _s_tgtw, _s_vals = plan["total"], plan["tgtw"], plan["vals"]
         _sell_list, _buy_list = plan["sells"], plan["buys"]
 
-        _total_sell_proceeds = sum(abs(d) for _, d, _, _ in _sell_list)
+        # 💡 이중계산 방지: 매도 금액은 오직 "주식을 팔아서 얻은 금액"만 합산
+        _total_sell_proceeds = sum(abs(d) for a, d, sh, cp in _sell_list)
         _existing_cash = _s_vals.get('CASH', 0.0)
         _available_cash = _total_sell_proceeds + _existing_cash
-        _total_buy_needed = sum(d for _, d, _, _ in _buy_list)
+        _total_buy_needed = sum(d for a, d, sh, cp in _buy_list)
 
         if not is_mobile:
             _ep1, _ep2, _ep3 = st.columns([1, 0.12, 1])
             with _ep1:
                 _sell_rows = ""
                 for asset, diff, sh, cp in _sell_list:
-                    if asset != 'CASH' and sh < 1: continue
-                    _sh_str = f"{int(sh):,.0f}주" if asset != "CASH" else f"${abs(diff):,.0f}"
+                    _sh_str = f"{int(sh):,.0f}주" 
                     _sell_rows += f'<tr style="background:rgba(220,38,38,0.025);"><td style="font-weight:700;color:#059669;font-family:DM Mono,monospace;font-size:0.84em;">{asset}</td><td style="color:{tc_muted};">${cp:.2f}</td><td style="color:{tc_label};">{_s_vals[asset]:,.0f}</td><td style="color:{main_color};font-weight:700;">{_s_tgtw.get(asset,0)*100:.0f}%</td><td style="color:{tc_label};">{_s_total * _s_tgtw.get(asset, 0.0):,.0f}</td><td><span style="color:#DC2626;font-weight:600;">-${abs(diff):,.0f}</span></td><td><span style="font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;color:#DC2626;background:rgba(220,38,38,0.08);padding:2px 8px;border-left:2px solid #DC2626;">▼ SELL</span></td><td style="color:{tc_muted};font-size:0.8em;">{_sh_str}</td></tr>'
                 st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:700;color:#DC2626;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:6px;padding-bottom:5px;border-bottom:2px solid #DC2626;">STEP 1  ·  매도 실행</div>', unsafe_allow_html=True)
                 if _sell_rows:
@@ -878,19 +882,13 @@ elif page == "💼 Portfolio":
             with _ep3:
                 _remaining_cash, _buy_rows = _available_cash, ""
                 for asset, diff, sh, cp in _buy_list:
-                    if asset != 'CASH':
-                        _actual_sh = int(min(sh, _remaining_cash / cp)) # 살 수 있는 자연수 주식 계산
-                        _actual_buy = _actual_sh * cp
-                    else:
-                        _actual_buy = min(diff, _remaining_cash)
-                        _actual_sh = 0
-                        
-                    if asset != 'CASH' and _actual_sh < 1: continue
-                    if asset == 'CASH' and _actual_buy <= 0: continue
+                    _actual_sh = int(min(sh, _remaining_cash / cp)) 
+                    _actual_buy = _actual_sh * cp
+                    if _actual_sh < 1: continue
                         
                     _shortfall = diff - _actual_buy
                     _buy_color = "#059669" if _actual_buy >= diff * 0.95 else "#D97706"
-                    _sh_str = f"{int(_actual_sh):,.0f}주" if asset != 'CASH' else f"${_actual_buy:,.0f}"
+                    _sh_str = f"{int(_actual_sh):,.0f}주" 
                     
                     _buy_rows += f'<tr style="background:rgba(5,150,105,0.025);"><td style="font-weight:700;color:#059669;font-family:DM Mono,monospace;font-size:0.84em;">{asset}</td><td style="color:{tc_muted};">${cp:.2f}</td><td style="color:{tc_label};">{_s_vals[asset]:,.0f}</td><td style="color:{main_color};font-weight:700;">{_s_tgtw.get(asset,0)*100:.0f}%</td><td style="color:{tc_label};">{_s_total * _s_tgtw.get(asset, 0.0):,.0f}</td><td><span style="color:{_buy_color};font-weight:600;">+${_actual_buy:,.0f}</span>{f"<span style=\'font-family:DM Mono,monospace;font-size:0.62em;color:#D97706;margin-left:4px;\'>(부족 ${_shortfall:,.0f})</span>" if _shortfall > 1 else ""}</td><td><span style="font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;color:{_buy_color};background:rgba(5,150,105,0.09);padding:2px 8px;border-left:2px solid {_buy_color};">▲ BUY</span></td><td style="color:{tc_muted};font-size:0.8em;">{_sh_str}</td></tr>'
                     _remaining_cash -= _actual_buy
@@ -906,28 +904,19 @@ elif page == "💼 Portfolio":
             if _hold_items: st.markdown(f'<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:8px 14px;background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);"><span style="font-family:DM Mono,monospace;font-size:0.58em;color:{tc_label};letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap;">HOLD</span><div style="display:flex;gap:4px;flex-wrap:wrap;">{" ".join([f"<span style=\'background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);font-family:DM Mono,monospace;font-size:0.68em;color:{tc_label};padding:2px 10px;\'>{a}</span>" for a in _hold_items])}</div></div>', unsafe_allow_html=True)
 
         else:
-            # 💡 Mobile View 고정 플랜 매수/매도 자연수 처리
             st.markdown(apply_theme(f'<div style="background:rgba(220,38,38,0.05);border:1px solid rgba(220,38,38,0.2);padding:8px 14px;margin-bottom:10px;"><span style="font-family:DM Mono,monospace;font-size:0.62em;color:#DC2626;font-weight:600;">매각 대금  ${_total_sell_proceeds:,.0f}</span>{f"  <span style=\'color:{tc_label};\'>+ 보유현금 ${_existing_cash:,.0f}</span>" if _existing_cash > 1 else ""}  →  <span style="color:{tc_body};font-weight:700;">가용 현금 ${_available_cash:,.0f}</span></div>'), unsafe_allow_html=True)
             
             _remaining_cash = _available_cash
             for action_type, lst in [("SELL", _sell_list), ("BUY", _buy_list)]:
                 for asset, diff, sh, cp in lst:
                     if action_type == "BUY":
-                        if asset != 'CASH':
-                            _actual_sh = int(min(sh, _remaining_cash / cp))
-                            _actual_buy = _actual_sh * cp
-                        else:
-                            _actual_buy = min(diff, _remaining_cash)
-                            _actual_sh = 0
-                            
-                        if asset != 'CASH' and _actual_sh < 1: continue
-                        if asset == 'CASH' and _actual_buy <= 0: continue
-                            
+                        _actual_sh = int(min(sh, _remaining_cash / cp))
+                        _actual_buy = _actual_sh * cp
+                        if _actual_sh < 1: continue
                         _diff_to_show = _actual_buy
                         _sh_to_show = _actual_sh
                         _remaining_cash -= _actual_buy
                     else:
-                        if asset != 'CASH' and sh < 1: continue
                         _diff_to_show = abs(diff)
                         _sh_to_show = sh
                     
@@ -937,7 +926,7 @@ elif page == "💼 Portfolio":
                     
                     _act_txt, _act_c, _rbg = ("▲ BUY", "#059669", "rgba(5,150,105,0.035)") if action_type=="BUY" else ("▼ SELL", "#DC2626", "rgba(220,38,38,0.035)")
                     _delta_str = f"+${_diff_to_show:,.0f}" if action_type=="BUY" else f"-${_diff_to_show:,.0f}"
-                    _sh_str = f"{int(_sh_to_show):,.0f}주" if asset != 'CASH' else f"${_diff_to_show:,.0f}"
+                    _sh_str = f"{int(_sh_to_show):,.0f}주"
 
                     st.markdown(apply_theme(f'<div style="background:{_rbg};border:1px solid rgba(0,0,0,0.09);border-left:3px solid {_act_c};padding:10px 14px;margin-bottom:5px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><span style="font-family:DM Mono,monospace;font-size:0.88em;font-weight:700;color:#059669;">{asset}</span><span style="font-family:DM Mono,monospace;font-size:0.76em;font-weight:700;color:{_act_c};background:rgba(0,0,0,0.04);padding:3px 10px;border:1px solid {_act_c}40;">{_act_txt}</span></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;"><div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">기준액</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:{tc_body};font-variant-numeric:tabular-nums;">${_curv:,.0f} <span style="font-size:0.7em;color:{tc_label};">({_curw:.0f}%)</span></div></div><div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">목표 %</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:{main_color};font-weight:600;">{_tgtw*100:.0f}%</div></div><div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">Δ 금액</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:{_act_c};font-weight:600;">{_delta_str}</div></div><div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">수량</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:{_act_c};font-weight:600;font-variant-numeric:tabular-nums;">{_sh_str}</div></div></div></div>'), unsafe_allow_html=True)
             
@@ -1043,15 +1032,8 @@ elif page == "💼 Portfolio":
         _ft_m.update_layout(title=dict(text=f"Target  R{curr_regime}", font=dict(family="DM Mono", size=12, color=t_color), x=0.5, xanchor='center'), **_pie_cfg_m)
         with st.container(border=True): st.plotly_chart(_ft_m, use_container_width=True)
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        st.markdown(apply_theme(f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="width:2px;height:12px;background:{main_color};flex-shrink:0;"></div><span style="font-family:DM Mono,monospace;font-size:0.62em;font-weight:600;color:{tc_heading};letter-spacing:0.18em;text-transform:uppercase;">Rebalancing</span><div style="flex:1;height:1px;background:rgba(0,0,0,0.09);"></div></div>'), unsafe_allow_html=True)
-        
-        if not st.session_state.rebal_locked or not st.session_state.rebal_plan:
-            st.markdown(apply_theme(f'<div style="background:rgba(217,119,6,0.08);border:1px solid rgba(217,119,6,0.3);padding:16px;text-align:center;margin-bottom:14px;"><div style="font-size:0.85em;color:#D97706;margin-bottom:10px;">리밸런싱 도중 포지션 변경 시 지침이 바뀌는 것을 방지하려면<br>현재 상태를 <b>고정(Snapshot)</b>해야 합니다.</div></div>'), unsafe_allow_html=True)
-            if st.button("📸 리밸런싱 액션 플랜 생성 (지침 고정)", use_container_width=True):
-                generate_rebal_plan()
-                st.rerun()
-        else:
-            _rebalancing_matrix(is_mobile=True)
+        st.markdown(apply_theme(f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="width:2px;height:14px;background:{main_color};flex-shrink:0;"></div><span style="font-family:DM Mono,monospace;font-size:0.62em;font-weight:600;color:{tc_heading};letter-spacing:0.18em;text-transform:uppercase;">Rebalancing</span><div style="flex:1;height:1px;background:rgba(0,0,0,0.09);"></div></div>'), unsafe_allow_html=True)
+        _rebalancing_matrix(is_mobile=True)
 
 # ==========================================
 # 라우팅 3. 12-Pack Radar
