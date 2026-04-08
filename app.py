@@ -233,7 +233,7 @@ def load_custom_backtest_data(start_date, end_date):
     bt_df['VIX_MA50'] = bt_df['^VIX'].rolling(50).mean()
     bt_df['SMH_3M_Ret'] = bt_df['SMH'].pct_change(63)
     bt_df['SMH_1M_Ret'] = bt_df['SMH'].pct_change(21)
-    bt_df['SMH_RSI'] = ta.rsi(bt_df['SMH'], length=14)
+    bt_df['SMH_RSI'] = ta.rsi(df['SMH'], length=14)
     bt_df['HYG_IEF_Ratio'] = bt_df['HYG'] / bt_df['IEF']
     bt_df['HYG_IEF_MA20'] = bt_df['HYG_IEF_Ratio'].rolling(20).mean()
     bt_df['HYG_IEF_MA50'] = bt_df['HYG_IEF_Ratio'].rolling(50).mean()
@@ -573,6 +573,7 @@ with hdr_c2:
     with c_sync1: st.markdown(_hdr_right, unsafe_allow_html=True)
 st.markdown(apply_theme(f"""<div style="position:relative;margin:14px 0 24px;height:1px;background:rgba(0,0,0,0.07);"><div style="position:absolute;left:0;top:0;width:100%;height:1px;background:rgba(0,0,0,0.12);"></div><div style="position:absolute;left:0;top:-1px;width:80px;height:3px;background:var(--acc);"></div></div>"""), unsafe_allow_html=True)
 
+
 # ==========================================
 # 라우팅 1. Dashboard
 # ==========================================
@@ -678,6 +679,7 @@ elif page == "💼 Portfolio":
     invested_cost = sum(st.session_state.portfolio[a]['shares'] * st.session_state.portfolio[a]['avg_price'] for a in ASSET_LIST if a != 'CASH')
     pnl_usd   = total_val_usd - invested_cost
     pnl_pct   = (pnl_usd / invested_cost * 100) if invested_cost > 0 else 0.0
+    
     live_diff_vals = {a: (total_val_usd * target_weights.get(a, 0.0)) - curr_vals[a] for a in ASSET_LIST} if total_val_usd > 0 else {a: 0.0 for a in ASSET_LIST}
     
     C_GREEN, C_RED = main_color, "#DC2626"
@@ -705,20 +707,25 @@ elif page == "💼 Portfolio":
         _rows = "".join([f'<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(0,0,0,0.04);"><span style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:700;color:{tc_body};">{a}</span><span style="font-family:DM Mono,monospace;font-size:0.74em;color:{accent};font-variant-numeric:tabular-nums;">{v}</span></div>' for a, v in items]) or f'<div style="padding:6px 0;text-align:center;font-family:DM Mono,monospace;font-size:0.68em;color:#CCCCCC;">— 없음</div>'
         col.markdown(f'<div style="background:{bg};border:1px solid rgba(0,0,0,0.07);border-top:2px solid {accent};padding:8px 10px;"><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.76em;font-weight:700;color:{accent};margin-bottom:5px;">{title}</div>{_rows}</div>', unsafe_allow_html=True)
 
+    # 💡 매수/매도 수량 철저한 '자연수' 처리 적용 
     def _sells_buys():
         if st.session_state.rebal_locked and st.session_state.rebal_plan:
             p = st.session_state.rebal_plan
-            _s = [(a, f"{sh:,.2f}주 매도" if a!='CASH' else f"${abs(d):,.0f} 사용") for a, d, sh, cp in p['sells']]
-            _b = [(a, f"{sh:,.2f}주 매수" if a!='CASH' else f"${d:,.0f} 확보") for a, d, sh, cp in p['buys']]
+            _s = [(a, f"{int(sh):,.0f}주 매도" if a!='CASH' else f"${abs(d):,.0f} 사용") for a, d, sh, cp in p['sells'] if a=='CASH' or int(sh) >= 1]
+            _b = [(a, f"{int(sh):,.0f}주 매수" if a!='CASH' else f"${d:,.0f} 확보") for a, d, sh, cp in p['buys'] if a=='CASH' or int(sh) >= 1]
             return _s, _b
         else:
             _sells, _buys = [], []
             for asset in ASSET_LIST:
-                _cp, _dv = current_prices[asset] if current_prices[asset] > 0 else 1.0, live_diff_vals[asset]
-                if asset != 'CASH' and _dv < -_cp * 0.05: _sells.append((asset, f"{abs(_dv)/_cp:,.2f}주 매도"))
-                elif asset == 'CASH' and _dv < -1.0: _sells.append(("CASH", f"${abs(_dv):,.0f} 사용"))
-                if asset != 'CASH' and _dv > _cp * 0.05: _buys.append((asset, f"{_dv/_cp:,.2f}주 매수"))
-                elif asset == 'CASH' and _dv > 1.0: _buys.append(("CASH", f"${_dv:,.0f} 확보"))
+                _cp = current_prices[asset] if current_prices[asset] > 0 else 1.0
+                _dv = live_diff_vals[asset]
+                if asset != 'CASH':
+                    _sh = int(abs(_dv) / _cp)
+                    if _dv < -_cp * 0.05 and _sh >= 1: _sells.append((asset, f"{_sh:,.0f}주 매도"))
+                    elif _dv > _cp * 0.05 and _sh >= 1: _buys.append((asset, f"{_sh:,.0f}주 매수"))
+                else:
+                    if _dv < -1.0: _sells.append(("CASH", f"${abs(_dv):,.0f} 사용"))
+                    elif _dv > 1.0: _buys.append(("CASH", f"${_dv:,.0f} 확보"))
             return _sells, _buys
 
     def _goal_tracker_html():
@@ -781,6 +788,7 @@ elif page == "💼 Portfolio":
             _wt_rows += f'<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04);"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:700;color:{tc_body};">{_wk}</span><div style="display:flex;gap:3px;align-items:baseline;"><span style="font-family:DM Mono,monospace;font-size:0.84em;font-weight:600;color:{main_color};">{_wpct:.0f}%</span><span style="font-family:DM Mono,monospace;font-size:0.58em;color:{_dc};">{_ds}</span></div></div><div style="height:4px;background:rgba(0,0,0,0.07);"><div style="height:4px;width:{_bw}%;background:{main_color};"></div></div></div>'
         with st.container(border=True): st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.55em;font-weight:600;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid rgba(0,0,0,0.08);">Target Weights · R{curr_regime}</div><div>{_wt_rows}</div>', unsafe_allow_html=True)
 
+    # 💡 고정 플랜 생성 시, 1주 미만은 과감히 매수/매도에서 제외하고 HOLD에 넣는다.
     def generate_rebal_plan():
         _s_px = dict(current_prices)
         _s_vals = dict(curr_vals)
@@ -793,10 +801,22 @@ elif page == "💼 Portfolio":
             _cp = _s_px[asset] if _s_px[asset] > 0 else 1.0
             _diff = _s_diff[asset]
             _threshold = _cp * 0.05 if asset != 'CASH' else 1.0
-            if _diff < -_threshold: _sell_list.append((asset, _diff, abs(_diff)/_cp if asset != 'CASH' else 0, _cp))
-            elif _diff > _threshold: _buy_list.append((asset, _diff, _diff/_cp if asset != 'CASH' else 0, _cp))
-            elif _s_vals[asset] > 0 or _s_tgtw.get(asset, 0) > 0: _hold_list.append(asset)
-        _sell_list.sort(key=lambda x: x[1]); _buy_list.sort(key=lambda x: -x[1])
+            
+            if asset != 'CASH':
+                _sh = int(abs(_diff) / _cp)
+                if _diff < -_threshold and _sh >= 1: 
+                    _sell_list.append((asset, -(_sh * _cp), _sh, _cp))
+                elif _diff > _threshold and _sh >= 1: 
+                    _buy_list.append((asset, (_sh * _cp), _sh, _cp))
+                elif _s_vals[asset] > 0 or _s_tgtw.get(asset, 0) > 0: 
+                    _hold_list.append(asset)
+            else:
+                if _diff < -_threshold: _sell_list.append((asset, _diff, 0, _cp))
+                elif _diff > _threshold: _buy_list.append((asset, _diff, 0, _cp))
+                elif _s_vals[asset] > 0 or _s_tgtw.get(asset, 0) > 0: _hold_list.append(asset)
+                
+        _sell_list.sort(key=lambda x: x[1])
+        _buy_list.sort(key=lambda x: -x[1])
         
         st.session_state.rebal_plan = {
             "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -844,23 +864,38 @@ elif page == "💼 Portfolio":
             with _ep1:
                 _sell_rows = ""
                 for asset, diff, sh, cp in _sell_list:
-                    _sell_rows += f'<tr style="background:rgba(220,38,38,0.025);"><td style="font-weight:700;color:#059669;font-family:DM Mono,monospace;font-size:0.84em;">{asset}</td><td style="color:{tc_muted};">${cp:.2f}</td><td style="color:{tc_label};">{_s_vals[asset]:,.0f}</td><td style="color:{main_color};font-weight:700;">{_s_tgtw.get(asset,0)*100:.0f}%</td><td style="color:{tc_label};">{_s_total * _s_tgtw.get(asset, 0.0):,.0f}</td><td><span style="color:#DC2626;font-weight:600;">-${abs(diff):,.0f}</span></td><td><span style="font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;color:#DC2626;background:rgba(220,38,38,0.08);padding:2px 8px;border-left:2px solid #DC2626;">▼ SELL</span></td><td style="color:{tc_muted};font-size:0.8em;">{f"{sh:,.4f}주" if asset != "CASH" else f"${abs(diff):,.0f}"}</td></tr>'
+                    if asset != 'CASH' and sh < 1: continue
+                    _sh_str = f"{int(sh):,.0f}주" if asset != "CASH" else f"${abs(diff):,.0f}"
+                    _sell_rows += f'<tr style="background:rgba(220,38,38,0.025);"><td style="font-weight:700;color:#059669;font-family:DM Mono,monospace;font-size:0.84em;">{asset}</td><td style="color:{tc_muted};">${cp:.2f}</td><td style="color:{tc_label};">{_s_vals[asset]:,.0f}</td><td style="color:{main_color};font-weight:700;">{_s_tgtw.get(asset,0)*100:.0f}%</td><td style="color:{tc_label};">{_s_total * _s_tgtw.get(asset, 0.0):,.0f}</td><td><span style="color:#DC2626;font-weight:600;">-${abs(diff):,.0f}</span></td><td><span style="font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;color:#DC2626;background:rgba(220,38,38,0.08);padding:2px 8px;border-left:2px solid #DC2626;">▼ SELL</span></td><td style="color:{tc_muted};font-size:0.8em;">{_sh_str}</td></tr>'
                 st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:700;color:#DC2626;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:6px;padding-bottom:5px;border-bottom:2px solid #DC2626;">STEP 1  ·  매도 실행</div>', unsafe_allow_html=True)
                 if _sell_rows:
                     with st.container(border=True): st.markdown('<div style="overflow-x:auto;"><table class="mint-table"><thead><tr><th style="text-align:left;">Asset</th><th>기준가</th><th>기준액</th><th>목표%</th><th>목표액</th><th>매도금액</th><th style="text-align:center;">Action</th><th>수량</th></tr></thead><tbody>' + _sell_rows + '</tbody></table></div>', unsafe_allow_html=True)
                     st.markdown(apply_theme(f'<div style="background:rgba(220,38,38,0.05);border:1px solid rgba(220,38,38,0.2);padding:8px 14px;margin-top:6px;"><span style="font-family:DM Mono,monospace;font-size:0.62em;color:#DC2626;font-weight:600;">매각 대금  ${_total_sell_proceeds:,.0f}</span>{f"  <span style=\'color:{tc_label};\'>+ 보유현금 ${_existing_cash:,.0f}</span>" if _existing_cash > 1 else ""}  →  <span style="color:{tc_body};font-weight:700;">가용 현금 ${_available_cash:,.0f}</span></div>'), unsafe_allow_html=True)
                 else: st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);padding:20px;text-align:center;"><span style="font-family:DM Mono,monospace;font-size:0.72em;color:#CCCCCC;">매도 항목 없음</span></div>', unsafe_allow_html=True)
+            
             with _ep2: st.markdown(f'<div style="display:flex;align-items:center;justify-content:center;height:100%;min-height:120px;font-size:1.6em;color:{tc_label};">→</div>', unsafe_allow_html=True)
+            
             with _ep3:
                 _remaining_cash, _buy_rows = _available_cash, ""
                 for asset, diff, sh, cp in _buy_list:
-                    _actual_buy = min(diff, _remaining_cash)
-                    _actual_sh = _actual_buy / cp if cp > 0 and asset != 'CASH' else 0
+                    if asset != 'CASH':
+                        _actual_sh = int(min(sh, _remaining_cash / cp)) # 살 수 있는 자연수 주식 계산
+                        _actual_buy = _actual_sh * cp
+                    else:
+                        _actual_buy = min(diff, _remaining_cash)
+                        _actual_sh = 0
+                        
+                    if asset != 'CASH' and _actual_sh < 1: continue
+                    if asset == 'CASH' and _actual_buy <= 0: continue
+                        
                     _shortfall = diff - _actual_buy
                     _buy_color = "#059669" if _actual_buy >= diff * 0.95 else "#D97706"
-                    _buy_rows += f'<tr style="background:rgba(5,150,105,0.025);"><td style="font-weight:700;color:#059669;font-family:DM Mono,monospace;font-size:0.84em;">{asset}</td><td style="color:{tc_muted};">${cp:.2f}</td><td style="color:{tc_label};">{_s_vals[asset]:,.0f}</td><td style="color:{main_color};font-weight:700;">{_s_tgtw.get(asset,0)*100:.0f}%</td><td style="color:{tc_label};">{_s_total * _s_tgtw.get(asset, 0.0):,.0f}</td><td><span style="color:{_buy_color};font-weight:600;">+${_actual_buy:,.0f}</span>{f"<span style=\'font-family:DM Mono,monospace;font-size:0.62em;color:#D97706;margin-left:4px;\'>(부족 ${_shortfall:,.0f})</span>" if _shortfall > 1 else ""}</td><td><span style="font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;color:{_buy_color};background:rgba(5,150,105,0.09);padding:2px 8px;border-left:2px solid {_buy_color};">▲ BUY</span></td><td style="color:{tc_muted};font-size:0.8em;">{f"{_actual_sh:,.4f}주" if asset != "CASH" else f"${_actual_buy:,.0f}"}</td></tr>'
+                    _sh_str = f"{int(_actual_sh):,.0f}주" if asset != 'CASH' else f"${_actual_buy:,.0f}"
+                    
+                    _buy_rows += f'<tr style="background:rgba(5,150,105,0.025);"><td style="font-weight:700;color:#059669;font-family:DM Mono,monospace;font-size:0.84em;">{asset}</td><td style="color:{tc_muted};">${cp:.2f}</td><td style="color:{tc_label};">{_s_vals[asset]:,.0f}</td><td style="color:{main_color};font-weight:700;">{_s_tgtw.get(asset,0)*100:.0f}%</td><td style="color:{tc_label};">{_s_total * _s_tgtw.get(asset, 0.0):,.0f}</td><td><span style="color:{_buy_color};font-weight:600;">+${_actual_buy:,.0f}</span>{f"<span style=\'font-family:DM Mono,monospace;font-size:0.62em;color:#D97706;margin-left:4px;\'>(부족 ${_shortfall:,.0f})</span>" if _shortfall > 1 else ""}</td><td><span style="font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;color:{_buy_color};background:rgba(5,150,105,0.09);padding:2px 8px;border-left:2px solid {_buy_color};">▲ BUY</span></td><td style="color:{tc_muted};font-size:0.8em;">{_sh_str}</td></tr>'
                     _remaining_cash -= _actual_buy
                     if _remaining_cash <= 0: break
+
                 st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:700;color:#059669;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:6px;padding-bottom:5px;border-bottom:2px solid #059669;">STEP 2  ·  매수 실행</div>', unsafe_allow_html=True)
                 if _buy_rows:
                     with st.container(border=True): st.markdown('<div style="overflow-x:auto;"><table class="mint-table"><thead><tr><th style="text-align:left;">Asset</th><th>기준가</th><th>기준액</th><th>목표%</th><th>목표액</th><th>매수금액</th><th style="text-align:center;">Action</th><th>수량</th></tr></thead><tbody>' + _buy_rows + '</tbody></table></div>', unsafe_allow_html=True)
@@ -871,19 +906,28 @@ elif page == "💼 Portfolio":
             if _hold_items: st.markdown(f'<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:8px 14px;background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);"><span style="font-family:DM Mono,monospace;font-size:0.58em;color:{tc_label};letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap;">HOLD</span><div style="display:flex;gap:4px;flex-wrap:wrap;">{" ".join([f"<span style=\'background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);font-family:DM Mono,monospace;font-size:0.68em;color:{tc_label};padding:2px 10px;\'>{a}</span>" for a in _hold_items])}</div></div>', unsafe_allow_html=True)
 
         else:
+            # 💡 Mobile View 고정 플랜 매수/매도 자연수 처리
             st.markdown(apply_theme(f'<div style="background:rgba(220,38,38,0.05);border:1px solid rgba(220,38,38,0.2);padding:8px 14px;margin-bottom:10px;"><span style="font-family:DM Mono,monospace;font-size:0.62em;color:#DC2626;font-weight:600;">매각 대금  ${_total_sell_proceeds:,.0f}</span>{f"  <span style=\'color:{tc_label};\'>+ 보유현금 ${_existing_cash:,.0f}</span>" if _existing_cash > 1 else ""}  →  <span style="color:{tc_body};font-weight:700;">가용 현금 ${_available_cash:,.0f}</span></div>'), unsafe_allow_html=True)
             
             _remaining_cash = _available_cash
             for action_type, lst in [("SELL", _sell_list), ("BUY", _buy_list)]:
                 for asset, diff, sh, cp in lst:
                     if action_type == "BUY":
-                        _actual_buy = min(diff, _remaining_cash)
-                        _actual_sh = _actual_buy / cp if cp > 0 and asset != 'CASH' else 0
+                        if asset != 'CASH':
+                            _actual_sh = int(min(sh, _remaining_cash / cp))
+                            _actual_buy = _actual_sh * cp
+                        else:
+                            _actual_buy = min(diff, _remaining_cash)
+                            _actual_sh = 0
+                            
+                        if asset != 'CASH' and _actual_sh < 1: continue
+                        if asset == 'CASH' and _actual_buy <= 0: continue
+                            
                         _diff_to_show = _actual_buy
                         _sh_to_show = _actual_sh
                         _remaining_cash -= _actual_buy
-                        if _actual_buy <= 0: continue
                     else:
+                        if asset != 'CASH' and sh < 1: continue
                         _diff_to_show = abs(diff)
                         _sh_to_show = sh
                     
@@ -893,7 +937,7 @@ elif page == "💼 Portfolio":
                     
                     _act_txt, _act_c, _rbg = ("▲ BUY", "#059669", "rgba(5,150,105,0.035)") if action_type=="BUY" else ("▼ SELL", "#DC2626", "rgba(220,38,38,0.035)")
                     _delta_str = f"+${_diff_to_show:,.0f}" if action_type=="BUY" else f"-${_diff_to_show:,.0f}"
-                    _sh_str = f"{_sh_to_show:,.4f}주" if asset != 'CASH' else f"${_diff_to_show:,.0f}"
+                    _sh_str = f"{int(_sh_to_show):,.0f}주" if asset != 'CASH' else f"${_diff_to_show:,.0f}"
 
                     st.markdown(apply_theme(f'<div style="background:{_rbg};border:1px solid rgba(0,0,0,0.09);border-left:3px solid {_act_c};padding:10px 14px;margin-bottom:5px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><span style="font-family:DM Mono,monospace;font-size:0.88em;font-weight:700;color:#059669;">{asset}</span><span style="font-family:DM Mono,monospace;font-size:0.76em;font-weight:700;color:{_act_c};background:rgba(0,0,0,0.04);padding:3px 10px;border:1px solid {_act_c}40;">{_act_txt}</span></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;"><div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">기준액</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:{tc_body};font-variant-numeric:tabular-nums;">${_curv:,.0f} <span style="font-size:0.7em;color:{tc_label};">({_curw:.0f}%)</span></div></div><div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">목표 %</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:{main_color};font-weight:600;">{_tgtw*100:.0f}%</div></div><div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">Δ 금액</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:{_act_c};font-weight:600;">{_delta_str}</div></div><div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">수량</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:{_act_c};font-weight:600;font-variant-numeric:tabular-nums;">{_sh_str}</div></div></div></div>'), unsafe_allow_html=True)
             
@@ -1000,7 +1044,14 @@ elif page == "💼 Portfolio":
         with st.container(border=True): st.plotly_chart(_ft_m, use_container_width=True)
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         st.markdown(apply_theme(f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="width:2px;height:12px;background:{main_color};flex-shrink:0;"></div><span style="font-family:DM Mono,monospace;font-size:0.62em;font-weight:600;color:{tc_heading};letter-spacing:0.18em;text-transform:uppercase;">Rebalancing</span><div style="flex:1;height:1px;background:rgba(0,0,0,0.09);"></div></div>'), unsafe_allow_html=True)
-        _rebalancing_matrix(is_mobile=True)
+        
+        if not st.session_state.rebal_locked or not st.session_state.rebal_plan:
+            st.markdown(apply_theme(f'<div style="background:rgba(217,119,6,0.08);border:1px solid rgba(217,119,6,0.3);padding:16px;text-align:center;margin-bottom:14px;"><div style="font-size:0.85em;color:#D97706;margin-bottom:10px;">리밸런싱 도중 포지션 변경 시 지침이 바뀌는 것을 방지하려면<br>현재 상태를 <b>고정(Snapshot)</b>해야 합니다.</div></div>'), unsafe_allow_html=True)
+            if st.button("📸 리밸런싱 액션 플랜 생성 (지침 고정)", use_container_width=True):
+                generate_rebal_plan()
+                st.rerun()
+        else:
+            _rebalancing_matrix(is_mobile=True)
 
 # ==========================================
 # 라우팅 3. 12-Pack Radar
