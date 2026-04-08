@@ -241,7 +241,8 @@ def load_custom_backtest_data(start_date, end_date):
     bt_df['VIX_MA50'] = bt_df['^VIX'].rolling(50).mean()
     bt_df['SMH_3M_Ret'] = bt_df['SMH'].pct_change(63)
     bt_df['SMH_1M_Ret'] = bt_df['SMH'].pct_change(21)
-    bt_df['SMH_RSI'] = ta.rsi(df['SMH'], length=14)
+    # 💡 백테스트 RSI 오타 픽스
+    bt_df['SMH_RSI'] = ta.rsi(bt_df['SMH'], length=14)
     bt_df['HYG_IEF_Ratio'] = bt_df['HYG'] / bt_df['IEF']
     bt_df['HYG_IEF_MA20'] = bt_df['HYG_IEF_Ratio'].rolling(20).mean()
     bt_df['HYG_IEF_MA50'] = bt_df['HYG_IEF_Ratio'].rolling(50).mean()
@@ -490,11 +491,11 @@ with st.sidebar.expander("🎨  Appearance", expanded=False):
     with _ac1:
         st.markdown('<div style="font-family:DM Mono,monospace;font-size:0.65em;color:rgba(255,255,255,0.35);margin-bottom:4px;">Accent</div>', unsafe_allow_html=True)
         new_color = st.color_picker("Accent", st.session_state.main_color, label_visibility="collapsed", key="cp_theme")
-        if new_color != st.session_state.main_color: st.session_state.main_color = new_color; st.session_state['_needs_ls_save'] = True; st.rerun()
+        if new_color != st.session_state.main_color: st.session_state.main_color = new_color; st.session_state['_needs_ls_save'] = True
     with _ac2:
         st.markdown('<div style="font-family:DM Mono,monospace;font-size:0.65em;color:rgba(255,255,255,0.35);margin-bottom:4px;">Background</div>', unsafe_allow_html=True)
         _new_bg = st.color_picker("BG", st.session_state.bg_color, label_visibility="collapsed", key="cp_bg")
-        if _new_bg != st.session_state.bg_color: st.session_state.bg_color = _new_bg; st.session_state['_needs_ls_save'] = True; st.rerun()
+        if _new_bg != st.session_state.bg_color: st.session_state.bg_color = _new_bg; st.session_state['_needs_ls_save'] = True
     st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
     _tc_defs = [("헤딩","tc_heading","cp_tc_heading"),("본문","tc_body","cp_tc_body"),("뮤트","tc_muted","cp_tc_muted"),("레이블","tc_label","cp_tc_label"),("데이터","tc_data","cp_tc_data"),("사이드","tc_sidebar","cp_tc_sidebar")]
     for (_d1, _k1, _w1), (_d2, _k2, _w2) in [(_tc_defs[i], _tc_defs[i+1]) for i in range(0, len(_tc_defs)-1, 2)]:
@@ -502,11 +503,11 @@ with st.sidebar.expander("🎨  Appearance", expanded=False):
         with _cc1:
             st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.65em;color:rgba(255,255,255,0.35);margin-bottom:4px;">{_d1}</div>', unsafe_allow_html=True)
             _p1 = st.color_picker("", getattr(st.session_state, _k1), label_visibility="collapsed", key=_w1)
-            if _p1 != getattr(st.session_state, _k1): setattr(st.session_state, _k1, _p1); st.session_state['_needs_ls_save'] = True; st.rerun()
+            if _p1 != getattr(st.session_state, _k1): setattr(st.session_state, _k1, _p1); st.session_state['_needs_ls_save'] = True
         with _cc2:
             st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.65em;color:rgba(255,255,255,0.35);margin-bottom:4px;">{_d2}</div>', unsafe_allow_html=True)
             _p2 = st.color_picker("", getattr(st.session_state, _k2), label_visibility="collapsed", key=_w2)
-            if _p2 != getattr(st.session_state, _k2): setattr(st.session_state, _k2, _p2); st.session_state['_needs_ls_save'] = True; st.rerun()
+            if _p2 != getattr(st.session_state, _k2): setattr(st.session_state, _k2, _p2); st.session_state['_needs_ls_save'] = True
     if st.button("↺  초기화", use_container_width=True, key="reset_colors"):
         for _k, _v in [("main_color","#10B981"),("bg_color","#F7F6F2"),("tc_heading","#111118"),("tc_body","#2D2D2D"),("tc_muted","#6B6B7A"),("tc_label","#9494A0"),("tc_data","#111118"),("tc_sidebar","#2D2D2D")]: setattr(st.session_state, _k, _v)
         st.session_state['_needs_ls_save'] = True; st.rerun()
@@ -525,30 +526,30 @@ with st.sidebar.expander("💾  Portfolio Data", expanded=False):
 with st.sidebar.expander("⚙️  Layout Controls  (PC)", expanded=False):
     def _lc_sec(title): st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:600;color:{tc_label};letter-spacing:0.16em;text-transform:uppercase;margin:10px 0 6px;padding-bottom:4px;border-bottom:1px solid rgba(0,0,0,0.08);">{title}</div>', unsafe_allow_html=True)
     _lc_sec("① 열 분할")
-    _v = st.slider("좌열 너비 %", 20, 60, st.session_state.lc_lr_split, 2, key="sl_lr"); 
-    if _v != st.session_state.lc_lr_split: st.session_state.lc_lr_split = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
-    _v = st.slider("Goal 입력창 %", 10, 40, st.session_state.lc_goal_inp, 2, key="sl_gi"); 
-    if _v != st.session_state.lc_goal_inp: st.session_state.lc_goal_inp = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
+    _v = st.slider("좌열 너비 %", 20, 60, st.session_state.lc_lr_split, 2, key="sl_lr")
+    if _v != st.session_state.lc_lr_split: st.session_state.lc_lr_split = _v; st.session_state['_needs_ls_save'] = True
+    _v = st.slider("Goal 입력창 %", 10, 40, st.session_state.lc_goal_inp, 2, key="sl_gi")
+    if _v != st.session_state.lc_goal_inp: st.session_state.lc_goal_inp = _v; st.session_state['_needs_ls_save'] = True
     _lc_sec("② 컴포넌트 높이")
-    _v = st.slider("에디터 높이 px", 200, 600, st.session_state.lc_editor_h, 20, key="sl_eh"); 
-    if _v != st.session_state.lc_editor_h: st.session_state.lc_editor_h = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
-    _v = st.slider("파이차트 높이 px", 140, 340, st.session_state.lc_pie_h, 20, key="sl_ph"); 
-    if _v != st.session_state.lc_pie_h: st.session_state.lc_pie_h = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
-    _v = st.slider("Delta Bar 높이 px", 120, 320, st.session_state.lc_bar_h, 20, key="sl_bh"); 
-    if _v != st.session_state.lc_bar_h: st.session_state.lc_bar_h = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
+    _v = st.slider("에디터 높이 px", 200, 600, st.session_state.lc_editor_h, 20, key="sl_eh")
+    if _v != st.session_state.lc_editor_h: st.session_state.lc_editor_h = _v; st.session_state['_needs_ls_save'] = True
+    _v = st.slider("파이차트 높이 px", 140, 340, st.session_state.lc_pie_h, 20, key="sl_ph")
+    if _v != st.session_state.lc_pie_h: st.session_state.lc_pie_h = _v; st.session_state['_needs_ls_save'] = True
+    _v = st.slider("Delta Bar 높이 px", 120, 320, st.session_state.lc_bar_h, 20, key="sl_bh")
+    if _v != st.session_state.lc_bar_h: st.session_state.lc_bar_h = _v; st.session_state['_needs_ls_save'] = True
     _lc_sec("③ 내부 비율")
-    _v = st.slider("파이 Current/Target %", 30, 70, st.session_state.lc_pie_split, 5, key="sl_ps"); 
-    if _v != st.session_state.lc_pie_split: st.session_state.lc_pie_split = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
-    _v = st.slider("Delta Bar / Weights %", 30, 70, st.session_state.lc_delta_wt, 5, key="sl_dw"); 
-    if _v != st.session_state.lc_delta_wt: st.session_state.lc_delta_wt = _v; st.session_state['_needs_ls_save'] = True; st.rerun()
+    _v = st.slider("파이 Current/Target %", 30, 70, st.session_state.lc_pie_split, 5, key="sl_ps")
+    if _v != st.session_state.lc_pie_split: st.session_state.lc_pie_split = _v; st.session_state['_needs_ls_save'] = True
+    _v = st.slider("Delta Bar / Weights %", 30, 70, st.session_state.lc_delta_wt, 5, key="sl_dw")
+    if _v != st.session_state.lc_delta_wt: st.session_state.lc_delta_wt = _v; st.session_state['_needs_ls_save'] = True
     _lc_sec("④ 패널 표시")
     _c1, _c2, _c3 = st.columns(3)
     _nreg = _c1.checkbox("Regime", value=st.session_state.lc_show_reg, key="ck_reg")
     _nlp  = _c2.checkbox("Live Px", value=st.session_state.lc_show_lp, key="ck_lp")
     _nqo  = _c3.checkbox("Orders", value=st.session_state.lc_show_qo, key="ck_qo")
-    if _nreg != st.session_state.lc_show_reg: st.session_state.lc_show_reg = _nreg; st.session_state['_needs_ls_save'] = True; st.rerun()
-    if _nlp  != st.session_state.lc_show_lp: st.session_state.lc_show_lp = _nlp; st.session_state['_needs_ls_save'] = True; st.rerun()
-    if _nqo  != st.session_state.lc_show_qo: st.session_state.lc_show_qo = _nqo; st.session_state['_needs_ls_save'] = True; st.rerun()
+    if _nreg != st.session_state.lc_show_reg: st.session_state.lc_show_reg = _nreg; st.session_state['_needs_ls_save'] = True
+    if _nlp  != st.session_state.lc_show_lp: st.session_state.lc_show_lp = _nlp; st.session_state['_needs_ls_save'] = True
+    if _nqo  != st.session_state.lc_show_qo: st.session_state.lc_show_qo = _nqo; st.session_state['_needs_ls_save'] = True
     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
     if st.button("↺  전체 초기화", use_container_width=True, key="lc_reset"):
         for _k, _dv in [("lc_lr_split", 38), ("lc_goal_inp", 22), ("lc_editor_h", 355), ("lc_pie_h", 200), ("lc_bar_h", 185), ("lc_pie_split", 50), ("lc_delta_wt", 52), ("lc_show_reg", True), ("lc_show_lp", True), ("lc_show_qo", True)]: setattr(st.session_state, _k, _dv)
@@ -581,6 +582,7 @@ with hdr_c2:
         if st.button("↺ 동기화", use_container_width=True): fetch_realtime_prices.clear(); load_data.clear(); st.rerun()
     with c_sync1: st.markdown(_hdr_right, unsafe_allow_html=True)
 st.markdown(apply_theme(f"""<div style="position:relative;margin:14px 0 24px;height:1px;background:rgba(0,0,0,0.07);"><div style="position:absolute;left:0;top:0;width:100%;height:1px;background:rgba(0,0,0,0.12);"></div><div style="position:absolute;left:0;top:-1px;width:80px;height:3px;background:var(--acc);"></div></div>"""), unsafe_allow_html=True)
+
 
 # ==========================================
 # 라우팅 1. Dashboard
@@ -625,7 +627,6 @@ if page == "📊 Dashboard":
             st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
     with st.spinner("글로벌 마켓 데이터 로딩..."): _gm_data, _gm_tickers, _asset_tickers, _leader_tickers = fetch_global_markets()
-
     def _sec_label(txt): st.markdown(f'<div style="display:flex;align-items:center;gap:12px;margin:24px 0 14px;"><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.1em;font-weight:700;color:{tc_heading};letter-spacing:-0.3px;white-space:nowrap;">{txt}</div><div style="flex:1;height:1px;background:rgba(0,0,0,0.12);"></div></div>', unsafe_allow_html=True)
 
     _sec_label("① Nasdaq 100  ·  Heatmap")
@@ -715,7 +716,6 @@ elif page == "💼 Portfolio":
         _rows = "".join([f'<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(0,0,0,0.04);"><span style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:700;color:{tc_body};">{a}</span><span style="font-family:DM Mono,monospace;font-size:0.74em;color:{accent};font-variant-numeric:tabular-nums;">{v}</span></div>' for a, v in items]) or f'<div style="padding:6px 0;text-align:center;font-family:DM Mono,monospace;font-size:0.68em;color:#CCCCCC;">— 없음</div>'
         col.markdown(f'<div style="background:{bg};border:1px solid rgba(0,0,0,0.07);border-top:2px solid {accent};padding:8px 10px;"><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:0.76em;font-weight:700;color:{accent};margin-bottom:5px;">{title}</div>{_rows}</div>', unsafe_allow_html=True)
 
-    # 💡 매수/매도 수량 철저한 '자연수' 처리 적용 
     def _sells_buys():
         if st.session_state.rebal_locked and st.session_state.rebal_plan:
             p = st.session_state.rebal_plan
@@ -793,7 +793,6 @@ elif page == "💼 Portfolio":
             _wt_rows += f'<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04);"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:700;color:{tc_body};">{_wk}</span><div style="display:flex;gap:3px;align-items:baseline;"><span style="font-family:DM Mono,monospace;font-size:0.84em;font-weight:600;color:{main_color};">{_wpct:.0f}%</span><span style="font-family:DM Mono,monospace;font-size:0.58em;color:{_dc};">{_ds}</span></div></div><div style="height:4px;background:rgba(0,0,0,0.07);"><div style="height:4px;width:{_bw}%;background:{main_color};"></div></div></div>'
         with st.container(border=True): st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.55em;font-weight:600;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid rgba(0,0,0,0.08);">Target Weights · R{curr_regime}</div><div>{_wt_rows}</div>', unsafe_allow_html=True)
 
-    # 💡 고정 플랜 생성 시, CASH를 매수/매도 리스트에서 완벽하게 제외하고 주식만으로 계산
     def generate_rebal_plan():
         _s_px = dict(current_prices)
         _s_vals = dict(curr_vals)
@@ -858,7 +857,6 @@ elif page == "💼 Portfolio":
         _s_total, _s_tgtw, _s_vals = plan["total"], plan["tgtw"], plan["vals"]
         _sell_list, _buy_list = plan["sells"], plan["buys"]
 
-        # 💡 이중계산 방지: 매도 금액은 오직 "주식을 팔아서 얻은 금액"만 합산
         _total_sell_proceeds = sum(abs(d) for a, d, sh, cp in _sell_list)
         _existing_cash = _s_vals.get('CASH', 0.0)
         _available_cash = _total_sell_proceeds + _existing_cash
@@ -1178,8 +1176,7 @@ elif page == "🍫 12-Pack Radar":
             try:
                 import google.generativeai as genai
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                _models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                _model = genai.GenerativeModel(_models[0].replace('models/', ''))
+                _model = genai.GenerativeModel('gemini-1.5-flash')
                 _prompt = f"너는 월스트리트 출신 퀀트 애널리스트야. AMLS V4.5 시스템의 12개 매크로 신호를 분석해서 투자의견을 내줘.\n[현재 레짐] R{curr_regime} — {regime_info[curr_regime][1]}\n[신호 요약] Risk {risk_cnt}개 / Warn {warn_cnt}개 / Safe {safe_cnt}개\n[12개 실시간 신호]\n1. QQQ RSI: {qqq_rsi:.1f}\n2. QQQ 고점대비 낙폭: {qqq_dd*100:.1f}%\n3. CNN Fear&Greed: {fg_score:.0f}\n4. 주도섹터: {top_sec} / 약세섹터: {bot_sec}\n5. 신용스프레드 HYG/IEF: {'위험' if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else '안전'}\n6. 시장폭: {'좁아짐' if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else '넓음'}\n7. 금/주식 비율: {'금강세' if last_row['GLD_SPY_Ratio']>last_row['GLD_SPY_MA50'] else '주식강세'}\n8. 달러: {'강세' if last_row['UUP']>last_row['UUP_MA50'] else '약세'}\n9. 미10년물금리 {last_row['^TNX']:.2f}%: {'상승' if last_row['^TNX']>last_row['TNX_MA50'] else '하락'}\n10. 비트코인: {'위험' if last_row['BTC-USD']<last_row['BTC_MA50'] else '안전'}\n11. 러셀2000/S&P500: {'약세' if last_row['IWM_SPY_Ratio']<last_row['IWM_SPY_MA50'] else '강세'}\n12. VIX {last_row['^VIX']:.1f}: {'확장' if last_row['^VIX']>last_row['VIX_MA50'] else '축소'}\n아래 3개 섹션으로 구성해서 한국어로 작성해줘:\n**① 시장 환경 진단**\n**② 핵심 리스크 & 기회 요인**\n**③ AMLS 전략 투자의견**"
                 with st.spinner("AI 분석 중..."): _response = _model.generate_content(_prompt)
                 st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);border-left:4px solid {main_color};padding:20px 24px;"><div style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};letter-spacing:0.16em;text-transform:uppercase;margin-bottom:12px;">AI Quant Analysis  ·  {last_update_time}</div><div style="font-family:DM Sans,sans-serif;font-size:0.88em;color:{tc_body};line-height:1.8;">{_response.text}</div></div>'), unsafe_allow_html=True)
@@ -1258,8 +1255,7 @@ elif page == "📰 Macro News":
                 else:
                     with st.spinner("AI 분석 중..."):
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        _models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                        _model = genai.GenerativeModel(_models[0].replace('models/',''))
+                        _model = genai.GenerativeModel('gemini-1.5-flash')
                         _res = _model.generate_content("다음 뉴스를 섹터별, 리스크 요소, 최종 투자 스탠스로 나누어 요약해.\n" + "\n".join(headlines_for_ai))
                         st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid {main_color};padding:20px 22px;margin-top:12px;"><div style="font-family:DM Mono,monospace;font-size:0.58em;color:#9494A0;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:10px;">AI Summary</div><div style="font-family:DM Sans,sans-serif;font-size:0.9em;color:{tc_body};line-height:1.75;">{_res.text}</div></div>'), unsafe_allow_html=True)
             except KeyError: st.error("🚨 GEMINI_API_KEY 누락")
