@@ -365,6 +365,7 @@ hist_regime   = int(df.iloc[-1]['Regime'])
 if live_regime > hist_regime: curr_regime = live_regime
 elif hist_regime == 3 and live_regime <= 2: curr_regime = 2
 else: curr_regime = hist_regime
+r_acc = {1: main_color, 2: "#D97706", 3: "#DC2626", 4: "#7C3AED"}[curr_regime]
 
 target_regime = live_regime
 smh_cond = (smh_close > smh_ma50) and (smh_3m > 0.05 or smh_1m > 0.10) and (smh_rsi > 50)
