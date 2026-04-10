@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
@@ -14,8 +15,12 @@ import os
 
 warnings.filterwarnings('ignore')
 
+# ==========================================
+# 1. 설정 및 데이터
+# ==========================================
 st.set_page_config(page_title="AMLS V4.5 FINANCE STRATEGY", layout="wide", page_icon="🌿", initial_sidebar_state="expanded")
 
+# --- 🎨 테마 커스텀 시스템 ---
 if 'display_mode' not in st.session_state: st.session_state.display_mode  = 'PC'
 if 'lc_lr_split'  not in st.session_state: st.session_state.lc_lr_split   = 38
 if 'lc_delta_wt'  not in st.session_state: st.session_state.lc_delta_wt   = 52
@@ -40,6 +45,9 @@ if '_ls_loaded'   not in st.session_state: st.session_state._ls_loaded   = False
 if 'rebal_locked' not in st.session_state: st.session_state.rebal_locked = False
 if 'rebal_plan'   not in st.session_state: st.session_state.rebal_plan   = None
 
+# ==========================================
+# localStorage 영속화 레이어
+# ==========================================
 def _ls_save_all():
     _layout = json.dumps({"display_mode": st.session_state.display_mode, "lc_lr_split": st.session_state.lc_lr_split, "lc_delta_wt": st.session_state.lc_delta_wt, "lc_editor_h": st.session_state.lc_editor_h, "lc_goal_inp": st.session_state.lc_goal_inp, "lc_pie_h": st.session_state.lc_pie_h, "lc_pie_split": st.session_state.lc_pie_split, "lc_bar_h": st.session_state.lc_bar_h, "lc_show_lp": st.session_state.lc_show_lp, "lc_show_qo": st.session_state.lc_show_qo, "lc_show_reg": st.session_state.lc_show_reg})
     _theme = json.dumps({"main_color": st.session_state.main_color, "bg_color": st.session_state.bg_color, "tc_heading": st.session_state.tc_heading, "tc_body": st.session_state.tc_body, "tc_muted": st.session_state.tc_muted, "tc_label": st.session_state.tc_label, "tc_data": st.session_state.tc_data, "tc_sidebar": st.session_state.tc_sidebar})
@@ -107,9 +115,9 @@ def apply_theme(text):
     return text.replace("#10B981", main_color).replace("#10b981", main_color).replace("16, 185, 129", f"{r_c}, {g_c}, {b_c}").replace("16,185,129", f"{r_c},{g_c},{b_c}")
 
 SECTOR_TICKERS = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','XLB']
-CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPY','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
+CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
 TICKERS        = CORE_TICKERS + SECTOR_TICKERS
-ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPY','QQQ','GLD','CASH']
+ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
 PORTFOLIO_FILE = 'portfolio_autosave.json'
 
 def sanitize_portfolio():
@@ -129,7 +137,12 @@ if 'portfolio' not in st.session_state:
         try:
             with open(PORTFOLIO_FILE, 'r') as f:
                 loaded = json.load(f)
-                for k, v in loaded.items(): st.session_state.portfolio[k] = v
+                # SPY 였던 포지션을 SPYG로 자동 마이그레이션 방지 차원에서 직접 로드 처리
+                for k, v in loaded.items():
+                    if k == 'SPY':
+                        st.session_state.portfolio['SPYG'] = v
+                    elif k in ASSET_LIST:
+                        st.session_state.portfolio[k] = v
         except: pass
 
 sanitize_portfolio()
@@ -170,15 +183,15 @@ def load_data():
             df['QQQ_20d_Ret'] = df['QQQ'].pct_change(20)
             df['QQQE_20d_Ret'] = df['QQQE'].pct_change(20)
             df['QQQ_RSI'] = ta.rsi(df['QQQ'], length=14)
-            df['GLD_SPY_Ratio'] = df['GLD'] / df['SPY']
-            df['GLD_SPY_MA50'] = df['GLD_SPY_Ratio'].rolling(50).mean()
+            df['GLD_SPYG_Ratio'] = df['GLD'] / df['SPYG']
+            df['GLD_SPYG_MA50'] = df['GLD_SPYG_Ratio'].rolling(50).mean()
             df['QQQ_High52'] = df['QQQ'].rolling(252).max()
             df['QQQ_DD'] = (df['QQQ'] / df['QQQ_High52']) - 1
             df['UUP_MA50'] = df['UUP'].rolling(50).mean()
             df['TNX_MA50'] = df['^TNX'].rolling(50).mean()
             df['BTC_MA50'] = df['BTC-USD'].rolling(50).mean()
-            df['IWM_SPY_Ratio'] = df['IWM'] / df['SPY']
-            df['IWM_SPY_MA50'] = df['IWM_SPY_Ratio'].rolling(50).mean()
+            df['IWM_SPYG_Ratio'] = df['IWM'] / df['SPYG']
+            df['IWM_SPYG_MA50'] = df['IWM_SPYG_Ratio'].rolling(50).mean()
             for sec in SECTOR_TICKERS: df[f'{sec}_1M'] = df[sec].pct_change(21)
             result = df.dropna()
             if not result.empty: return result
@@ -240,15 +253,15 @@ def load_custom_backtest_data(start_date, end_date):
     bt_df['QQQ_20d_Ret'] = bt_df['QQQ'].pct_change(20)
     bt_df['QQQE_20d_Ret'] = bt_df['QQQE'].pct_change(20)
     bt_df['QQQ_RSI'] = ta.rsi(bt_df['QQQ'], length=14)
-    bt_df['GLD_SPY_Ratio'] = bt_df['GLD'] / bt_df['SPY']
-    bt_df['GLD_SPY_MA50'] = bt_df['GLD_SPY_Ratio'].rolling(50).mean()
+    bt_df['GLD_SPYG_Ratio'] = bt_df['GLD'] / bt_df['SPYG']
+    bt_df['GLD_SPYG_MA50'] = bt_df['GLD_SPYG_Ratio'].rolling(50).mean()
     bt_df['QQQ_High52'] = bt_df['QQQ'].rolling(252).max()
     bt_df['QQQ_DD'] = (bt_df['QQQ'] / bt_df['QQQ_High52']) - 1
     bt_df['UUP_MA50'] = bt_df['UUP'].rolling(50).mean()
     bt_df['TNX_MA50'] = bt_df['^TNX'].rolling(50).mean()
     bt_df['BTC_MA50'] = bt_df['BTC-USD'].rolling(50).mean()
-    bt_df['IWM_SPY_Ratio'] = bt_df['IWM'] / bt_df['SPY']
-    bt_df['IWM_SPY_MA50'] = bt_df['IWM_SPY_Ratio'].rolling(50).mean()
+    bt_df['IWM_SPYG_Ratio'] = bt_df['IWM'] / bt_df['SPYG']
+    bt_df['IWM_SPYG_MA50'] = bt_df['IWM_SPYG_Ratio'].rolling(50).mean()
     bt_df = bt_df.dropna()
     if bt_df.empty: return bt_df
     bt_df['Target'] = bt_df.apply(get_target_v45, axis=1)
@@ -256,7 +269,7 @@ def load_custom_backtest_data(start_date, end_date):
     bt_df = bt_df.loc[pd.to_datetime(start_date):pd.to_datetime(end_date)]
     return bt_df
 
-REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPY','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
+REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPYG','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
 
 @st.cache_data(ttl=15)
 def fetch_realtime_prices():
@@ -308,7 +321,7 @@ def fetch_macro_news():
 
 @st.cache_data(ttl=300)
 def fetch_global_markets():
-    global_tickers = {'SPY':'S&P 500','QQQ':'Nasdaq 100','DIA':'Dow Jones','IWM':'Russell 2000','EWJ':'Japan','EWT':'Taiwan','EWY':'Korea','FXI':'China','EWH':'HongKong','VGK':'Europe','EWG':'Germany','EWU':'UK','EWQ':'France','EWC':'Canada','EEM':'Emg Mkt','EWZ':'Brazil','EWA':'Australia'}
+    global_tickers = {'SPYG':'S&P 500 Growth','QQQ':'Nasdaq 100','DIA':'Dow Jones','IWM':'Russell 2000','EWJ':'Japan','EWT':'Taiwan','EWY':'Korea','FXI':'China','EWH':'HongKong','VGK':'Europe','EWG':'Germany','EWU':'UK','EWQ':'France','EWC':'Canada','EEM':'Emg Mkt','EWZ':'Brazil','EWA':'Australia'}
     asset_tickers = {'^TNX':'US 10Y','GLD':'Gold','SLV':'Silver','USO':'Oil','BTC-USD':'Bitcoin','ETH-USD':'Ethereum','UUP':'DXY'}
     leader_tickers = {'AAPL':'Apple','MSFT':'Microsoft','NVDA':'Nvidia','AMZN':'Amazon','GOOGL':'Alphabet','META':'Meta','TSLA':'Tesla','AVGO':'Broadcom','AMD':'AMD','TSM':'TSMC'}
     all_t = list(global_tickers.keys()) + list(asset_tickers.keys()) + list(leader_tickers.keys())
@@ -344,7 +357,8 @@ for ticker, price in rt_prices.items():
 
 if 'QQQ' in rt_injected: df.at[last_index, 'QQQ_DD'] = (df.at[last_index, 'QQQ'] / df['QQQ_High52'].iloc[-1]) - 1
 if 'HYG' in rt_injected and 'IEF' in rt_injected: df.at[last_index, 'HYG_IEF_Ratio'] = df.at[last_index, 'HYG'] / df.at[last_index, 'IEF']
-if 'IWM' in rt_injected and 'SPY' in rt_injected: df.at[last_index, 'IWM_SPY_Ratio'] = df.at[last_index, 'IWM'] / df.at[last_index, 'SPY']
+if 'IWM' in rt_injected and 'SPYG' in rt_injected: df.at[last_index, 'IWM_SPYG_Ratio'] = df.at[last_index, 'IWM'] / df.at[last_index, 'SPYG']
+if 'GLD' in rt_injected and 'SPYG' in rt_injected: df.at[last_index, 'GLD_SPYG_Ratio'] = df.at[last_index, 'GLD'] / df.at[last_index, 'SPYG']
 
 last_row = df.iloc[-1].copy()
 rt_ok    = len(rt_injected) >= 3
@@ -370,8 +384,8 @@ smh_cond = (smh_close > smh_ma50) and (smh_3m > 0.05 or smh_1m > 0.10) and (smh_
 def get_weights_v45(reg, smh_ok):
     w = {t: 0.0 for t in ASSET_LIST}
     semi = 'SOXL' if smh_ok else 'USD'
-    if reg == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'], w['SPY'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
-    elif reg == 2: w['TQQQ'], w['QLD'], w['SSO'], w['USD'], w['GLD'], w['SPY'] = 0.15, 0.30, 0.25, 0.10, 0.15, 0.05
+    if reg == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'], w['SPYG'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
+    elif reg == 2: w['TQQQ'], w['QLD'], w['SSO'], w['USD'], w['GLD'], w['SPYG'] = 0.15, 0.30, 0.25, 0.10, 0.15, 0.05
     elif reg == 3: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.35, 0.15
     elif reg == 4: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.40, 0.10
     return w
@@ -517,21 +531,21 @@ with st.sidebar.expander("💾  Portfolio Data", expanded=False):
 with st.sidebar.expander("⚙️  Layout Controls  (PC)", expanded=False):
     def _lc_sec(title): st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:600;color:{tc_label};letter-spacing:0.16em;text-transform:uppercase;margin:10px 0 6px;padding-bottom:4px;border-bottom:1px solid rgba(0,0,0,0.08);">{title}</div>', unsafe_allow_html=True)
     _lc_sec("① 열 분할")
-    _v = st.slider("좌열 너비 %", 20, 60, st.session_state.lc_lr_split, 2, key="sl_lr"); 
+    _v = st.slider("좌열 너비 %", 20, 60, st.session_state.lc_lr_split, 2, key="sl_lr")
     if _v != st.session_state.lc_lr_split: st.session_state.lc_lr_split = _v; st.session_state['_needs_ls_save'] = True
-    _v = st.slider("Goal 입력창 %", 10, 40, st.session_state.lc_goal_inp, 2, key="sl_gi"); 
+    _v = st.slider("Goal 입력창 %", 10, 40, st.session_state.lc_goal_inp, 2, key="sl_gi")
     if _v != st.session_state.lc_goal_inp: st.session_state.lc_goal_inp = _v; st.session_state['_needs_ls_save'] = True
     _lc_sec("② 컴포넌트 높이")
-    _v = st.slider("에디터 높이 px", 200, 600, st.session_state.lc_editor_h, 20, key="sl_eh"); 
+    _v = st.slider("에디터 높이 px", 200, 600, st.session_state.lc_editor_h, 20, key="sl_eh")
     if _v != st.session_state.lc_editor_h: st.session_state.lc_editor_h = _v; st.session_state['_needs_ls_save'] = True
-    _v = st.slider("파이차트 높이 px", 140, 340, st.session_state.lc_pie_h, 20, key="sl_ph"); 
+    _v = st.slider("파이차트 높이 px", 140, 340, st.session_state.lc_pie_h, 20, key="sl_ph")
     if _v != st.session_state.lc_pie_h: st.session_state.lc_pie_h = _v; st.session_state['_needs_ls_save'] = True
-    _v = st.slider("Delta Bar 높이 px", 120, 320, st.session_state.lc_bar_h, 20, key="sl_bh"); 
+    _v = st.slider("Delta Bar 높이 px", 120, 320, st.session_state.lc_bar_h, 20, key="sl_bh")
     if _v != st.session_state.lc_bar_h: st.session_state.lc_bar_h = _v; st.session_state['_needs_ls_save'] = True
     _lc_sec("③ 내부 비율")
-    _v = st.slider("파이 Current/Target %", 30, 70, st.session_state.lc_pie_split, 5, key="sl_ps"); 
+    _v = st.slider("파이 Current/Target %", 30, 70, st.session_state.lc_pie_split, 5, key="sl_ps")
     if _v != st.session_state.lc_pie_split: st.session_state.lc_pie_split = _v; st.session_state['_needs_ls_save'] = True
-    _v = st.slider("Delta Bar / Weights %", 30, 70, st.session_state.lc_delta_wt, 5, key="sl_dw"); 
+    _v = st.slider("Delta Bar / Weights %", 30, 70, st.session_state.lc_delta_wt, 5, key="sl_dw")
     if _v != st.session_state.lc_delta_wt: st.session_state.lc_delta_wt = _v; st.session_state['_needs_ls_save'] = True
     _lc_sec("④ 패널 표시")
     _c1, _c2, _c3 = st.columns(3)
@@ -573,7 +587,6 @@ with hdr_c2:
         if st.button("↺ 동기화", use_container_width=True): fetch_realtime_prices.clear(); load_data.clear(); st.rerun()
     with c_sync1: st.markdown(_hdr_right, unsafe_allow_html=True)
 st.markdown(apply_theme(f"""<div style="position:relative;margin:14px 0 24px;height:1px;background:rgba(0,0,0,0.07);"><div style="position:absolute;left:0;top:0;width:100%;height:1px;background:rgba(0,0,0,0.12);"></div><div style="position:absolute;left:0;top:-1px;width:80px;height:3px;background:var(--acc);"></div></div>"""), unsafe_allow_html=True)
-
 
 # ==========================================
 # 라우팅 1. Dashboard
@@ -618,7 +631,6 @@ if page == "📊 Dashboard":
             st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
     with st.spinner("글로벌 마켓 데이터 로딩..."): _gm_data, _gm_tickers, _asset_tickers, _leader_tickers = fetch_global_markets()
-
     def _sec_label(txt): st.markdown(f'<div style="display:flex;align-items:center;gap:12px;margin:24px 0 14px;"><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.1em;font-weight:700;color:{tc_heading};letter-spacing:-0.3px;white-space:nowrap;">{txt}</div><div style="flex:1;height:1px;background:rgba(0,0,0,0.12);"></div></div>', unsafe_allow_html=True)
 
     _sec_label("① Nasdaq 100  ·  Heatmap")
@@ -1055,7 +1067,7 @@ elif page == "🍫 12-Pack Radar":
     else: safe_cnt+=1
     if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0): warn_cnt+=1
     else: safe_cnt+=1
-    if last_row['GLD_SPY_Ratio'] > last_row['GLD_SPY_MA50']: warn_cnt+=1
+    if last_row['GLD_SPYG_Ratio'] > last_row['GLD_SPYG_MA50']: warn_cnt+=1
     else: safe_cnt+=1
     if last_row['UUP'] > last_row['UUP_MA50']: risk_cnt+=1
     else: safe_cnt+=1
@@ -1063,7 +1075,7 @@ elif page == "🍫 12-Pack Radar":
     else: safe_cnt+=1
     if last_row['BTC-USD'] < last_row['BTC_MA50']: warn_cnt+=1
     else: safe_cnt+=1
-    if last_row['IWM_SPY_Ratio'] < last_row['IWM_SPY_MA50']: warn_cnt+=1
+    if last_row['IWM_SPYG_Ratio'] < last_row['IWM_SPYG_MA50']: warn_cnt+=1
     else: safe_cnt+=1
     if last_row['^VIX'] > last_row['VIX_MA50']: risk_cnt+=1
     else: safe_cnt+=1
@@ -1072,7 +1084,7 @@ elif page == "🍫 12-Pack Radar":
 
     if risk_cnt >= 3: radar_status, radar_msg, radar_color = "극단적 위험 구간 (Risk-Off)", "시장에 극단적인 공포가 덮쳤습니다. 현재 복수의 매크로 지표가 시스템 리스크를 강하게 경고하고 있습니다. 단순한 조정을 넘어선 투매 구간일 확률이 높으니, 모든 레버리지 포지션을 해제하고 현금과 달러, 금 등 안전 자산 비중을 최대로 늘려 폭풍우가 지나가기를 기다리셔야 합니다.", "#DC2626"
     elif warn_cnt >= 4 or risk_cnt >= 1: radar_status, radar_msg, radar_color = "변동성 주의 (Warning)", "시장 곳곳에서 균열의 조짐이 감지되고 풀 지표가 점차 악화되고 있습니다. 신규 매수는 철저히 보류하시고, 포트폴리오의 리스크 노출도를 점검하며 보수적인 관망 자세를 유지하는 것이 좋습니다.", "#D97706"
-    else: radar_status, radar_msg, radar_color = "안정적 순항 (Safe)", "현재 글로벌 매크로 지표와 시장 심리가 모두 안정적인 궤도에 올라와 있습니다. 추세를 꺾을 만한 시스템 리스크가 보이지 않으니, AMLS 알고리즘이 제시하는 비중에 맞춰 자신감 있게 추세 추종 전략 전개하시기 바랍니다.", main_color
+    else: radar_status, radar_msg, radar_color = "안정적 순항 (Safe)", "현재 글로벌 매크로 지표와 시장 심리가 모두 안정적인 궤도에 올라와 있습니다. 추세를 꺾을 만한 시스템 리스크가 보이지 않으니, AMLS 알고리즘이 제시하는 비중에 맞춰 자신감 있게 추세 추종 전략을 전개하시기 바랍니다.", main_color
 
     total_signals = risk_cnt + warn_cnt + safe_cnt
     risk_pct  = int(risk_cnt  / total_signals * 100) if total_signals else 0
@@ -1091,11 +1103,11 @@ elif page == "🍫 12-Pack Radar":
     b4  = f'<span style="background:rgba({r_c},{g_c},{b_c},0.10);color:{main_color};border:1px solid {main_color};padding:2px 7px;font-size:0.68em;font-family:DM Mono,monospace;">▲{top_sec}/▼{bot_sec}</span>'
     b5  = _badge("RISK OFF","red","▼") if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else _badge("RISK ON","green","▲")
     b6  = _badge("NARROW","orange","⚠") if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else _badge("BROAD","green","▲")
-    b7  = _badge("GOLD","orange","▲") if last_row['GLD_SPY_Ratio']>last_row['GLD_SPY_MA50'] else _badge("EQUITY","green","▲")
+    b7  = _badge("GOLD","orange","▲") if last_row['GLD_SPYG_Ratio']>last_row['GLD_SPYG_MA50'] else _badge("EQUITY","green","▲")
     b8  = _badge("USD STR","red","▼") if last_row['UUP']>last_row['UUP_MA50'] else _badge("USD WK","green","▲")
     b9  = _badge("YIELD↑","red","▼") if last_row['^TNX'] > last_row['TNX_MA50'] else _badge("YIELD↓","green","▲")
     b10 = _badge("RISK OFF","red","▼") if last_row['BTC-USD'] < last_row['BTC_MA50'] else _badge("RISK ON","green","▲")
-    b11 = _badge("NARROW","orange","⚠") if last_row['IWM_SPY_Ratio'] < last_row['IWM_SPY_MA50'] else _badge("BROAD","green","▲")
+    b11 = _badge("NARROW","orange","⚠") if last_row['IWM_SPYG_Ratio'] < last_row['IWM_SPYG_MA50'] else _badge("BROAD","green","▲")
     b12 = _badge("EXPAND","red","▼") if last_row['^VIX'] > last_row['VIX_MA50'] else _badge("SHRINK","green","▲")
 
     gauge_steps = [{'range':[0,25], 'color':"rgba(220,38,38,0.4)"}, {'range':[25,45], 'color':"rgba(217,119,6,0.3)"}, {'range':[45,55], 'color':"rgba(0,0,0,0.04)"}, {'range':[55,75], 'color':f"rgba({r_c},{g_c},{b_c},0.3)"}, {'range':[75,100],'color':f"rgba({r_c},{g_c},{b_c},0.5)"}]
@@ -1131,8 +1143,8 @@ elif page == "🍫 12-Pack Radar":
             fig6=go.Figure(); fig6.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQ_20d_Ret'], name='QQQ', line=dict(color=line_c, width=1.8))); fig6.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQE_20d_Ret'], name='QQQE', line=dict(color=dash_c, dash='dot', width=1.1))); fig6.update_layout(**radar_layout, showlegend=False); fig6.update_xaxes(**_ax_r); fig6.update_yaxes(tickformat='.0%', **_ax_r); st.plotly_chart(fig6, use_container_width=True)
     with row2[2]:
         with st.container(border=True):
-            st.markdown(apply_theme(r_head(7, "Gold / Equity", b7, "https://kr.tradingview.com/chart/?symbol=AMEX:GLD", "GLD/SPY 비율. 금이 상대 강세면 기관의 Risk-Off 전환, 구조적 리스크 시그널.")), unsafe_allow_html=True)
-            fig7=go.Figure(); fig7.add_trace(go.Scatter(x=df_view.index, y=df_view['GLD_SPY_Ratio'], line=dict(color=line_c, width=1.8))); fig7.add_trace(go.Scatter(x=df_view.index, y=df_view['GLD_SPY_MA50'], line=dict(color=dash_c, dash='dot', width=1.1))); fig7.update_layout(**radar_layout, showlegend=False); fig7.update_xaxes(**_ax_r); fig7.update_yaxes(**_ax_r); st.plotly_chart(fig7, use_container_width=True)
+            st.markdown(apply_theme(r_head(7, "Gold / Equity", b7, "https://kr.tradingview.com/chart/?symbol=AMEX:GLD", "GLD/SPYG 비율. 금이 상대 강세면 기관의 Risk-Off 전환, 구조적 리스크 시그널.")), unsafe_allow_html=True)
+            fig7=go.Figure(); fig7.add_trace(go.Scatter(x=df_view.index, y=df_view['GLD_SPYG_Ratio'], line=dict(color=line_c, width=1.8))); fig7.add_trace(go.Scatter(x=df_view.index, y=df_view['GLD_SPYG_MA50'], line=dict(color=dash_c, dash='dot', width=1.1))); fig7.update_layout(**radar_layout, showlegend=False); fig7.update_xaxes(**_ax_r); fig7.update_yaxes(**_ax_r); st.plotly_chart(fig7, use_container_width=True)
     with row2[3]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(8, "USD (UUP)", b8, "https://kr.tradingview.com/chart/?symbol=AMEX:UUP", "달러지수(UUP). 50일선 상향 돌파시 기술주 강한 하방압력, 주식비중 축소 정석.")), unsafe_allow_html=True)
@@ -1149,8 +1161,8 @@ elif page == "🍫 12-Pack Radar":
             fig10=go.Figure(); fig10.add_trace(go.Scatter(x=df_view.index, y=df_view['BTC-USD'], line=dict(color=line_c, width=1.8))); fig10.add_trace(go.Scatter(x=df_view.index, y=df_view['BTC_MA50'], line=dict(color=dash_c, dash='dot', width=1.1))); fig10.update_layout(**radar_layout, showlegend=False); fig10.update_xaxes(**_ax_r); fig10.update_yaxes(**_ax_r); st.plotly_chart(fig10, use_container_width=True)
     with row3[2]:
         with st.container(border=True):
-            st.markdown(apply_theme(r_head(11, "Russell/SP500", b11, "https://kr.tradingview.com/chart/?symbol=AMEX:IWM", "IWM/SPY 비율. 중소형주 상대약세시 시장 내부 균열, TZA 전략 고려 가능.")), unsafe_allow_html=True)
-            fig11=go.Figure(); fig11.add_trace(go.Scatter(x=df_view.index, y=df_view['IWM_SPY_Ratio'], line=dict(color=line_c, width=1.8))); fig11.add_trace(go.Scatter(x=df_view.index, y=df_view['IWM_SPY_MA50'], line=dict(color=dash_c, dash='dot', width=1.1))); fig11.update_layout(**radar_layout, showlegend=False); fig11.update_xaxes(**_ax_r); fig11.update_yaxes(**_ax_r); st.plotly_chart(fig11, use_container_width=True)
+            st.markdown(apply_theme(r_head(11, "Russell/SPYG", b11, "https://kr.tradingview.com/chart/?symbol=AMEX:IWM", "IWM/SPYG 비율. 중소형주 상대약세시 시장 내부 균열, TZA 전략 고려 가능.")), unsafe_allow_html=True)
+            fig11=go.Figure(); fig11.add_trace(go.Scatter(x=df_view.index, y=df_view['IWM_SPYG_Ratio'], line=dict(color=line_c, width=1.8))); fig11.add_trace(go.Scatter(x=df_view.index, y=df_view['IWM_SPYG_MA50'], line=dict(color=dash_c, dash='dot', width=1.1))); fig11.update_layout(**radar_layout, showlegend=False); fig11.update_xaxes(**_ax_r); fig11.update_yaxes(**_ax_r); st.plotly_chart(fig11, use_container_width=True)
     with row3[3]:
         with st.container(border=True):
             st.markdown(apply_theme(r_head(12, "VIX Trend", b12, "https://kr.tradingview.com/chart/?symbol=CBOE:VIX", "VIX 추세. 50일선 상향 돌파시 변동성 확장 국면 진입, 시스템 패닉 시그널.")), unsafe_allow_html=True)
@@ -1160,7 +1172,7 @@ elif page == "🍫 12-Pack Radar":
     st.markdown(apply_theme(f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;"><div style="width:2px;height:14px;background:{main_color};flex-shrink:0;"></div><span style="font-family:DM Mono,monospace;font-size:0.6em;font-weight:600;color:{tc_heading};letter-spacing:0.2em;text-transform:uppercase;">AI  Quant  Analyst  ·  12-Signal Synthesis</span><div style="flex:1;height:1px;background:rgba(0,0,0,0.10);"></div><span style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};">Powered by Google Gemini</span></div>'), unsafe_allow_html=True)
     _ai_col_l, _ai_col_r = st.columns([1, 2])
     with _ai_col_l:
-        _sig_data = [("01 DCA·RSI", "BUY" if qqq_rsi<40 else ("OVER" if qqq_rsi>70 else "NEUTRAL"), f"QQQ RSI {qqq_rsi:.1f}", main_color if qqq_rsi<40 else ("#DC2626" if qqq_rsi>70 else "#9494A0")), ("02 Drawdown", "BEAR" if qqq_dd<-0.20 else ("CORR" if qqq_dd<-0.10 else "SAFE"), f"DD {qqq_dd*100:.1f}%", "#DC2626" if qqq_dd<-0.10 else main_color), ("03 Fear&Greed", "FEAR" if fg_score<30 else ("GREED" if fg_score>70 else "NEUTRAL"), f"FGI {fg_score:.0f}", main_color if fg_score<30 else ("#DC2626" if fg_score>70 else "#9494A0")), ("04 Sector", f"▲{top_sec}", f"▼{bot_sec}", main_color if top_sec not in ['UTIL','STAPLE','HEALTH'] else "#D97706"), ("05 Credit", "RISK-OFF" if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else "RISK-ON", "HYG/IEF ratio", "#DC2626" if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else main_color), ("06 Breadth", "NARROW" if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else "BROAD", "QQQ vs QQQE", "#D97706" if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else main_color), ("07 Gold/Equity", "GOLD↑" if last_row['GLD_SPY_Ratio']>last_row['GLD_SPY_MA50'] else "EQUITY↑", "GLD/SPY ratio", "#D97706" if last_row['GLD_SPY_Ratio']>last_row['GLD_SPY_MA50'] else main_color), ("08 USD", "USD↑" if last_row['UUP']>last_row['UUP_MA50'] else "USD↓", "UUP vs 50MA", "#DC2626" if last_row['UUP']>last_row['UUP_MA50'] else main_color), ("09 10Y Yield", "YIELD↑" if last_row['^TNX']>last_row['TNX_MA50'] else "YIELD↓", f"TNX {last_row['^TNX']:.2f}%", "#DC2626" if last_row['^TNX']>last_row['TNX_MA50'] else main_color), ("10 Bitcoin", "RISK-OFF" if last_row['BTC-USD']<last_row['BTC_MA50'] else "RISK-ON", "BTC vs 50MA", "#DC2626" if last_row['BTC-USD']<last_row['BTC_MA50'] else main_color), ("11 Russell/SP", "NARROW" if last_row['IWM_SPY_Ratio']<last_row['IWM_SPY_MA50'] else "BROAD", "IWM/SPY ratio", "#D97706" if last_row['IWM_SPY_Ratio']<last_row['IWM_SPY_MA50'] else main_color), ("12 VIX Trend", "EXPAND" if last_row['^VIX']>last_row['VIX_MA50'] else "SHRINK", f"VIX {last_row['^VIX']:.1f}", "#DC2626" if last_row['^VIX']>last_row['VIX_MA50'] else main_color)]
+        _sig_data = [("01 DCA·RSI", "BUY" if qqq_rsi<40 else ("OVER" if qqq_rsi>70 else "NEUTRAL"), f"QQQ RSI {qqq_rsi:.1f}", main_color if qqq_rsi<40 else ("#DC2626" if qqq_rsi>70 else "#9494A0")), ("02 Drawdown", "BEAR" if qqq_dd<-0.20 else ("CORR" if qqq_dd<-0.10 else "SAFE"), f"DD {qqq_dd*100:.1f}%", "#DC2626" if qqq_dd<-0.10 else main_color), ("03 Fear&Greed", "FEAR" if fg_score<30 else ("GREED" if fg_score>70 else "NEUTRAL"), f"FGI {fg_score:.0f}", main_color if fg_score<30 else ("#DC2626" if fg_score>70 else "#9494A0")), ("04 Sector", f"▲{top_sec}", f"▼{bot_sec}", main_color if top_sec not in ['UTIL','STAPLE','HEALTH'] else "#D97706"), ("05 Credit", "RISK-OFF" if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else "RISK-ON", "HYG/IEF ratio", "#DC2626" if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else main_color), ("06 Breadth", "NARROW" if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else "BROAD", "QQQ vs QQQE", "#D97706" if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else main_color), ("07 Gold/Equity", "GOLD↑" if last_row['GLD_SPYG_Ratio']>last_row['GLD_SPYG_MA50'] else "EQUITY↑", "GLD/SPYG ratio", "#D97706" if last_row['GLD_SPYG_Ratio']>last_row['GLD_SPYG_MA50'] else main_color), ("08 USD", "USD↑" if last_row['UUP']>last_row['UUP_MA50'] else "USD↓", "UUP vs 50MA", "#DC2626" if last_row['UUP']>last_row['UUP_MA50'] else main_color), ("09 10Y Yield", "YIELD↑" if last_row['^TNX']>last_row['TNX_MA50'] else "YIELD↓", f"TNX {last_row['^TNX']:.2f}%", "#DC2626" if last_row['^TNX']>last_row['TNX_MA50'] else main_color), ("10 Bitcoin", "RISK-OFF" if last_row['BTC-USD']<last_row['BTC_MA50'] else "RISK-ON", "BTC vs 50MA", "#DC2626" if last_row['BTC-USD']<last_row['BTC_MA50'] else main_color), ("11 Russell/SPYG", "NARROW" if last_row['IWM_SPYG_Ratio']<last_row['IWM_SPYG_MA50'] else "BROAD", "IWM/SPYG ratio", "#D97706" if last_row['IWM_SPYG_Ratio']<last_row['IWM_SPYG_MA50'] else main_color), ("12 VIX Trend", "EXPAND" if last_row['^VIX']>last_row['VIX_MA50'] else "SHRINK", f"VIX {last_row['^VIX']:.1f}", "#DC2626" if last_row['^VIX']>last_row['VIX_MA50'] else main_color)]
         _sig_rows = "".join([f'<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(0,0,0,0.05);"><span style="font-family:DM Mono,monospace;font-size:0.66em;color:{tc_label};">{_sn}</span><div style="text-align:right;"><span style="font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;color:{_sc};">{_ss}</span><span style="font-family:DM Mono,monospace;font-size:0.58em;color:{tc_label};margin-left:6px;">{_sv}</span></div></div>' for _sn, _ss, _sv, _sc in _sig_data])
         with st.container(border=True): st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.56em;font-weight:600;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(0,0,0,0.09);">12 Signal Snapshot</div><div>{_sig_rows}</div><div style="display:flex;justify-content:space-between;margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.08);"><span style="font-family:DM Mono,monospace;font-size:0.58em;color:#DC2626;">Risk {risk_cnt}개</span><span style="font-family:DM Mono,monospace;font-size:0.58em;color:#D97706;">Warn {warn_cnt}개</span><span style="font-family:DM Mono,monospace;font-size:0.58em;color:{main_color};">Safe {safe_cnt}개</span></div>', unsafe_allow_html=True)
     with _ai_col_r:
@@ -1179,7 +1191,7 @@ elif page == "🍫 12-Pack Radar":
                             _target_model = _match[0]
                             break
                     _model = genai.GenerativeModel(_target_model.replace('models/', ''))
-                    _prompt = f"너는 월스트리트 출신 퀀트 애널리스트야. AMLS V4.5 시스템의 12개 매크로 신호를 분석해서 투자의견을 내줘.\n[현재 레짐] R{curr_regime} — {regime_info[curr_regime][1]}\n[신호 요약] Risk {risk_cnt}개 / Warn {warn_cnt}개 / Safe {safe_cnt}개\n[12개 실시간 신호]\n1. QQQ RSI: {qqq_rsi:.1f}\n2. QQQ 고점대비 낙폭: {qqq_dd*100:.1f}%\n3. CNN Fear&Greed: {fg_score:.0f}\n4. 주도섹터: {top_sec} / 약세섹터: {bot_sec}\n5. 신용스프레드 HYG/IEF: {'위험' if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else '안전'}\n6. 시장폭: {'좁아짐' if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else '넓음'}\n7. 금/주식 비율: {'금강세' if last_row['GLD_SPY_Ratio']>last_row['GLD_SPY_MA50'] else '주식강세'}\n8. 달러: {'강세' if last_row['UUP']>last_row['UUP_MA50'] else '약세'}\n9. 미10년물금리 {last_row['^TNX']:.2f}%: {'상승' if last_row['^TNX']>last_row['TNX_MA50'] else '하락'}\n10. 비트코인: {'위험' if last_row['BTC-USD']<last_row['BTC_MA50'] else '안전'}\n11. 러셀2000/S&P500: {'약세' if last_row['IWM_SPY_Ratio']<last_row['IWM_SPY_MA50'] else '강세'}\n12. VIX {last_row['^VIX']:.1f}: {'확장' if last_row['^VIX']>last_row['VIX_MA50'] else '축소'}\n아래 3개 섹션으로 구성해서 한국어로 작성해줘:\n**① 시장 환경 진단**\n**② 핵심 리스크 & 기회 요인**\n**③ AMLS 전략 투자의견**"
+                    _prompt = f"너는 월스트리트 출신 퀀트 애널리스트야. AMLS V4.5 시스템의 12개 매크로 신호를 분석해서 투자의견을 내줘.\n[현재 레짐] R{curr_regime} — {regime_info[curr_regime][1]}\n[신호 요약] Risk {risk_cnt}개 / Warn {warn_cnt}개 / Safe {safe_cnt}개\n[12개 실시간 신호]\n1. QQQ RSI: {qqq_rsi:.1f}\n2. QQQ 고점대비 낙폭: {qqq_dd*100:.1f}%\n3. CNN Fear&Greed: {fg_score:.0f}\n4. 주도섹터: {top_sec} / 약세섹터: {bot_sec}\n5. 신용스프레드 HYG/IEF: {'위험' if last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'] else '안전'}\n6. 시장폭: {'좁아짐' if (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0) else '넓음'}\n7. 금/주식 비율: {'금강세' if last_row['GLD_SPYG_Ratio']>last_row['GLD_SPYG_MA50'] else '주식강세'}\n8. 달러: {'강세' if last_row['UUP']>last_row['UUP_MA50'] else '약세'}\n9. 미10년물금리 {last_row['^TNX']:.2f}%: {'상승' if last_row['^TNX']>last_row['TNX_MA50'] else '하락'}\n10. 비트코인: {'위험' if last_row['BTC-USD']<last_row['BTC_MA50'] else '안전'}\n11. 러셀2000/S&P500Growth: {'약세' if last_row['IWM_SPYG_Ratio']<last_row['IWM_SPYG_MA50'] else '강세'}\n12. VIX {last_row['^VIX']:.1f}: {'확장' if last_row['^VIX']>last_row['VIX_MA50'] else '축소'}\n아래 3개 섹션으로 구성해서 한국어로 작성해줘:\n**① 시장 환경 진단**\n**② 핵심 리스크 & 기회 요인**\n**③ AMLS 전략 투자의견**"
                     with st.spinner("AI 분석 중..."): _response = _model.generate_content(_prompt)
                     st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);border-left:4px solid {main_color};padding:20px 24px;"><div style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};letter-spacing:0.16em;text-transform:uppercase;margin-bottom:12px;">AI Quant Analysis  ·  {last_update_time}</div><div style="font-family:DM Sans,sans-serif;font-size:0.88em;color:{tc_body};line-height:1.8;">{_response.text}</div></div>'), unsafe_allow_html=True)
             except KeyError: st.error("🚨 GEMINI_API_KEY 누락")
@@ -1205,7 +1217,7 @@ elif page == "📈 Backtest Lab":
             bt_df = load_custom_backtest_data(bt_start, bt_end)
             if bt_df.empty: st.error("해당 기간의 데이터가 부족합니다.")
             else:
-                daily_ret = bt_df[['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPY','SMH','GLD']].pct_change().fillna(0)
+                daily_ret = bt_df[['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD']].pct_change().fillna(0)
                 w_orig = get_weights_v45(bt_df['Regime'].iloc[0], False)
                 val_o, val_q, val_qld, val_tqqq = 10000, 10000, 10000, 10000
                 hist_o, hist_q, hist_qld, hist_tqqq, invested, curr_inv = [val_o], [val_q], [val_qld], [val_tqqq], [10000], 10000
