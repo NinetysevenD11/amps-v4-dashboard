@@ -379,6 +379,8 @@ def get_weights_v45(reg, smh_ok):
     elif reg == 4: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.40, 0.10
     return w
 target_weights = get_weights_v45(curr_regime, smh_cond)
+current_prices = {t: (rt_prices.get(t, df[t].iloc[-1]) if t != 'CASH' else 1.0) for t in ASSET_LIST}
+cp = current_prices    
 
 if curr_regime == live_regime: regime_committee_msg = "🟢 조건 부합 (안정)"
 elif live_regime > curr_regime: regime_committee_msg = f"🔴 R{live_regime} 방어 즉시 반영"
