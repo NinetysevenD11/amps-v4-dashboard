@@ -598,26 +598,6 @@ def fetch_realtime_prices():
 
 
 
-@st.cache_data(ttl=1800)
-def fetch_fear_and_greed():
-    try:
-        url = "https://production.api.cnn.io/data/ext/fear_and_greed/latest"
-        # 💡 봇 차단을 우회하기 위해 진짜 브라우저처럼 완벽하게 헤더를 위장합니다.
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
-            "Origin": "https://edition.cnn.com",
-            "Referer": "https://edition.cnn.com/",
-            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7"
-        }
-        req = urllib.request.Request(url, headers=headers)
-        res = urllib.request.urlopen(req, timeout=5).read().decode('utf-8')
-        return float(json.loads(res)['fear_and_greed']['score'])
-    except Exception as e:
-        return None
-
-
-
 @st.cache_data(ttl=900)
 
 def fetch_macro_news():
@@ -2159,17 +2139,23 @@ elif page == "💼 Portfolio":
 
 elif page == "🍫 12-Pack Radar":
 
+    elif page == "🍫 12-Pack Radar":
     df_view  = df.iloc[-120:]
-
     qqq_rsi  = last_row['QQQ_RSI']
-
     qqq_dd   = last_row['QQQ_DD']
-
-    cnn_fgi  = fetch_fear_and_greed()
-
-    if cnn_fgi is not None: fg_score = cnn_fgi
-
-    else: fg_score = (max(0, min(100, 100-(last_row['^VIX']-12)/28*100)) + max(0, min(100, (qqq_dd+0.20)/0.20*100)) + max(0, min(100, qqq_rsi)))/3
+    
+    # 💡 CNN 방식을 모방한 자체 Fear & Greed 엔진 (절대 고장나지 않음)
+    # 1. 변동성 (VIX): 12(탐욕) ~ 35(공포) 기준 역산
+    _vix_score = max(0, min(100, 100 - (last_row['^VIX'] - 12) / 23 * 100))
+    # 2. 시장 모멘텀 (RSI)
+    _rsi_score = max(0, min(100, qqq_rsi))
+    # 3. 장기 추세 강도 (QQQ vs 200MA)
+    _mom_score = max(0, min(100, 50 + (last_row['QQQ'] / last_row['QQQ_MA200'] - 1) * 250))
+    # 4. 스마트머니 신용 스프레드 (하이일드 채권 수요)
+    _crd_score = max(0, min(100, 50 + (last_row['HYG_IEF_Ratio'] / last_row['HYG_IEF_MA50'] - 1) * 500))
+    
+    # 위 4개 핵심 지표를 평균 내어 최종 FGI(0~100) 산출
+    fg_score = (_vix_score + _rsi_score + _mom_score + _crd_score) / 4
 
 
 
