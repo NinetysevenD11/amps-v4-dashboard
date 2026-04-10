@@ -15,7 +15,7 @@ import os
 warnings.filterwarnings('ignore')
 
 # ==========================================
-# 1. 앱 설정 및 세션 상태 초기화
+# 1. 설정 및 상태 관리
 # ==========================================
 st.set_page_config(page_title="AMLS V4.5 FINANCE STRATEGY", layout="wide", page_icon="🌿", initial_sidebar_state="expanded")
 
@@ -39,12 +39,21 @@ if 'tc_label'     not in st.session_state: st.session_state.tc_label     = '#949
 if 'tc_data'      not in st.session_state: st.session_state.tc_data      = '#111118'
 if 'tc_sidebar'   not in st.session_state: st.session_state.tc_sidebar   = '#2D2D2D'
 if '_ls_loaded'   not in st.session_state: st.session_state._ls_loaded   = False
-
 if 'rebal_locked' not in st.session_state: st.session_state.rebal_locked = False
 if 'rebal_plan'   not in st.session_state: st.session_state.rebal_plan   = None
 
 # ==========================================
-# 2. 로컬 스토리지 & 포트폴리오 관리 (기본 함수)
+# 2. 전역 상수 (티커 및 포트폴리오 설정)
+# ==========================================
+SECTOR_TICKERS   = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','XLB']
+CORE_TICKERS     = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
+TICKERS          = CORE_TICKERS + SECTOR_TICKERS
+ASSET_LIST       = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
+REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPYG','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
+PORTFOLIO_FILE   = 'portfolio_autosave.json'
+
+# ==========================================
+# 3. 로컬 스토리지 & 포트폴리오 로직
 # ==========================================
 def _ls_save_all():
     _layout = json.dumps({"display_mode": st.session_state.display_mode, "lc_lr_split": st.session_state.lc_lr_split, "lc_delta_wt": st.session_state.lc_delta_wt, "lc_editor_h": st.session_state.lc_editor_h, "lc_goal_inp": st.session_state.lc_goal_inp, "lc_pie_h": st.session_state.lc_pie_h, "lc_pie_split": st.session_state.lc_pie_split, "lc_bar_h": st.session_state.lc_bar_h, "lc_show_lp": st.session_state.lc_show_lp, "lc_show_qo": st.session_state.lc_show_qo, "lc_show_reg": st.session_state.lc_show_reg})
@@ -59,12 +68,6 @@ def _ls_load():
     if st.session_state._ls_loaded: return
     st.markdown("""<script>(function(){var keys=["amls_portfolio","amls_goal","amls_layout","amls_theme","amls_dispmode"];var changed=false;var params=new URLSearchParams(window.location.search);keys.forEach(function(k){var v=localStorage.getItem(k);if(v&&!params.has(k)){params.set(k,encodeURIComponent(v));changed=true;}});if(changed){var newUrl=window.location.pathname+"?"+params.toString();window.history.replaceState(null,"",newUrl);window.location.reload();}})();</script>""", unsafe_allow_html=True)
     st.session_state._ls_loaded = True
-
-SECTOR_TICKERS = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','XLB']
-CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
-TICKERS        = CORE_TICKERS + SECTOR_TICKERS
-ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
-PORTFOLIO_FILE = 'portfolio_autosave.json'
 
 def _restore_from_qp():
     _qp, _changed = st.query_params.to_dict(), False
@@ -149,9 +152,8 @@ def save_portfolio_to_disk():
     except: pass
     st.session_state['_needs_ls_save'] = True
 
-
 # ==========================================
-# 3. 데이터 로딩 및 전략 엔진 (먼저 실행)
+# 4. 데이터 수집 및 백엔드 로직
 # ==========================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_data():
@@ -228,6 +230,47 @@ def apply_asymmetric_delay(targets):
         res.append(hist_curr)
     return pd.Series(res, index=targets.index).shift(1).bfill()
 
+@st.cache_data(ttl=3600)
+def load_custom_backtest_data(start_date, end_date):
+    fetch_start = pd.to_datetime(start_date) - timedelta(days=400)
+    data = yf.download(TICKERS, start=fetch_start.strftime("%Y-%m-%d"), end=(pd.to_datetime(end_date) + timedelta(days=1)).strftime("%Y-%m-%d"), progress=False, auto_adjust=True)['Close']
+    if 'QQQ' in data.columns: data = data.dropna(subset=['QQQ'])
+    bt_df = pd.DataFrame(index=data.index)
+    for t in TICKERS: bt_df[t] = data[t]
+    bt_df = bt_df.ffill().bfill()
+    bt_df['QQQ_MA20'] = bt_df['QQQ'].rolling(20).mean()
+    bt_df['QQQ_MA50'] = bt_df['QQQ'].rolling(50).mean()
+    bt_df['QQQ_MA200'] = bt_df['QQQ'].rolling(200).mean()
+    bt_df['TQQQ_MA200'] = bt_df['TQQQ'].rolling(200).mean()
+    bt_df['SMH_MA50'] = bt_df['SMH'].rolling(50).mean()
+    bt_df['VIX_MA5'] = bt_df['^VIX'].rolling(5).mean()
+    bt_df['VIX_MA20'] = bt_df['^VIX'].rolling(20).mean()
+    bt_df['VIX_MA50'] = bt_df['^VIX'].rolling(50).mean()
+    bt_df['SMH_3M_Ret'] = bt_df['SMH'].pct_change(63)
+    bt_df['SMH_1M_Ret'] = bt_df['SMH'].pct_change(21)
+    bt_df['SMH_RSI'] = ta.rsi(bt_df['SMH'], length=14)
+    bt_df['HYG_IEF_Ratio'] = bt_df['HYG'] / bt_df['IEF']
+    bt_df['HYG_IEF_MA20'] = bt_df['HYG_IEF_Ratio'].rolling(20).mean()
+    bt_df['HYG_IEF_MA50'] = bt_df['HYG_IEF_Ratio'].rolling(50).mean()
+    bt_df['QQQ_20d_Ret'] = bt_df['QQQ'].pct_change(20)
+    bt_df['QQQE_20d_Ret'] = bt_df['QQQE'].pct_change(20)
+    bt_df['QQQ_RSI'] = ta.rsi(bt_df['QQQ'], length=14)
+    bt_df['GLD_SPYG_Ratio'] = bt_df['GLD'] / bt_df['SPYG']
+    bt_df['GLD_SPYG_MA50'] = bt_df['GLD_SPYG_Ratio'].rolling(50).mean()
+    bt_df['QQQ_High52'] = bt_df['QQQ'].rolling(252).max()
+    bt_df['QQQ_DD'] = (bt_df['QQQ'] / bt_df['QQQ_High52']) - 1
+    bt_df['UUP_MA50'] = bt_df['UUP'].rolling(50).mean()
+    bt_df['TNX_MA50'] = bt_df['^TNX'].rolling(50).mean()
+    bt_df['BTC_MA50'] = bt_df['BTC-USD'].rolling(50).mean()
+    bt_df['IWM_SPYG_Ratio'] = bt_df['IWM'] / bt_df['SPYG']
+    bt_df['IWM_SPYG_MA50'] = bt_df['IWM_SPYG_Ratio'].rolling(50).mean()
+    bt_df = bt_df.dropna()
+    if bt_df.empty: return bt_df
+    bt_df['Target'] = bt_df.apply(get_target_v45, axis=1)
+    bt_df['Regime'] = apply_asymmetric_delay(bt_df['Target'])
+    bt_df = bt_df.loc[pd.to_datetime(start_date):pd.to_datetime(end_date)]
+    return bt_df
+
 @st.cache_data(ttl=15)
 def fetch_realtime_prices():
     prices = {}
@@ -293,48 +336,6 @@ def fetch_global_markets():
     except: pass
     return results, gt, at, lt
 
-@st.cache_data(ttl=3600)
-def load_custom_backtest_data(start_date, end_date):
-    fetch_start = pd.to_datetime(start_date) - timedelta(days=400)
-    data = yf.download(TICKERS, start=fetch_start.strftime("%Y-%m-%d"), end=(pd.to_datetime(end_date) + timedelta(days=1)).strftime("%Y-%m-%d"), progress=False, auto_adjust=True)['Close']
-    if 'QQQ' in data.columns: data = data.dropna(subset=['QQQ'])
-    bt_df = pd.DataFrame(index=data.index)
-    for t in TICKERS: bt_df[t] = data[t]
-    bt_df = bt_df.ffill().bfill()
-    bt_df['QQQ_MA20'] = bt_df['QQQ'].rolling(20).mean()
-    bt_df['QQQ_MA50'] = bt_df['QQQ'].rolling(50).mean()
-    bt_df['QQQ_MA200'] = bt_df['QQQ'].rolling(200).mean()
-    bt_df['TQQQ_MA200'] = bt_df['TQQQ'].rolling(200).mean()
-    bt_df['SMH_MA50'] = bt_df['SMH'].rolling(50).mean()
-    bt_df['VIX_MA5'] = bt_df['^VIX'].rolling(5).mean()
-    bt_df['VIX_MA20'] = bt_df['^VIX'].rolling(20).mean()
-    bt_df['VIX_MA50'] = bt_df['^VIX'].rolling(50).mean()
-    bt_df['SMH_3M_Ret'] = bt_df['SMH'].pct_change(63)
-    bt_df['SMH_1M_Ret'] = bt_df['SMH'].pct_change(21)
-    bt_df['SMH_RSI'] = ta.rsi(bt_df['SMH'], length=14)
-    bt_df['HYG_IEF_Ratio'] = bt_df['HYG'] / bt_df['IEF']
-    bt_df['HYG_IEF_MA20'] = bt_df['HYG_IEF_Ratio'].rolling(20).mean()
-    bt_df['HYG_IEF_MA50'] = bt_df['HYG_IEF_Ratio'].rolling(50).mean()
-    bt_df['QQQ_20d_Ret'] = bt_df['QQQ'].pct_change(20)
-    bt_df['QQQE_20d_Ret'] = bt_df['QQQE'].pct_change(20)
-    bt_df['QQQ_RSI'] = ta.rsi(bt_df['QQQ'], length=14)
-    bt_df['GLD_SPYG_Ratio'] = bt_df['GLD'] / bt_df['SPYG']
-    bt_df['GLD_SPYG_MA50'] = bt_df['GLD_SPYG_Ratio'].rolling(50).mean()
-    bt_df['QQQ_High52'] = bt_df['QQQ'].rolling(252).max()
-    bt_df['QQQ_DD'] = (bt_df['QQQ'] / bt_df['QQQ_High52']) - 1
-    bt_df['UUP_MA50'] = bt_df['UUP'].rolling(50).mean()
-    bt_df['TNX_MA50'] = bt_df['^TNX'].rolling(50).mean()
-    bt_df['BTC_MA50'] = bt_df['BTC-USD'].rolling(50).mean()
-    bt_df['IWM_SPYG_Ratio'] = bt_df['IWM'] / bt_df['SPYG']
-    bt_df['IWM_SPYG_MA50'] = bt_df['IWM_SPYG_Ratio'].rolling(50).mean()
-    bt_df = bt_df.dropna()
-    if bt_df.empty: return bt_df
-    bt_df['Target'] = bt_df.apply(get_target_v45, axis=1)
-    bt_df['Regime'] = apply_asymmetric_delay(bt_df['Target'])
-    bt_df = bt_df.loc[pd.to_datetime(start_date):pd.to_datetime(end_date)]
-    return bt_df
-
-# === 데이터 로드 및 핵심 변수 계산 실행 ===
 with st.spinner('데이터 수집 중...'):
     df = load_data()
     if df is not None and not df.empty: st.session_state['_df_cache'] = df
@@ -382,15 +383,11 @@ elif live_regime > curr_regime: regime_committee_msg = f"🔴 R{live_regime} 방
 elif hist_regime == 3 and live_regime == 1 and curr_regime == 2: regime_committee_msg = "🟡 R2 1차 회복 · R1 승급 대기 (5일)"
 else: regime_committee_msg = f"🟡 R{live_regime} 승급 대기 (5일)"
 
-regime_info = {1:("R1 BULL","풀 가동"),2:("R2 CORR","방어 진입"), 3:("R3 BEAR","대피"),4:("R4 PANIC","최대 방어")}
-
-# ==========================================
-# 4. 테마 및 CSS 스타일 적용
-# ==========================================
 b_color, t_color, line_c, dash_c, rsi_low_c = 'rgba(0,0,0,0)', '#4A4A57', main_color, '#B0B0BE', main_color
 chart_layout = dict(paper_bgcolor=b_color, plot_bgcolor=b_color, font=dict(family="DM Mono, DM Sans, monospace", color=t_color), margin=dict(l=0, r=0, t=40, b=0))
 radar_layout = dict(height=200, margin=dict(l=10, r=10, t=15, b=15), paper_bgcolor=b_color, plot_bgcolor=b_color, font=dict(family="DM Mono, DM Sans, monospace", color=t_color))
 _ax, _ax_r = dict(gridcolor='rgba(0,0,0,0.07)', linecolor='rgba(0,0,0,0.12)', showgrid=True, zeroline=False), dict(gridcolor='rgba(0,0,0,0.07)', zeroline=False, showgrid=True)
+regime_info = {1:("R1 BULL","풀 가동"),2:("R2 CORR","방어 진입"), 3:("R3 BEAR","대피"),4:("R4 PANIC","최대 방어")}
 
 css_block = f"""<style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
@@ -475,9 +472,7 @@ css_block = f"""<style>
 </style>"""
 st.markdown(apply_theme(css_block), unsafe_allow_html=True)
 
-# ==========================================
-# 5. 사이드바 및 공통 헤더 렌더링
-# ==========================================
+# --- 사이드바 ---
 st.sidebar.markdown(apply_theme(f"""<div style="padding:22px 20px 16px;background:{bg_color};border-bottom:1px solid rgba(0,0,0,0.09);"><div style="font-family:'DM Mono';font-size:0.52em;color:{tc_label};letter-spacing:0.26em;text-transform:uppercase;margin-bottom:8px;">Quantitative Engine</div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:1.65em;font-weight:800;color:{tc_heading};letter-spacing:-1px;line-height:1;margin-bottom:14px;">AMLS <span style="color:#10B981;">V4.5</span></div><div style="display:flex;align-items:center;justify-content:space-between;"><div class="live-pulse" style="display:inline-flex;align-items:center;gap:5px;font-family:'DM Mono';font-size:0.6em;color:#059669;padding:3px 10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);letter-spacing:0.06em;">{rt_label}</div><div style="font-family:'DM Mono';font-size:0.58em;color:{tc_label};letter-spacing:0.04em;">R{curr_regime} · {regime_info[curr_regime][1]}</div></div></div>"""), unsafe_allow_html=True)
 st.sidebar.markdown('<div class="sb-section" style="border-top:none;">Navigation</div>', unsafe_allow_html=True)
 page = st.sidebar.radio("MENU", ["📊 Dashboard", "💼 Portfolio", "🍫 12-Pack Radar", "📈 Backtest Lab", "📰 Macro News"], label_visibility="collapsed")
@@ -520,20 +515,14 @@ with hdr_c2:
     with cs1: st.markdown(apply_theme(f"""<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;"><div style="display:flex;gap:6px;">{_p_qqq}{_p_vix}{_p_smh}{_p_reg}</div><div style="display:flex;align-items:center;gap:10px;"><div class="live-pulse" style="font-family:'DM Mono';font-size:0.68em;color:#059669;padding:4px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:6px;letter-spacing:0.06em;">{rt_label}</div><div style="font-family:'DM Mono';font-size:0.68em;color:#4A5568;letter-spacing:0.04em;">⏱ {last_update_time}</div></div></div>"""), unsafe_allow_html=True)
 st.markdown(apply_theme(f"""<div style="position:relative;margin:14px 0 24px;height:1px;background:rgba(0,0,0,0.07);"><div style="position:absolute;left:0;top:-1px;width:80px;height:3px;background:var(--acc);"></div></div>"""), unsafe_allow_html=True)
 
-# ==========================================
-# 6. 메인 페이지 라우팅 로직
-# ==========================================
+# --- 페이지 로직 ---
 if page == "📊 Dashboard":
     def _lg_row(label, val, passed):
         icon, color = ("●", main_color) if passed else ("○", "#B0B0BE")
         val_str = f"${val:.2f}" if isinstance(val, (int, float)) and val > 5 else f"{val:.2f}" if isinstance(val, (int, float)) else str(val)
         return f'<div class="crow"><span class="clabel">{label}</span><span class="cval" style="color:{color};">{val_str}&nbsp;<span style="font-size:0.7em;">{icon}</span></span></div>'
     soxl_title, soxl_strat, soxl_color = ("SOXL APPROVED", "3× Leverage Active", main_color) if smh_cond else ("USD DEFENSE", "2× Defense Mode", "#9494A0")
-    def _tick(label, val, sub, ok): return f'<div style="display:inline-flex;flex-direction:column;padding:0 20px;border-right:1px solid rgba(0,0,0,0.09);min-width:110px;"><span style="font-family:DM Mono,monospace;font-size:0.65em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">{label}</span><span style="font-family:DM Mono,monospace;font-size:1.05em;color:#111118;font-variant-numeric:tabular-nums;">{val}</span><span style="font-family:DM Mono,monospace;font-size:0.76em;color:{"#059669" if ok else "#DC2626"};\">{"▲" if ok else "▼"} {sub}</span></div>'
-    
-    tickers = _tick("QQQ", f"${last_row['QQQ']:.2f}", f"{_qqq_chg:+.2f}%", _qqq_chg>=0) + _tick("TQQQ", f"${last_row['TQQQ']:.2f}", f"{(last_row['TQQQ']/last_row['TQQQ_MA200']-1)*100:+.2f}%", last_row['TQQQ']>=last_row['TQQQ_MA200']) + _tick("VIX", f"{last_row['^VIX']:.2f}", f"MA20: {last_row['VIX_MA20']:.1f}", last_row['^VIX']<20) + _tick("SMH 1M", f"{last_row['SMH_1M_Ret']*100:+.1f}%", f"vs 50MA: {(last_row['SMH']/last_row['SMH_MA50']-1)*100:+.1f}%", last_row['SMH_1M_Ret']>=0) + _tick("SMH RSI", f"{last_row['SMH_RSI']:.1f}", "> 50 target", last_row['SMH_RSI']>50)
-    st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid #111118;padding:12px 0 12px 18px;margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;"><span style="font-family:DM Mono;font-size:0.65em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;white-space:nowrap;padding-right:16px;border-right:1px solid rgba(0,0,0,0.09);">Live Feed</span>{tickers}<div style="margin-left:auto;padding:0 14px;white-space:nowrap;"><span class="live-pulse" style="font-family:DM Mono;font-size:0.6em;color:#059669;letter-spacing:0.06em;">{rt_label}</span></div></div>', unsafe_allow_html=True)
-    
+    st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid #111118;padding:12px 0 12px 18px;margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;"><span style="font-family:DM Mono;font-size:0.65em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;white-space:nowrap;padding-right:16px;border-right:1px solid rgba(0,0,0,0.09);">Live Feed</span>{_tick("QQQ",f"${last_row['QQQ']:.2f}",f"{(last_row['QQQ']/last_row['QQQ_MA200']-1)*100:+.2f}%",last_row['QQQ']>=last_row['QQQ_MA200'])+_tick("TQQQ",f"${last_row['TQQQ']:.2f}",f"{(last_row['TQQQ']/last_row['TQQQ_MA200']-1)*100:+.2f}%",last_row['TQQQ']>=last_row['TQQQ_MA200'])+_tick("VIX",f"{last_row['^VIX']:.2f}",f"MA20: {last_row['VIX_MA20']:.1f}",last_row['^VIX']<20)+_tick("SMH 1M",f"{last_row['SMH_1M_Ret']*100:+.1f}%",f"vs 50MA: {(last_row['SMH']/last_row['SMH_MA50']-1)*100:+.1f}%",last_row['SMH_1M_Ret']>=0)+_tick("SMH RSI",f"{last_row['SMH_RSI']:.1f}","> 50 target",last_row['SMH_RSI']>50)}<div style="margin-left:auto;padding:0 14px;white-space:nowrap;"><span class="live-pulse" style="font-family:DM Mono;font-size:0.6em;color:#059669;letter-spacing:0.06em;">{rt_label}</span></div></div>', unsafe_allow_html=True)
     lcol, rcol = st.columns([1, 2.4])
     with lcol:
         r_acc = {1:main_color, 2:"#D97706", 3:"#DC2626", 4:"#7C3AED"}[curr_regime]
@@ -548,7 +537,6 @@ if page == "📊 Dashboard":
         st.markdown(f'<div style="display:flex;gap:4px;margin-bottom:10px;align-items:center;">{tabs_html}<div style="margin-left:auto;font-family:DM Mono;font-size:0.7em;color:#9494A0;">⏱ {last_update_time}</div></div>', unsafe_allow_html=True)
         for t, m in [("QQQ","QQQ_MA200"),("TQQQ","TQQQ_MA200")]:
             fig = go.Figure(); fig.add_trace(go.Scatter(x=df.iloc[-500:].index, y=df.iloc[-500:][t], name=t, line=dict(color=line_c, width=2), fill='tozeroy', fillcolor=f'rgba({r_c},{g_c},{b_c},0.06)')); fig.add_trace(go.Scatter(x=df.iloc[-500:].index, y=df.iloc[-500:][m], name='200MA', line=dict(color=dash_c, width=1.2, dash='dot'))); fig.update_layout(title=dict(text=f"{t} / 200-Day Moving Average", font=dict(family='DM Mono', size=13)), height=330, **chart_layout, legend=dict(orientation='h', x=1, xanchor='right', y=1.1)); fig.update_xaxes(**_ax); fig.update_yaxes(**_ax); st.container(border=True).plotly_chart(fig, use_container_width=True)
-    
     _gm, _gt, _at, _lt = fetch_global_markets()
     def _sec_label(txt): st.markdown(f'<div style="display:flex;align-items:center;gap:12px;margin:24px 0 14px;"><div style="font-family:Plus Jakarta Sans;font-size:1.1em;font-weight:700;">{txt}</div><div style="flex:1;height:1px;background:rgba(0,0,0,0.12);"></div></div>', unsafe_allow_html=True)
 
@@ -560,7 +548,6 @@ if page == "📊 Dashboard":
         d = _gm.get(t, {}); tlabels.append(t); tparents.append(s); tvalues.append(max(abs(d.get('price', 0.0)) * 0.1, 1)); tcolors.append(d.get('chg', 0.0)); ttext.append(f"{n}<br>{d.get('price',0.0):,.1f}<br>{d.get('chg',0.0):+.2f}%")
     tm_fig = go.Figure(go.Treemap(labels=tlabels, parents=tparents, values=tvalues, customdata=ttext, hovertemplate='%{customdata}<extra></extra>', texttemplate='<b>%{label}</b><br>%{customdata}', marker=dict(colors=tcolors, colorscale=[[0, '#DC2626'],[0.3, '#FCA5A5'],[0.5, '#F7F6F2'],[0.7, '#6EE7B7'],[1, '#059669']], cmid=0, cmin=-3, cmax=3, showscale=True), branchvalues='remainder'))
     tm_fig.update_layout(height=400, margin=dict(l=0,r=0,t=10,b=0), paper_bgcolor='rgba(0,0,0,0)'); st.container(border=True).plotly_chart(tm_fig, use_container_width=True)
-    
     _sec_label("② Assets & Leaders"); acols = st.columns(7)
     idict = {"^TNX":"📈","GLD":"🥇","SLV":"⚪","USO":"🛢","BTC-USD":"₿","ETH-USD":"Ξ","UUP":"💵"}
     for i, (t, n) in enumerate(_at.items()):
@@ -571,9 +558,7 @@ if page == "📊 Dashboard":
         d = _gm.get(t, {}); clr = "#059669" if d.get('chg',0)>=0 else "#DC2626"
         lcols[i%5].markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.1);border-top:2px solid {clr};padding:12px 14px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;"><span style="font-size:0.62em;color:#9494A0;">{t}</span><span style="font-size:0.62em;font-weight:600;">#{i+1}</span></div><div style="font-size:0.82em;margin:3px 0;">{n}</div><div style="font-size:1.0em;color:#111118;">${d.get("price",0):,.2f}</div><div style="font-size:0.82em;color:{clr};font-weight:600;">{"▲" if d.get("chg",0)>=0 else "▼"} {d.get("chg",0):+.2f}%</div></div>', unsafe_allow_html=True)
 
-# ==========================================
-# 페이지 2: 💼 Portfolio
-# ==========================================
+# 💼 Portfolio 페이지
 elif page == "💼 Portfolio":
     cp = {t: (rt_prices.get(t, df[t].iloc[-1]) if t != 'CASH' else 1.0) for t in ASSET_LIST}
     fx = rt_prices.get('USDKRW=X', 1350.0); cvals = {a: st.session_state.portfolio[a]['shares'] * cp[a] for a in ASSET_LIST}
@@ -581,7 +566,6 @@ elif page == "💼 Portfolio":
     tval_k, pnl_u, pnl_p = tval_u * fx, tval_u - tcost_u, ((tval_u - tcost_u)/tcost_u*100 if tcost_u > 0 else 0.0)
     ldiff = {a: (tval_u * target_weights.get(a, 0.0)) - cvals[a] for a in ASSET_LIST} if tval_u > 0 else {a: 0.0 for a in ASSET_LIST}
 
-    # 💡 Goal Tracker (원화 표기 포함)
     def _goal_tracker_html(total_val_krw):
         g_u, pct_r = st.session_state.goal_usd, (tval_u / st.session_state.goal_usd * 100) if st.session_state.goal_usd > 0 else 0.0
         pct = min(pct_r, 100.0); gc = "#059669" if pct_r > 100 else (main_color if pct >= 75 else ("#D97706" if pct >= 50 else "#94A3B8"))
@@ -615,7 +599,6 @@ elif page == "💼 Portfolio":
         if c2.button("🔄 초기화", key=f"rp_{is_mobile}"): st.session_state.rebal_locked=False; st.session_state.rebal_plan=None; st.rerun()
         st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
         t_sel = sum(abs(d) for a, d, s, c in p["sells"]); a_cash = t_sel + p["vals"].get('CASH', 0.0)
-        
         if not is_mobile:
             e1, e2, e3 = st.columns([1, 0.12, 1])
             with e1:
@@ -637,9 +620,9 @@ elif page == "💼 Portfolio":
                 ash = int(min(s, rem_c/c)); abuy = ash * c; rem_c -= abuy
                 if ash >= 1: st.markdown(f'<div style="background:rgba(5,150,105,0.035);border-left:3px solid #059669;padding:10px 14px;margin-bottom:5px;"><div style="display:flex;justify-content:space-between;"><span style="font-weight:700;">{a}</span><span style="color:#059669;font-weight:700;">▲ {ash:,.0f}주 매수</span></div></div>', unsafe_allow_html=True)
 
-    # 💡 P&L 및 화살표 출력 시 f-string 버그 해결됨
     def _kv(l, v, c, s=""): return f'<div style="display:flex;flex-direction:column;padding:0 20px;border-right:1px solid rgba(255,255,255,0.06);min-width:115px;"><span style="font-size:0.53em;color:rgba(255,255,255,0.35);text-transform:uppercase;">{l}</span><span style="font-size:1.0em;font-weight:500;color:{c};">{v}</span><span style="font-size:0.6em;color:rgba(255,255,255,0.3);">{s}</span></div>'
-    _pnl_icon = '▲' if pnl_p >= 0 else '▼'
+    
+    _pnl_icon = "▲" if pnl_p >= 0 else "▼"
     st.markdown(apply_theme(f'<div style="background:#111118;border-left:4px solid {r_acc};padding:13px 0;margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;"><div style="padding:0 20px 0 16px;border-right:1px solid rgba(255,255,255,0.06);"><div style="font-size:0.52em;color:rgba(255,255,255,0.3);text-transform:uppercase;">AMLS V4.5</div><div style="font-family:Plus Jakarta Sans;font-size:1.1em;font-weight:800;color:#FFFFFF;line-height:1;">Portfolio</div></div>{_kv("Total NAV", f"${tval_u:,.2f}", "#FFFFFF", f"₩{tval_k:,.0f}")}{_kv("USD/KRW", f"₩{fx:,.0f}", "rgba(255,255,255,0.65)", "환율")}{_kv("P&L", f"{pnl_p:+.2f}%", "#6EE7B7" if pnl_p>=0 else "#FCA5A5", f"{_pnl_icon} ${pnl_u:,.0f}")}{_kv("Regime", f"R{curr_regime}", r_acc)}<div style="margin-left:auto;padding:0 16px;"><span class="live-pulse" style="font-size:0.58em;color:#6EE7B7;">{rt_label}</span></div></div>'), unsafe_allow_html=True)
 
     if display_mode == "PC":
@@ -677,9 +660,7 @@ elif page == "💼 Portfolio":
         with st.container(border=True): st.markdown(_sl("Position Input"), unsafe_allow_html=True); _pf_editor(400)
         _target_weights_block(); st.markdown(apply_theme(f'<div style="margin-bottom:8px;"><span style="font-weight:600;text-transform:uppercase;">Rebalancing</span></div>'), unsafe_allow_html=True); _rebalancing_matrix(True)
 
-# ==========================================
-# 페이지 3: 🍫 12-Pack Radar
-# ==========================================
+# 🍫 12-Pack Radar 페이지
 elif page == "🍫 12-Pack Radar":
     def run_ai_radar():
         try:
@@ -687,8 +668,8 @@ elif page == "🍫 12-Pack Radar":
             valid = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
             target = next((m for m in valid if 'gemini-1.5-flash' in m), valid[0]) if valid else None
             if not target: st.error("모델 오류"); return
-            p = f"너는 월스트리트 퀀트 애널리스트야. AMLS V4.5 지표를 분석해줘.\n[레짐] R{curr_regime}\n[신호] Risk {risk_cnt}, Warn {warn_cnt}, Safe {safe_cnt}\n1. QQQ RSI: {last_row['QQQ_RSI']:.1f}\n2. QQQ DD: {last_row['QQQ_DD']*100:.1f}%\n3. FGI: {fg_score:.0f}\n섹터별 분류, 리스크 요소, 투자 스탠스로 요약해줘."
-            with st.spinner("AI 분석 중..."): res = genai.GenerativeModel(target.replace('models/','')).generate_content(p); st.markdown(apply_theme(f'<div style="background:#FAFAF7;border-left:4px solid {main_color};padding:20px 24px;font-size:0.88em;">{res.text}</div>'), unsafe_allow_html=True)
+            p = f"너는 퀀트 애널리스트야. AMLS V4.5 지표를 분석해줘.\n[레짐] R{curr_regime}\n1. QQQ RSI: {last_row['QQQ_RSI']:.1f}\n2. QQQ DD: {last_row['QQQ_DD']*100:.1f}%\n3. FGI: {fg_score:.0f}\n섹터분류, 리스크 요소, 투자 스탠스로 요약해줘."
+            with st.spinner("AI 분석 중..."): res = genai.GenerativeModel(target.replace('models/','')).generate_content(p); st.markdown(apply_theme(f'<div style="background:#FAFAF7;border-left:4px solid {main_color};padding:20px;font-size:0.88em;">{res.text}</div>'), unsafe_allow_html=True)
         except Exception as e: st.error(f"오류: {e}")
 
     df_view  = df.iloc[-120:]
@@ -702,16 +683,18 @@ elif page == "🍫 12-Pack Radar":
     warn_cnt = sum([qqq_rsi>70, -0.20<=qqq_dd<-0.10, fg_score>70, (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0), last_row['GLD_SPYG_Ratio']>last_row['GLD_SPYG_MA50'], last_row['^TNX']>last_row['TNX_MA50'], last_row['BTC-USD']<last_row['BTC_MA50'], last_row['IWM_SPYG_Ratio']<last_row['IWM_SPYG_MA50'], top_sec in ['UTIL', 'STAPLE', 'HEALTH']])
     safe_cnt = 12 - risk_cnt - warn_cnt
 
-    if risk_cnt >= 3: radar_status, radar_msg, radar_color = "극단적 위험 구간 (Risk-Off)", "시스템 리스크 경고. 레버리지 해제 요망.", "#DC2626"
-    elif warn_cnt >= 4 or risk_cnt >= 1: radar_status, radar_msg, radar_color = "변동성 주의 (Warning)", "균열 조짐 발생. 신규 매수 보류 및 관망 요망.", "#D97706"
-    else: radar_status, radar_msg, radar_color = "안정적 순항 (Safe)", "매크로 지표 안정적. 추세 추종 전략 전개 요망.", main_color
+    st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid {main_color};padding:14px 20px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;"><div style="font-family:DM Mono;font-size:1.2em;font-weight:700;">Macro Signal Status</div><div>Risk {risk_cnt} | Warn {warn_cnt} | Safe {safe_cnt}</div></div></div>'), unsafe_allow_html=True)
+    
+    def _badge(label, color, icon): return f'<span style="background:rgba(0,0,0,0.05);color:{color};padding:2px 7px;font-size:0.68em;font-weight:500;">{icon} {label}</span>'
+    r1 = st.columns(4)
+    with r1[0]: st.container(border=True).markdown(_badge("RSI", main_color if qqq_rsi<40 else "#DC2626", "▲"), unsafe_allow_html=True)
+    with r1[1]: st.container(border=True).markdown(_badge("DD", main_color if qqq_dd>-0.1 else "#DC2626", "▲"), unsafe_allow_html=True)
+    with r1[2]: st.container(border=True).markdown(_badge("FGI", main_color if fg_score<30 else "#DC2626", "▲"), unsafe_allow_html=True)
+    with r1[3]: st.container(border=True).markdown(_badge("SEC", main_color, "▲"), unsafe_allow_html=True)
 
-    st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid {radar_color};padding:14px 20px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;"><div style="font-family:DM Mono;font-size:1.2em;font-weight:700;">Macro Signal Status</div><div>Risk {risk_cnt} | Warn {warn_cnt} | Safe {safe_cnt}</div></div></div>'), unsafe_allow_html=True)
     if st.button("🤖 AI 종합 투자의견 생성"): run_ai_radar()
 
-# ==========================================
-# 페이지 4: 📈 Backtest Lab
-# ==========================================
+# 📈 Backtest Lab 페이지
 elif page == "📈 Backtest Lab":
     st.markdown(apply_theme("""<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;"><div><h2 style="font-family:'Plus Jakarta Sans';font-size:1.7em;color:#0F172A;margin:0;">📈 Backtest Lab</h2></div></div>"""), unsafe_allow_html=True)
     panel_cfg, panel_res = st.columns([1, 2.8])
@@ -753,9 +736,7 @@ elif page == "📈 Backtest Lab":
                 fig_eq.update_layout(title="Equity Curve", height=380, yaxis_type='log', **chart_layout); fig_eq.update_xaxes(**_ax); fig_eq.update_yaxes(**_ax)
                 with st.container(border=True): st.plotly_chart(fig_eq, use_container_width=True)
 
-# ==========================================
-# 페이지 5: 📰 Macro News
-# ==========================================
+# 📰 Macro News 페이지
 elif page == "📰 Macro News":
     headlines_for_ai, news_items = fetch_macro_news()
     st.markdown(apply_theme(f"""<div style="border-top:3px solid #111118;border-bottom:1px solid rgba(0,0,0,0.12);padding:18px 0 14px;margin-bottom:24px;"><div style="font-size:2.2em;font-weight:800;">Market Briefing</div></div>"""), unsafe_allow_html=True)
