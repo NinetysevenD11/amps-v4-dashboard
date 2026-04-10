@@ -44,6 +44,14 @@ if 'param_ma_long' not in st.session_state: st.session_state.param_ma_long = 200
 if 'param_ma_short' not in st.session_state: st.session_state.param_ma_short = 50
 if 'trade_log' not in st.session_state: st.session_state.trade_log = []
 if 'messages' not in st.session_state: st.session_state.messages = []
+if 'use_custom_weights' not in st.session_state: st.session_state.use_custom_weights = False
+if 'custom_weights' not in st.session_state:
+    st.session_state.custom_weights = {
+        "R1": {'TQQQ':30, 'SOXL':20, 'USD':0,  'QLD':20, 'SSO':15, 'SPYG':5, 'QQQ':0,  'GLD':10, 'CASH':0},
+        "R2": {'TQQQ':15, 'SOXL':0,  'USD':10, 'QLD':30, 'SSO':25, 'SPYG':5, 'QQQ':0,  'GLD':15, 'CASH':0},
+        "R3": {'TQQQ':0,  'SOXL':0,  'USD':0,  'QLD':0,  'SSO':0,  'SPYG':0, 'QQQ':15, 'GLD':50, 'CASH':35},
+        "R4": {'TQQQ':0,  'SOXL':0,  'USD':0,  'QLD':0,  'SSO':0,  'SPYG':0, 'QQQ':10, 'GLD':50, 'CASH':40}
+    }    
 
 def _ls_save_all():
     _layout = json.dumps({"display_mode": st.session_state.display_mode, "lc_lr_split": st.session_state.lc_lr_split, "lc_delta_wt": st.session_state.lc_delta_wt, "lc_editor_h": st.session_state.lc_editor_h, "lc_goal_inp": st.session_state.lc_goal_inp, "lc_pie_h": st.session_state.lc_pie_h, "lc_pie_split": st.session_state.lc_pie_split, "lc_bar_h": st.session_state.lc_bar_h, "lc_show_lp": st.session_state.lc_show_lp, "lc_show_qo": st.session_state.lc_show_qo, "lc_show_reg": st.session_state.lc_show_reg})
