@@ -15,7 +15,7 @@ import os
 warnings.filterwarnings('ignore')
 
 # ==========================================
-# 1. 앱 설정 및 세션 상태 초기화
+# 1. 설정 및 상태 관리
 # ==========================================
 st.set_page_config(page_title="AMLS V4.5 FINANCE STRATEGY", layout="wide", page_icon="🌿", initial_sidebar_state="expanded")
 
@@ -43,7 +43,7 @@ if 'rebal_locked' not in st.session_state: st.session_state.rebal_locked = False
 if 'rebal_plan'   not in st.session_state: st.session_state.rebal_plan   = None
 
 # ==========================================
-# 2. 로컬 스토리지 & 포트폴리오 관리
+# 2. 로컬 스토리지 & 포트폴리오 로직
 # ==========================================
 def _ls_save_all():
     _layout = json.dumps({"display_mode": st.session_state.display_mode, "lc_lr_split": st.session_state.lc_lr_split, "lc_delta_wt": st.session_state.lc_delta_wt, "lc_editor_h": st.session_state.lc_editor_h, "lc_goal_inp": st.session_state.lc_goal_inp, "lc_pie_h": st.session_state.lc_pie_h, "lc_pie_split": st.session_state.lc_pie_split, "lc_bar_h": st.session_state.lc_bar_h, "lc_show_lp": st.session_state.lc_show_lp, "lc_show_qo": st.session_state.lc_show_qo, "lc_show_reg": st.session_state.lc_show_reg})
@@ -56,7 +56,7 @@ def _ls_save_all():
 
 def _ls_load():
     if st.session_state._ls_loaded: return
-    st.markdown("""<script>(function(){var keys=["amls_portfolio","amls_goal","amls_layout","amls_theme","amls_dispmode"];var changed=false;var params=new URLSearchParams(window.location.search);keys.forEach(function(k){var v=localStorage.getItem(k);if(v&&!params.has(k)){params.set(k,encodeURIComponent(v));changed=true;}});if(changed){var newUrl=window.location.pathname+"?"+params.toString();window.history.replaceState(null,"",newUrl);window.location.reload();}})();</script>""", unsafe_allow_html=True)
+    st.markdown("""<script>(function(){var keys=["amls_portfolio","amls_goal","amls_layout","amls_theme","amls_dispmode"];var changed=false;var params=new URLSearchParams(window.location.search);keys.forEach(function(k){var v=localStorage.getItem(k);if(v&&!params.has(k)){params.set(k,encodeURIComponent(v));changed=true;}});if(changed){var newUrl=window.location.pathname+"?"+params.toString();window.location.reload();}})();</script>""", unsafe_allow_html=True)
     st.session_state._ls_loaded = True
 
 SECTOR_TICKERS = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','XLB']
@@ -226,6 +226,47 @@ def apply_asymmetric_delay(targets):
         res.append(hist_curr)
     return pd.Series(res, index=targets.index).shift(1).bfill()
 
+@st.cache_data(ttl=3600)
+def load_custom_backtest_data(start_date, end_date):
+    fetch_start = pd.to_datetime(start_date) - timedelta(days=400)
+    data = yf.download(TICKERS, start=fetch_start.strftime("%Y-%m-%d"), end=(pd.to_datetime(end_date) + timedelta(days=1)).strftime("%Y-%m-%d"), progress=False, auto_adjust=True)['Close']
+    if 'QQQ' in data.columns: data = data.dropna(subset=['QQQ'])
+    bt_df = pd.DataFrame(index=data.index)
+    for t in TICKERS: bt_df[t] = data[t]
+    bt_df = bt_df.ffill().bfill()
+    bt_df['QQQ_MA20'] = bt_df['QQQ'].rolling(20).mean()
+    bt_df['QQQ_MA50'] = bt_df['QQQ'].rolling(50).mean()
+    bt_df['QQQ_MA200'] = bt_df['QQQ'].rolling(200).mean()
+    bt_df['TQQQ_MA200'] = bt_df['TQQQ'].rolling(200).mean()
+    bt_df['SMH_MA50'] = bt_df['SMH'].rolling(50).mean()
+    bt_df['VIX_MA5'] = bt_df['^VIX'].rolling(5).mean()
+    bt_df['VIX_MA20'] = bt_df['^VIX'].rolling(20).mean()
+    bt_df['VIX_MA50'] = bt_df['^VIX'].rolling(50).mean()
+    bt_df['SMH_3M_Ret'] = bt_df['SMH'].pct_change(63)
+    bt_df['SMH_1M_Ret'] = bt_df['SMH'].pct_change(21)
+    bt_df['SMH_RSI'] = ta.rsi(bt_df['SMH'], length=14)
+    bt_df['HYG_IEF_Ratio'] = bt_df['HYG'] / bt_df['IEF']
+    bt_df['HYG_IEF_MA20'] = bt_df['HYG_IEF_Ratio'].rolling(20).mean()
+    bt_df['HYG_IEF_MA50'] = bt_df['HYG_IEF_Ratio'].rolling(50).mean()
+    bt_df['QQQ_20d_Ret'] = bt_df['QQQ'].pct_change(20)
+    bt_df['QQQE_20d_Ret'] = bt_df['QQQE'].pct_change(20)
+    bt_df['QQQ_RSI'] = ta.rsi(bt_df['QQQ'], length=14)
+    bt_df['GLD_SPYG_Ratio'] = bt_df['GLD'] / bt_df['SPYG']
+    bt_df['GLD_SPYG_MA50'] = bt_df['GLD_SPYG_Ratio'].rolling(50).mean()
+    bt_df['QQQ_High52'] = bt_df['QQQ'].rolling(252).max()
+    bt_df['QQQ_DD'] = (bt_df['QQQ'] / bt_df['QQQ_High52']) - 1
+    bt_df['UUP_MA50'] = bt_df['UUP'].rolling(50).mean()
+    bt_df['TNX_MA50'] = bt_df['^TNX'].rolling(50).mean()
+    bt_df['BTC_MA50'] = bt_df['BTC-USD'].rolling(50).mean()
+    bt_df['IWM_SPYG_Ratio'] = bt_df['IWM'] / bt_df['SPYG']
+    bt_df['IWM_SPYG_MA50'] = bt_df['IWM_SPYG_Ratio'].rolling(50).mean()
+    bt_df = bt_df.dropna()
+    if bt_df.empty: return bt_df
+    bt_df['Target'] = bt_df.apply(get_target_v45, axis=1)
+    bt_df['Regime'] = apply_asymmetric_delay(bt_df['Target'])
+    bt_df = bt_df.loc[pd.to_datetime(start_date):pd.to_datetime(end_date)]
+    return bt_df
+
 @st.cache_data(ttl=15)
 def fetch_realtime_prices():
     prices = {}
@@ -291,47 +332,6 @@ def fetch_global_markets():
     except: pass
     return results, gt, at, lt
 
-@st.cache_data(ttl=3600)
-def load_custom_backtest_data(start_date, end_date):
-    fetch_start = pd.to_datetime(start_date) - timedelta(days=400)
-    data = yf.download(TICKERS, start=fetch_start.strftime("%Y-%m-%d"), end=(pd.to_datetime(end_date) + timedelta(days=1)).strftime("%Y-%m-%d"), progress=False, auto_adjust=True)['Close']
-    if 'QQQ' in data.columns: data = data.dropna(subset=['QQQ'])
-    bt_df = pd.DataFrame(index=data.index)
-    for t in TICKERS: bt_df[t] = data[t]
-    bt_df = bt_df.ffill().bfill()
-    bt_df['QQQ_MA20'] = bt_df['QQQ'].rolling(20).mean()
-    bt_df['QQQ_MA50'] = bt_df['QQQ'].rolling(50).mean()
-    bt_df['QQQ_MA200'] = bt_df['QQQ'].rolling(200).mean()
-    bt_df['TQQQ_MA200'] = bt_df['TQQQ'].rolling(200).mean()
-    bt_df['SMH_MA50'] = bt_df['SMH'].rolling(50).mean()
-    bt_df['VIX_MA5'] = bt_df['^VIX'].rolling(5).mean()
-    bt_df['VIX_MA20'] = bt_df['^VIX'].rolling(20).mean()
-    bt_df['VIX_MA50'] = bt_df['^VIX'].rolling(50).mean()
-    bt_df['SMH_3M_Ret'] = bt_df['SMH'].pct_change(63)
-    bt_df['SMH_1M_Ret'] = bt_df['SMH'].pct_change(21)
-    bt_df['SMH_RSI'] = ta.rsi(bt_df['SMH'], length=14)
-    bt_df['HYG_IEF_Ratio'] = bt_df['HYG'] / bt_df['IEF']
-    bt_df['HYG_IEF_MA20'] = bt_df['HYG_IEF_Ratio'].rolling(20).mean()
-    bt_df['HYG_IEF_MA50'] = bt_df['HYG_IEF_Ratio'].rolling(50).mean()
-    bt_df['QQQ_20d_Ret'] = bt_df['QQQ'].pct_change(20)
-    bt_df['QQQE_20d_Ret'] = bt_df['QQQE'].pct_change(20)
-    bt_df['QQQ_RSI'] = ta.rsi(bt_df['QQQ'], length=14)
-    bt_df['GLD_SPYG_Ratio'] = bt_df['GLD'] / bt_df['SPYG']
-    bt_df['GLD_SPYG_MA50'] = bt_df['GLD_SPYG_Ratio'].rolling(50).mean()
-    bt_df['QQQ_High52'] = bt_df['QQQ'].rolling(252).max()
-    bt_df['QQQ_DD'] = (bt_df['QQQ'] / bt_df['QQQ_High52']) - 1
-    bt_df['UUP_MA50'] = bt_df['UUP'].rolling(50).mean()
-    bt_df['TNX_MA50'] = bt_df['^TNX'].rolling(50).mean()
-    bt_df['BTC_MA50'] = bt_df['BTC-USD'].rolling(50).mean()
-    bt_df['IWM_SPYG_Ratio'] = bt_df['IWM'] / bt_df['SPYG']
-    bt_df['IWM_SPYG_MA50'] = bt_df['IWM_SPYG_Ratio'].rolling(50).mean()
-    bt_df = bt_df.dropna()
-    if bt_df.empty: return bt_df
-    bt_df['Target'] = bt_df.apply(get_target_v45, axis=1)
-    bt_df['Regime'] = apply_asymmetric_delay(bt_df['Target'])
-    bt_df = bt_df.loc[pd.to_datetime(start_date):pd.to_datetime(end_date)]
-    return bt_df
-
 # === 데이터 병합 및 메인 지표 계산 ===
 with st.spinner('데이터 수집 중...'):
     df = load_data()
@@ -365,6 +365,9 @@ live_regime, hist_regime = get_target_v45(last_row), int(df.iloc[-1]['Regime'])
 if live_regime > hist_regime: curr_regime = live_regime
 elif hist_regime == 3 and live_regime <= 2: curr_regime = 2
 else: curr_regime = hist_regime
+
+# 💡 r_acc 글로벌 선언 (NameError 방지)
+r_acc = {1: main_color, 2: "#D97706", 3: "#DC2626", 4: "#7C3AED"}[curr_regime]
 
 smh_cond = (smh_close > smh_ma50) and (smh_3m > 0.05 or smh_1m > 0.10) and (smh_rsi > 50)
 def get_weights_v45(reg, smh_ok):
@@ -534,7 +537,6 @@ if page == "📊 Dashboard":
     
     lcol, rcol = st.columns([1, 2.4])
     with lcol:
-        r_acc = {1:main_color, 2:"#D97706", 3:"#DC2626", 4:"#7C3AED"}[curr_regime]
         credit_check = last_row['HYG_IEF_Ratio'] >= last_row['HYG_IEF_MA20']
         st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-top:3px solid {r_acc};padding:20px 18px 16px;margin-bottom:10px;position:relative;overflow:hidden;"><div style="position:absolute;right:-4px;bottom:-16px;font-family:Plus Jakarta Sans;font-size:7em;font-weight:800;color:rgba(0,0,0,0.04);line-height:1;pointer-events:none;">{curr_regime}</div><div style="font-family:DM Mono;font-size:0.68em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;">Market Regime</div><div style="font-family:Plus Jakarta Sans;font-size:2em;font-weight:800;color:{r_acc};line-height:1;margin-bottom:4px;">{regime_info[curr_regime][0]}</div><div style="font-family:DM Mono;font-size:0.72em;color:#6B6B7A;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px;">{regime_info[curr_regime][1]}</div>{_lg_row("VIX < 40", f"{vix_close:.2f}", vix_close<=40) + _lg_row(f"QQQ > 200MA [{qqq_ma200:.2f}]", f"${qqq_close:.2f}", qqq_close>=qqq_ma200) + _lg_row(f"50MA ≥ 200MA [{qqq_ma200:.2f}]", f"${qqq_ma50:.2f}", qqq_ma50>=qqq_ma200) + _lg_row("Credit Stress 방어", "안정" if credit_check else "경계", credit_check)}<div style="margin-top:8px;padding:6px 10px;background:rgba(16,185,129,0.07);border-left:2px solid {main_color};font-family:DM Mono;font-size:0.76em;color:#059669;">{regime_committee_msg}</div></div>'), unsafe_allow_html=True)
         st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-top:3px solid {soxl_color};padding:18px 18px 14px;margin-bottom:10px;"><div style="font-family:DM Mono;font-size:0.68em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;margin-bottom:8px;">Semi-Conductor Gate</div><div style="font-family:Plus Jakarta Sans;font-size:1.6em;font-weight:400;color:{soxl_color};margin-bottom:4px;">{soxl_title}</div><div style="font-family:DM Mono;font-size:0.7em;color:#6B6B7A;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:12px;">{soxl_strat}</div>{_lg_row("SMH > 50MA", f"${smh_close:.2f}", smh_close > smh_ma50) + _lg_row("Momentum 1M >10%", f"{smh_1m*100:.1f}%", smh_3m > 0.05 or smh_1m > 0.10) + _lg_row("RSI > 50", f"{smh_rsi:.1f}", smh_rsi > 50)}</div>'), unsafe_allow_html=True)
@@ -636,7 +638,7 @@ elif page == "💼 Portfolio":
 
     def _kv(l, v, c, s=""): return f'<div style="display:flex;flex-direction:column;padding:0 20px;border-right:1px solid rgba(255,255,255,0.06);min-width:115px;"><span style="font-size:0.53em;color:rgba(255,255,255,0.35);text-transform:uppercase;">{l}</span><span style="font-size:1.0em;font-weight:500;color:{c};">{v}</span><span style="font-size:0.6em;color:rgba(255,255,255,0.3);">{s}</span></div>'
     
-    _pnl_icon = "▲" if pnl_p >= 0 else "▼"
+    _pnl_icon = '▲' if pnl_p >= 0 else '▼'
     st.markdown(apply_theme(f'<div style="background:#111118;border-left:4px solid {r_acc};padding:13px 0;margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;"><div style="padding:0 20px 0 16px;border-right:1px solid rgba(255,255,255,0.06);"><div style="font-size:0.52em;color:rgba(255,255,255,0.3);text-transform:uppercase;">AMLS V4.5</div><div style="font-family:Plus Jakarta Sans;font-size:1.1em;font-weight:800;color:#FFFFFF;line-height:1;">Portfolio</div></div>{_kv("Total NAV", f"${tval_u:,.2f}", "#FFFFFF", f"₩{tval_k:,.0f}")}{_kv("USD/KRW", f"₩{fx:,.0f}", "rgba(255,255,255,0.65)", "환율")}{_kv("P&L", f"{pnl_p:+.2f}%", "#6EE7B7" if pnl_p>=0 else "#FCA5A5", f"{_pnl_icon} ${pnl_u:,.0f}")}{_kv("Regime", f"R{curr_regime}", r_acc)}<div style="margin-left:auto;padding:0 16px;"><span class="live-pulse" style="font-size:0.58em;color:#6EE7B7;">{rt_label}</span></div></div>'), unsafe_allow_html=True)
 
     if display_mode == "PC":
@@ -670,9 +672,9 @@ elif page == "💼 Portfolio":
     elif display_mode == "Mobile":
         st.markdown(f"<style>.main .block-container {{ max-width:460px !important; padding:0.4rem !important; }}</style>", unsafe_allow_html=True)
         ng = st.number_input("🎯 목표($)", value=st.session_state.goal_usd, format="%.0f", key="goal_input"); st.session_state.goal_usd = ng if ng != st.session_state.goal_usd else st.session_state.goal_usd
-        st.markdown(_goal_tracker_html(tval_k), unsafe_allow_html=True); st.markdown(_regime_card_html(False), unsafe_allow_html=True)
+        st.markdown(_goal_tracker_html(tval_k), unsafe_allow_html=True)
         with st.container(border=True): st.markdown(apply_theme(f'<div style="border-bottom:1px solid rgba(0,0,0,0.09);padding-bottom:7px;margin-bottom:8px;font-size:0.58em;font-weight:600;text-transform:uppercase;">Position Input</div>'), unsafe_allow_html=True); _pf_editor(400)
-        _target_weights_block(); st.markdown(apply_theme(f'<div style="margin-bottom:8px;"><span style="font-weight:600;text-transform:uppercase;">Rebalancing</span></div>'), unsafe_allow_html=True); _rebalancing_matrix(True)
+        st.markdown(apply_theme(f'<div style="margin-bottom:8px;"><span style="font-weight:600;text-transform:uppercase;">Rebalancing</span></div>'), unsafe_allow_html=True); _rebalancing_matrix(True)
 
 # ==========================================
 # 페이지 3: 🍫 12-Pack Radar
@@ -684,7 +686,7 @@ elif page == "🍫 12-Pack Radar":
             valid = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
             target = next((m for m in valid if 'gemini-1.5-flash' in m), valid[0]) if valid else None
             if not target: st.error("모델 오류"); return
-            p = f"너는 퀀트 애널리스트야. AMLS V4.5 지표를 분석해줘.\n[레짐] R{curr_regime}\n[신호] Risk {risk_cnt}, Warn {warn_cnt}, Safe {safe_cnt}\n1. QQQ RSI: {last_row['QQQ_RSI']:.1f}\n2. QQQ DD: {last_row['QQQ_DD']*100:.1f}%\n3. FGI: {fg_score:.0f}\n섹터분류, 리스크 요소, 투자 스탠스로 요약해줘."
+            p = f"너는 퀀트 애널리스트야. AMLS V4.5 지표를 분석해줘.\n[레짐] R{curr_regime}\n1. QQQ RSI: {last_row['QQQ_RSI']:.1f}\n2. QQQ DD: {last_row['QQQ_DD']*100:.1f}%\n섹터분류, 리스크, 투자스탠스로 요약."
             with st.spinner("AI 분석 중..."): res = genai.GenerativeModel(target.replace('models/','')).generate_content(p); st.markdown(apply_theme(f'<div style="background:#FAFAF7;border-left:4px solid {main_color};padding:20px;font-size:0.88em;">{res.text}</div>'), unsafe_allow_html=True)
         except Exception as e: st.error(f"오류: {e}")
 
