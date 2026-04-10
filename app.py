@@ -170,14 +170,14 @@ def load_data():
             df['QQQ_20d_Ret'] = df['QQQ'].pct_change(20)
             df['QQQE_20d_Ret'] = df['QQQE'].pct_change(20)
             df['QQQ_RSI'] = ta.rsi(df['QQQ'], length=14)
-            df['GLD_SPY_Ratio'] = df['GLD'] / df['SPY']
+            df['GLD_SPY_Ratio'] = df['GLD'] / df['SPYG']
             df['GLD_SPY_MA50'] = df['GLD_SPY_Ratio'].rolling(50).mean()
             df['QQQ_High52'] = df['QQQ'].rolling(252).max()
             df['QQQ_DD'] = (df['QQQ'] / df['QQQ_High52']) - 1
             df['UUP_MA50'] = df['UUP'].rolling(50).mean()
             df['TNX_MA50'] = df['^TNX'].rolling(50).mean()
             df['BTC_MA50'] = df['BTC-USD'].rolling(50).mean()
-            df['IWM_SPY_Ratio'] = df['IWM'] / df['SPY']
+            df['IWM_SPY_Ratio'] = df['IWM'] / df['SPYG']
             df['IWM_SPY_MA50'] = df['IWM_SPY_Ratio'].rolling(50).mean()
             for sec in SECTOR_TICKERS: df[f'{sec}_1M'] = df[sec].pct_change(21)
             result = df.dropna()
@@ -240,14 +240,14 @@ def load_custom_backtest_data(start_date, end_date):
     bt_df['QQQ_20d_Ret'] = bt_df['QQQ'].pct_change(20)
     bt_df['QQQE_20d_Ret'] = bt_df['QQQE'].pct_change(20)
     bt_df['QQQ_RSI'] = ta.rsi(bt_df['QQQ'], length=14)
-    bt_df['GLD_SPY_Ratio'] = bt_df['GLD'] / bt_df['SPY']
+    bt_df['GLD_SPY_Ratio'] = bt_df['GLD'] / bt_df['SPYG']
     bt_df['GLD_SPY_MA50'] = bt_df['GLD_SPY_Ratio'].rolling(50).mean()
     bt_df['QQQ_High52'] = bt_df['QQQ'].rolling(252).max()
     bt_df['QQQ_DD'] = (bt_df['QQQ'] / bt_df['QQQ_High52']) - 1
     bt_df['UUP_MA50'] = bt_df['UUP'].rolling(50).mean()
     bt_df['TNX_MA50'] = bt_df['^TNX'].rolling(50).mean()
     bt_df['BTC_MA50'] = bt_df['BTC-USD'].rolling(50).mean()
-    bt_df['IWM_SPY_Ratio'] = bt_df['IWM'] / bt_df['SPY']
+    bt_df['IWM_SPY_Ratio'] = bt_df['IWM'] / bt_df['SPYG']
     bt_df['IWM_SPY_MA50'] = bt_df['IWM_SPY_Ratio'].rolling(50).mean()
     bt_df = bt_df.dropna()
     if bt_df.empty: return bt_df
@@ -310,7 +310,7 @@ def fetch_macro_news():
 
 @st.cache_data(ttl=300)
 def fetch_global_markets():
-    global_tickers = {'SPY':'S&P 500','QQQ':'Nasdaq 100','DIA':'Dow Jones','IWM':'Russell 2000','EWJ':'Japan','EWT':'Taiwan','EWY':'Korea','FXI':'China','EWH':'HongKong','VGK':'Europe','EWG':'Germany','EWU':'UK','EWQ':'France','EWC':'Canada','EEM':'Emg Mkt','EWZ':'Brazil','EWA':'Australia'}
+    global_tickers = {'SPYG':'S&P 500','QQQ':'Nasdaq 100','DIA':'Dow Jones','IWM':'Russell 2000','EWJ':'Japan','EWT':'Taiwan','EWY':'Korea','FXI':'China','EWH':'HongKong','VGK':'Europe','EWG':'Germany','EWU':'UK','EWQ':'France','EWC':'Canada','EEM':'Emg Mkt','EWZ':'Brazil','EWA':'Australia'}
     asset_tickers = {'^TNX':'US 10Y','GLD':'Gold','SLV':'Silver','USO':'Oil','BTC-USD':'Bitcoin','ETH-USD':'Ethereum','UUP':'DXY'}
     leader_tickers = {'AAPL':'Apple','MSFT':'Microsoft','NVDA':'Nvidia','AMZN':'Amazon','GOOGL':'Alphabet','META':'Meta','TSLA':'Tesla','AVGO':'Broadcom','AMD':'AMD','TSM':'TSMC'}
     all_t = list(global_tickers.keys()) + list(asset_tickers.keys()) + list(leader_tickers.keys())
@@ -346,7 +346,7 @@ for ticker, price in rt_prices.items():
 
 if 'QQQ' in rt_injected: df.at[last_index, 'QQQ_DD'] = (df.at[last_index, 'QQQ'] / df['QQQ_High52'].iloc[-1]) - 1
 if 'HYG' in rt_injected and 'IEF' in rt_injected: df.at[last_index, 'HYG_IEF_Ratio'] = df.at[last_index, 'HYG'] / df.at[last_index, 'IEF']
-if 'IWM' in rt_injected and 'SPY' in rt_injected: df.at[last_index, 'IWM_SPY_Ratio'] = df.at[last_index, 'IWM'] / df.at[last_index, 'SPY']
+if 'IWM' in rt_injected and 'SPYG' in rt_injected: df.at[last_index, 'IWM_SPY_Ratio'] = df.at[last_index, 'IWM'] / df.at[last_index, 'SPYG']
 
 last_row = df.iloc[-1].copy()
 rt_ok    = len(rt_injected) >= 3
