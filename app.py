@@ -599,18 +599,22 @@ def fetch_realtime_prices():
 
 
 @st.cache_data(ttl=1800)
-
 def fetch_fear_and_greed():
-
     try:
-
         url = "https://production.api.cnn.io/data/ext/fear_and_greed/latest"
-
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'})
-
-        return float(json.loads(urllib.request.urlopen(req, timeout=5).read().decode('utf-8'))['fear_and_greed']['score'])
-
-    except: return None
+        # 💡 봇 차단을 우회하기 위해 진짜 브라우저처럼 완벽하게 헤더를 위장합니다.
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "https://edition.cnn.com",
+            "Referer": "https://edition.cnn.com/",
+            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7"
+        }
+        req = urllib.request.Request(url, headers=headers)
+        res = urllib.request.urlopen(req, timeout=5).read().decode('utf-8')
+        return float(json.loads(res)['fear_and_greed']['score'])
+    except Exception as e:
+        return None
 
 
 
