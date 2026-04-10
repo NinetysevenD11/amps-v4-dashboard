@@ -479,7 +479,15 @@ st.markdown(apply_theme(css_block), unsafe_allow_html=True)
 
 st.sidebar.markdown(apply_theme(f"""<div style="padding:22px 20px 16px;background:{bg_color};border-bottom:1px solid rgba(0,0,0,0.09);"><div style="font-family:'DM Mono';font-size:0.52em;color:{tc_label};letter-spacing:0.26em;text-transform:uppercase;margin-bottom:8px;">Quantitative Engine</div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:1.65em;font-weight:800;color:{tc_heading};letter-spacing:-1px;line-height:1;margin-bottom:14px;">AMLS <span style="color:#10B981;">V4.5</span></div><div style="display:flex;align-items:center;justify-content:space-between;"><div class="live-pulse" style="display:inline-flex;align-items:center;gap:5px;font-family:'DM Mono';font-size:0.6em;color:#059669;padding:3px 10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);letter-spacing:0.06em;">{rt_label}</div><div style="font-family:'DM Mono';font-size:0.58em;color:{tc_label};letter-spacing:0.04em;">R{curr_regime}  ·  {regime_info[curr_regime][1]}</div></div></div>"""), unsafe_allow_html=True)
 st.sidebar.markdown('<div class="sb-section" style="border-top:none;">Navigation</div>', unsafe_allow_html=True)
-page = st.sidebar.radio("MENU", ["📊 Dashboard", "💼 Portfolio", "🍫 12-Pack Radar", "📈 Backtest Lab", "📰 Macro News"], label_visibility="collapsed")
+
+# 새 메뉴를 위한 상태 초기화
+if 'param_vix_limit' not in st.session_state: st.session_state.param_vix_limit = 40.0
+if 'param_ma_long' not in st.session_state: st.session_state.param_ma_long = 200
+if 'param_ma_short' not in st.session_state: st.session_state.param_ma_short = 50
+if 'trade_log' not in st.session_state: st.session_state.trade_log = []
+
+# 메뉴 리스트 업데이트
+page = st.sidebar.radio("MENU", ["📊 Dashboard", "💼 Portfolio", "🤖 AI Quant Assistant", "🎛️ Parameter Lab", "📝 Trade Journal", "🍫 12-Pack Radar", "📈 Backtest Lab", "📰 Macro News"], label_visibility="collapsed")
 display_mode = st.session_state.display_mode
 
 with st.sidebar.expander("🎨  Appearance", expanded=False):
@@ -1310,4 +1318,69 @@ elif page == "📰 Macro News":
         for idx, item in enumerate(news_items):
             st.markdown(f'<div style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid rgba(0,0,0,0.07);"><div style="font-family:DM Mono,monospace;font-size:0.75em;color:{main_color if idx<3 else "#9494A0"};font-weight:600;">{idx+1:02d}</div><div><a href="{item["link"]}" target="_blank" style="text-decoration:none;"><div style="color:{tc_body};">{item["title"]}</div></a><div style="font-size:0.65em;color:#9494A0;margin-top:4px;">{item["date"]}</div></div></div>', unsafe_allow_html=True)
 
+with nr:
+        for idx, item in enumerate(news_items):
+            st.markdown(f'<div style="padding:12px 0;border-bottom:1px solid rgba(0,0,0,0.07);"><a href="{item["link"]}" target="_blank" style="text-decoration:none;color:{tc_body};">{item["title"]}</a></div>', unsafe_allow_html=True)
+
+# ==========================================
+# 추가된 페이지 1: 🤖 AI Quant Assistant
+# ==========================================
+elif page == "🤖 AI Quant Assistant":
+    st.markdown(apply_theme("""<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;"><div><h2 style="font-family:'Plus Jakarta Sans';font-size:1.7em;color:#0F172A;margin:0;">🤖 AI Quant Assistant</h2></div></div>"""), unsafe_allow_html=True)
+    st.info("현재 시장 데이터와 AMLS 알고리즘을 바탕으로 Gemini AI에게 전략적 조언을 구합니다.")
+    
+    if "messages" not in st.session_state: st.session_state.messages = []
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]): st.markdown(message["content"])
+        
+    if prompt := st.chat_input("질문을 입력하세요 (예: 현재 레짐에서 현금 비중을 어떻게 할까?)"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"): st.markdown(prompt)
+        with st.chat_message("assistant"):
+            try:
+                import google.generativeai as genai
+                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                # AI에게 현재 상황(레짐, VIX 등)을 같이 넘겨주어 똑똑한 답변 유도
+                context = f"너는 퀀트 투자 조언자야. 현재 레짐: R{curr_regime}, VIX: {vix_close:.1f}, QQQ 200MA 이격도: {(qqq_close/qqq_ma200-1)*100:.1f}%. 이 상황을 바탕으로 답변해."
+                response = model.generate_content(f"{context}\n질문: {prompt}")
+                st.markdown(response.text)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
+            except Exception as e:
+                st.error(f"API 연결 오류: {e}")
+
+# ==========================================
+# 추가된 페이지 2: 🎛️ Parameter Lab
+# ==========================================
+elif page == "🎛️ Parameter Lab":
+    st.markdown(apply_theme("""<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;"><div><h2 style="font-family:'Plus Jakarta Sans';font-size:1.7em;color:#0F172A;margin:0;">🎛️ Parameter Lab</h2></div></div>"""), unsafe_allow_html=True)
+    st.markdown("알고리즘의 판단 기준 임계치를 직접 수정하여 전략의 민감도를 조절합니다.")
+    with st.container(border=True):
+        st.session_state.param_vix_limit = st.slider("VIX Panic Threshold (R4 진입 기준)", 20.0, 60.0, st.session_state.param_vix_limit)
+        st.session_state.param_ma_long = st.number_input("Long-term MA (기준 이동평균선)", 100, 300, st.session_state.param_ma_long)
+        st.session_state.param_ma_short = st.number_input("Short-term MA (추세 확인용)", 20, 100, st.session_state.param_ma_short)
+    st.warning("⚠️ 현재는 UI만 제공되며, 실제 백테스트 및 레짐 판정 수식 연동은 별도 작업이 필요합니다.")
+
+# ==========================================
+# 추가된 페이지 3: 📝 Trade Journal
+# ==========================================
+elif page == "📝 Trade Journal":
+    st.markdown(apply_theme("""<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;"><div><h2 style="font-family:'Plus Jakarta Sans';font-size:1.7em;color:#0F172A;margin:0;">📝 Trade Journal</h2></div></div>"""), unsafe_allow_html=True)
+    with st.expander("➕ 새 매매 기록 작성", expanded=False):
+        c1, c2 = st.columns(2)
+        date = c1.date_input("매매일자")
+        asset = c2.selectbox("종목", ASSET_LIST)
+        action = c1.radio("액션", ["BUY", "SELL"], horizontal=True)
+        reason = st.text_area("매매 사유 (당시 레짐, 시장 상황 등)")
+        if st.button("기록 저장"):
+            st.session_state.trade_log.append({"날짜": str(date), "종목": asset, "구분": action, "사유": reason})
+            st.success("매매 일지가 저장되었습니다.")
+            st.rerun()
+            
+    if st.session_state.trade_log:
+        st.dataframe(pd.DataFrame(st.session_state.trade_log), use_container_width=True, hide_index=True)
+    else:
+        st.info("아직 기록된 매매 내역이 없습니다.")
+
+_ls_save_all()
 _ls_save_all()
