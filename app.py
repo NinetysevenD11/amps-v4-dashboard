@@ -15,11 +15,10 @@ import os
 warnings.filterwarnings('ignore')
 
 # ==========================================
-# 1. 설정 및 데이터
+# 1. 설정 및 상태 관리
 # ==========================================
 st.set_page_config(page_title="AMLS V4.5 FINANCE STRATEGY", layout="wide", page_icon="🌿", initial_sidebar_state="expanded")
 
-# --- 🎨 테마 및 레이아웃 상태 관리 ---
 if 'display_mode' not in st.session_state: st.session_state.display_mode  = 'PC'
 if 'lc_lr_split'  not in st.session_state: st.session_state.lc_lr_split   = 38
 if 'lc_delta_wt'  not in st.session_state: st.session_state.lc_delta_wt   = 52
@@ -40,14 +39,9 @@ if 'tc_label'     not in st.session_state: st.session_state.tc_label     = '#949
 if 'tc_data'      not in st.session_state: st.session_state.tc_data      = '#111118'
 if 'tc_sidebar'   not in st.session_state: st.session_state.tc_sidebar   = '#2D2D2D'
 if '_ls_loaded'   not in st.session_state: st.session_state._ls_loaded   = False
-
-# 리밸런싱 고정 상태
 if 'rebal_locked' not in st.session_state: st.session_state.rebal_locked = False
 if 'rebal_plan'   not in st.session_state: st.session_state.rebal_plan   = None
 
-# ==========================================
-# localStorage 영속화 (브라우저 저장)
-# ==========================================
 def _ls_save_all():
     _layout = json.dumps({"display_mode": st.session_state.display_mode, "lc_lr_split": st.session_state.lc_lr_split, "lc_delta_wt": st.session_state.lc_delta_wt, "lc_editor_h": st.session_state.lc_editor_h, "lc_goal_inp": st.session_state.lc_goal_inp, "lc_pie_h": st.session_state.lc_pie_h, "lc_pie_split": st.session_state.lc_pie_split, "lc_bar_h": st.session_state.lc_bar_h, "lc_show_lp": st.session_state.lc_show_lp, "lc_show_qo": st.session_state.lc_show_qo, "lc_show_reg": st.session_state.lc_show_reg})
     _theme = json.dumps({"main_color": st.session_state.main_color, "bg_color": st.session_state.bg_color, "tc_heading": st.session_state.tc_heading, "tc_body": st.session_state.tc_body, "tc_muted": st.session_state.tc_muted, "tc_label": st.session_state.tc_label, "tc_data": st.session_state.tc_data, "tc_sidebar": st.session_state.tc_sidebar})
@@ -62,13 +56,21 @@ def _ls_load():
     st.markdown("""<script>(function(){var keys=["amls_portfolio","amls_goal","amls_layout","amls_theme","amls_dispmode"];var changed=false;var params=new URLSearchParams(window.location.search);keys.forEach(function(k){var v=localStorage.getItem(k);if(v&&!params.has(k)){params.set(k,encodeURIComponent(v));changed=true;}});if(changed){var newUrl=window.location.pathname+"?"+params.toString();window.history.replaceState(null,"",newUrl);window.location.reload();}})();</script>""", unsafe_allow_html=True)
     st.session_state._ls_loaded = True
 
+SECTOR_TICKERS = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','XLB']
+CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
+TICKERS        = CORE_TICKERS + SECTOR_TICKERS
+ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
+PORTFOLIO_FILE = 'portfolio_autosave.json'
+
 def _restore_from_qp():
     _qp, _changed = st.query_params.to_dict(), False
     if "amls_portfolio" in _qp:
         try:
             _pf = json.loads(_qp["amls_portfolio"])
             if 'portfolio' not in st.session_state or not any(st.session_state.portfolio[a]['shares'] for a in ASSET_LIST if a != 'CASH'):
-                for k, v in _pf.items(): st.session_state.portfolio[k] = v
+                for k, v in _pf.items():
+                    if k == 'SPY': st.session_state.portfolio['SPYG'] = v
+                    elif k in ASSET_LIST: st.session_state.portfolio[k] = v
                 _changed = True
         except: pass
     if "amls_goal" in _qp:
@@ -114,12 +116,6 @@ def apply_theme(text):
     if not isinstance(text, str): return text
     return text.replace("#10B981", main_color).replace("#10b981", main_color).replace("16, 185, 129", f"{r_c}, {g_c}, {b_c}").replace("16,185,129", f"{r_c},{g_c},{b_c}")
 
-SECTOR_TICKERS = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','XLB']
-CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
-TICKERS        = CORE_TICKERS + SECTOR_TICKERS
-ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
-PORTFOLIO_FILE = 'portfolio_autosave.json'
-
 def sanitize_portfolio():
     for a in ASSET_LIST:
         val = st.session_state.portfolio.get(a)
@@ -135,7 +131,10 @@ if 'portfolio' not in st.session_state:
     if os.path.exists(PORTFOLIO_FILE):
         try:
             with open(PORTFOLIO_FILE, 'r') as f:
-                loaded = json.load(f); [st.session_state.portfolio.update({k: v}) for k, v in loaded.items() if k in ASSET_LIST]
+                loaded = json.load(f)
+                for k, v in loaded.items():
+                    if k == 'SPY': st.session_state.portfolio['SPYG'] = v
+                    elif k in ASSET_LIST: st.session_state.portfolio[k] = v
         except: pass
 
 sanitize_portfolio()
@@ -146,6 +145,95 @@ def save_portfolio_to_disk():
     except: pass
     st.session_state['_needs_ls_save'] = True
 
+# ==========================================
+# CSS BLOCK (스타일 정의 복구)
+# ==========================================
+css_block = f"""<style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+    :root {{ --paper:{bg_color}; --paper-2:{bg_color}dd; --paper-3:{bg_color}bb; --ink:{tc_heading}; --ink-2:{tc_body}; --ink-3:{tc_body}; --ink-4:{tc_muted}; --ink-5:{tc_label}; --rule:rgba(0,0,0,0.10); --rule-strong:rgba(0,0,0,0.18); --acc:#10B981; --acc-pale:rgba(16,185,129,0.08); --acc-mid:rgba(16,185,129,0.18); --acc-line:rgba(16,185,129,0.40); --bull:#059669; --bear:#DC2626; --warn:#D97706; --u:8px; }}
+    *,*::before,*::after {{ box-sizing:border-box; }}
+    .stApp,[data-testid="stAppViewContainer"] {{ background-color:{bg_color} !important; background-image:radial-gradient(circle, rgba(0,0,0,0.055) 1px, transparent 1px), radial-gradient(ellipse 70% 40% at 5% 0%, rgba(16,185,129,0.055) 0%, transparent 55%) !important; background-size:24px 24px, 100% 100% !important; color:{tc_body} !important; font-family:'Plus Jakarta Sans', sans-serif; font-size:14px; }}
+    [data-testid="stHeader"] {{ background:rgba(247,246,242,0.92) !important; backdrop-filter:blur(12px); border-bottom:1px solid var(--rule-strong); }}
+    #MainMenu {{ visibility:hidden; }} footer {{ visibility:hidden; }}
+    .main .block-container {{ max-width:1540px; padding-top:1.5rem; padding-bottom:3rem; }}
+    [data-testid="stSidebar"] {{ background:{bg_color} !important; border-right:1px solid var(--rule-strong) !important; box-shadow:none !important; }}
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] div {{ color:{tc_sidebar}; }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] > div:first-child {{ display:none !important; }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {{ gap:0px !important; padding:0 !important; background:transparent !important; }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] {{ display:flex !important; align-items:center !important; padding:11px 20px !important; margin:0 !important; border-radius:0 !important; border:none !important; border-bottom:1px solid var(--rule) !important; background:transparent !important; cursor:pointer !important; width:100% !important; transition:background 0.15s ease !important; position:relative; }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"] p {{ color:{tc_sidebar} !important; font-weight:400 !important; font-size:0.84rem !important; margin:0 !important; font-family:'DM Sans' !important; letter-spacing:0.01em !important; }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:hover {{ background:var(--paper-3) !important; }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {{ background:var(--acc-pale) !important; border-bottom:1px solid var(--rule) !important; }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked)::before {{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--acc); }}
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) p {{ color:{tc_heading} !important; font-weight:600 !important; }}
+    .sidebar-link {{ display:flex; align-items:center; gap:10px; padding:9px 20px; margin:0; border-bottom:1px solid var(--rule); text-decoration:none !important; color:{tc_sidebar} !important; font-weight:400; font-size:0.82rem; transition:background 0.15s, color 0.15s; background:transparent; font-family:'DM Sans'; position:relative; }}
+    .sidebar-link:hover {{ background:var(--paper-3) !important; color:{tc_heading} !important; }}
+    [data-testid="stSidebar"] [data-testid="stButton"] > button {{ background:transparent !important; border:1px solid var(--rule-strong) !important; color:{tc_sidebar} !important; border-radius:0 !important; padding:7px 14px !important; font-weight:400 !important; font-size:0.76em !important; transition:all 0.15s ease !important; font-family:'DM Mono', monospace !important; letter-spacing:0.05em; text-transform:uppercase; }}
+    [data-testid="stSidebar"] [data-testid="stButton"] > button:hover {{ background:var(--acc-pale) !important; border-color:var(--acc-line) !important; color:var(--bull) !important; }}
+    [data-testid="stSidebar"] [data-testid="stSlider"] label p {{ color:{tc_label} !important; font-family:'DM Mono', monospace !important; font-size:0.72em !important; }}
+    [data-testid="stSidebar"] [data-testid="stCheckbox"] label p {{ color:{tc_body} !important; font-size:0.78em !important; }}
+    [data-testid="stSidebar"] [data-testid="stDownloadButton"] > button {{ background:transparent !important; border:1px solid var(--rule-strong) !important; color:{tc_sidebar} !important; border-radius:0 !important; font-family:'DM Mono', monospace !important; font-size:0.74em !important; padding:7px 14px !important; text-transform:uppercase; letter-spacing:0.05em; }}
+    [data-testid="stSidebar"] [data-testid="stDownloadButton"] > button:hover {{ background:var(--acc-pale) !important; border-color:var(--acc-line) !important; color:var(--bull) !important; }}
+    [data-testid="stSidebar"] [data-testid="stFileUploader"] {{ background:var(--paper-2) !important; border:1px dashed var(--rule-strong) !important; border-radius:0 !important; }}
+    [data-testid="stSidebar"] [data-testid="stExpander"] {{ background:transparent !important; border:none !important; border-top:1px solid var(--rule) !important; border-radius:0 !important; }}
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary p {{ color:{tc_label} !important; font-family:'DM Mono', monospace !important; font-size:0.74em !important; letter-spacing:0.12em; text-transform:uppercase; }}
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary:hover {{ background:var(--paper-3) !important; }}
+    .sb-section {{ padding:10px 20px 6px; font-family:'DM Mono', monospace; font-size:0.58em; font-weight:500; color:{tc_label}; letter-spacing:0.22em; text-transform:uppercase; border-top:1px solid var(--rule); margin-top:2px; }}
+    .sb-section:first-child {{ border-top:none; }}
+    .glass-card {{ background:#FAFAF7 !important; border:1px solid var(--rule-strong) !important; border-top:2px solid var(--ink-2) !important; border-radius:0 !important; padding:20px 22px !important; box-shadow:none !important; height:100%; display:flex; flex-direction:column; justify-content:space-between; transition:border-top-color 0.2s ease; position:relative; }}
+    .glass-card:hover {{ border-top-color:var(--acc) !important; transform:none !important; box-shadow:0 4px 24px rgba(0,0,0,0.06) !important; }}
+    .glass-card h3 {{ font-family:'DM Mono', monospace !important; font-size:0.6em !important; font-weight:400 !important; color:var(--ink-4) !important; margin-bottom:14px !important; letter-spacing:0.20em; text-transform:uppercase; border-bottom:1px solid var(--rule); padding-bottom:9px; }}
+    .glass-inset {{ background:var(--paper-2) !important; border:1px solid var(--rule) !important; border-left:3px solid var(--acc) !important; border-radius:0 !important; padding:14px 16px 12px !important; text-align:left; margin-bottom:14px; box-shadow:none !important; }}
+    div[data-testid="stVerticalBlockBorderWrapper"] > div {{ background:#FAFAF7 !important; border:1px solid var(--rule-strong) !important; border-top:2px solid var(--ink-2) !important; border-radius:0 !important; padding:20px 22px !important; box-shadow:none !important; transition:border-top-color 0.2s ease; position:relative; }}
+    div[data-testid="stVerticalBlockBorderWrapper"] > div:hover {{ border-top-color:var(--acc) !important; box-shadow:0 4px 24px rgba(0,0,0,0.06) !important; transform:none !important; }}
+    [data-testid="stMetric"] {{ background:#FAFAF7 !important; border:1px solid var(--rule-strong) !important; border-top:2px solid var(--ink-2) !important; border-radius:0 !important; padding:16px 18px !important; box-shadow:none !important; margin-bottom:8px; transition:border-top-color 0.2s; position:relative; }}
+    [data-testid="stMetric"]:hover {{ border-top-color:var(--acc) !important; transform:none !important; }}
+    [data-testid="stMetricLabel"] > div > div > p {{ font-size:0.65em !important; font-weight:500; color:var(--ink-4) !important; white-space:normal !important; letter-spacing:0.14em; text-transform:uppercase; font-family:'DM Mono', monospace !important; }}
+    [data-testid="stMetricValue"] > div {{ font-family:'DM Mono', monospace !important; font-size:1.4em !important; font-weight:400; color:var(--ink) !important; font-variant-numeric:tabular-nums; }}
+    div[data-testid="stMetricDelta"] > div {{ font-size:0.8em !important; font-weight:500; font-family:'DM Mono', monospace !important; font-variant-numeric:tabular-nums; }}
+    [data-testid="stButton"] > button {{ background:transparent !important; border:1px solid var(--rule-strong) !important; color:var(--ink-2) !important; border-radius:0 !important; padding:7px 16px !important; font-weight:500 !important; font-size:0.78em !important; transition:all 0.15s ease !important; font-family:'DM Mono', monospace !important; letter-spacing:0.06em; text-transform:uppercase; }}
+    [data-testid="stButton"] > button:hover {{ background:var(--acc-pale) !important; border-color:var(--acc-line) !important; color:var(--bull) !important; }}
+    h1 {{ font-family:'Plus Jakarta Sans', sans-serif !important; font-size:2.2em !important; font-weight:800 !important; letter-spacing:-1.5px; margin:0 !important; color:{tc_heading} !important; }}
+    h2 {{ font-family:'Plus Jakarta Sans', sans-serif !important; color:{tc_heading} !important; font-weight:800 !important; letter-spacing:-0.5px; }}
+    h3 {{ font-family:'Plus Jakarta Sans', sans-serif !important; color:{tc_body} !important; }}
+    p  {{ color:{tc_body} !important; line-height:1.65; }}
+    strong {{ color:{tc_heading} !important; }}
+    [data-testid="stMetricValue"], .cval, .mint-table td {{ font-variant-numeric:tabular-nums; }}
+    .crow {{ display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--rule); font-size:0.9em; }}
+    .crow:last-child {{ border-bottom:none; }}
+    .clabel {{ color:{tc_muted}; font-weight:500; font-family:'DM Sans'; font-size:1em; }}
+    .cval {{ font-family:'DM Mono', monospace; font-weight:400; color:#10B981; font-size:0.9em; letter-spacing:0.02em; font-variant-numeric:tabular-nums; }}
+    [data-testid="stMetricLabel"] > div > div > p {{ font-size:0.65em !important; font-weight:500; color:{tc_label} !important; white-space:normal !important; letter-spacing:0.14em; text-transform:uppercase; font-family:'DM Mono', monospace !important; }}
+    [data-testid="stMetricValue"] > div {{ font-family:'DM Mono', monospace !important; font-size:1.4em !important; font-weight:400; color:{tc_data} !important; font-variant-numeric:tabular-nums; }}
+    [data-testid="stSidebar"] p {{ color:{tc_sidebar} !important; }}
+    [data-testid="stSidebar"] strong {{ color:{tc_heading} !important; }}
+    .radar-link {{ text-decoration:none !important; display:block; }}
+    .radar-link-title {{ font-size:0.62em; font-weight:500; color:{tc_label}; transition:color 0.15s; font-family:'DM Mono', monospace; letter-spacing:0.16em; text-transform:uppercase; }}
+    .radar-link:hover .radar-link-title {{ color:var(--acc) !important; }}
+    .mint-table {{ width:100%; border-collapse:collapse; font-family:'DM Mono', monospace; }}
+    .mint-table th {{ padding:8px 12px; font-weight:400; color:var(--ink-4); text-align:right; font-size:0.68em; letter-spacing:0.16em; text-transform:uppercase; border-bottom:2px solid var(--ink-3); background:var(--paper-2); }}
+    .mint-table td {{ padding:10px 12px; background:#FAFAF7; color:var(--ink-2); text-align:right; border-bottom:1px solid var(--rule); font-size:0.8em; font-variant-numeric:tabular-nums; transition:background 0.12s; }}
+    .mint-table tr:hover td {{ background:var(--acc-pale); }}
+    .mint-table td:first-child {{ border-left:3px solid transparent; text-align:left; font-family:'DM Sans'; font-weight:700; color:var(--bull); font-size:0.82em; }}
+    .mint-table tr:hover td:first-child {{ border-left-color:var(--acc); }}
+    .mint-table th:first-child {{ text-align:left; }}
+    [data-testid="stNumberInput"] > div > div, [data-testid="stTextInput"] > div > div, [data-testid="stDateInput"] > div > div, [data-baseweb="select"] > div {{ background:#FAFAF7 !important; border:1px solid var(--rule-strong) !important; border-radius:0 !important; color:var(--ink) !important; }}
+    [data-testid="stFileUploader"] {{ background:var(--paper-2) !important; border:1px dashed var(--rule-strong) !important; border-radius:0 !important; }}
+    [data-testid="stExpander"] {{ background:#FAFAF7 !important; border:1px solid var(--rule-strong) !important; border-radius:0 !important; }}
+    hr {{ border-color:var(--rule-strong) !important; }}
+    ::-webkit-scrollbar {{ width:3px; height:3px; }}
+    ::-webkit-scrollbar-track {{ background:var(--paper-2); }}
+    ::-webkit-scrollbar-thumb {{ background:var(--ink-5); }}
+    ::-webkit-scrollbar-thumb:hover {{ background:var(--ink-3); }}
+    @keyframes pulseGlow {{ 0%,100% {{ opacity:1; }} 50% {{ opacity:0.7; }} }}
+    .live-pulse {{ animation:pulseGlow 2.8s ease-in-out infinite; }}
+    [data-testid="stDataEditor"], [data-testid="stDataFrame"] {{ border:1px solid var(--rule-strong) !important; border-radius:0 !important; }}
+</style>"""
+st.markdown(apply_theme(css_block), unsafe_allow_html=True)
+
+# ==========================================
+# 데이터 처리 및 연산 함수
+# ==========================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_data():
     end_date = datetime.now()
@@ -159,18 +247,32 @@ def load_data():
             for t in TICKERS:
                 if t in data.columns: df[t] = data[t]
             df = df.ffill().bfill()
-            df['QQQ_MA20'], df['QQQ_MA50'], df['QQQ_MA200'] = df['QQQ'].rolling(20).mean(), df['QQQ'].rolling(50).mean(), df['QQQ'].rolling(200).mean()
-            df['TQQQ_MA200'], df['SMH_MA50'] = df['TQQQ'].rolling(200).mean(), df['SMH'].rolling(50).mean()
-            df['VIX_MA5'], df['VIX_MA20'], df['VIX_MA50'] = df['^VIX'].rolling(5).mean(), df['^VIX'].rolling(20).mean(), df['^VIX'].rolling(50).mean()
-            df['SMH_3M_Ret'], df['SMH_1M_Ret'], df['SMH_RSI'] = df['SMH'].pct_change(63), df['SMH'].pct_change(21), ta.rsi(df['SMH'], length=14)
+            df['QQQ_MA20'] = df['QQQ'].rolling(20).mean()
+            df['QQQ_MA50'] = df['QQQ'].rolling(50).mean()
+            df['QQQ_MA200'] = df['QQQ'].rolling(200).mean()
+            df['TQQQ_MA200'] = df['TQQQ'].rolling(200).mean()
+            df['SMH_MA50'] = df['SMH'].rolling(50).mean()
+            df['VIX_MA5'] = df['^VIX'].rolling(5).mean()
+            df['VIX_MA20'] = df['^VIX'].rolling(20).mean()
+            df['VIX_MA50'] = df['^VIX'].rolling(50).mean()
+            df['SMH_3M_Ret'] = df['SMH'].pct_change(63)
+            df['SMH_1M_Ret'] = df['SMH'].pct_change(21)
+            df['SMH_RSI'] = ta.rsi(df['SMH'], length=14)
             df['HYG_IEF_Ratio'] = df['HYG'] / df['IEF']
-            df['HYG_IEF_MA20'], df['HYG_IEF_MA50'] = df['HYG_IEF_Ratio'].rolling(20).mean(), df['HYG_IEF_Ratio'].rolling(50).mean()
-            df['QQQ_20d_Ret'], df['QQQE_20d_Ret'], df['QQQ_RSI'] = df['QQQ'].pct_change(20), df['QQQE'].pct_change(20), ta.rsi(df['QQQ'], length=14)
-            df['GLD_SPYG_Ratio'], df['GLD_SPYG_MA50'] = df['GLD'] / df['SPYG'], (df['GLD'] / df['SPYG']).rolling(50).mean()
+            df['HYG_IEF_MA20'] = df['HYG_IEF_Ratio'].rolling(20).mean()
+            df['HYG_IEF_MA50'] = df['HYG_IEF_Ratio'].rolling(50).mean()
+            df['QQQ_20d_Ret'] = df['QQQ'].pct_change(20)
+            df['QQQE_20d_Ret'] = df['QQQE'].pct_change(20)
+            df['QQQ_RSI'] = ta.rsi(df['QQQ'], length=14)
+            df['GLD_SPYG_Ratio'] = df['GLD'] / df['SPYG']
+            df['GLD_SPYG_MA50'] = df['GLD_SPYG_Ratio'].rolling(50).mean()
             df['QQQ_High52'] = df['QQQ'].rolling(252).max()
             df['QQQ_DD'] = (df['QQQ'] / df['QQQ_High52']) - 1
-            df['UUP_MA50'], df['TNX_MA50'], df['BTC_MA50'] = df['UUP'].rolling(50).mean(), df['^TNX'].rolling(50).mean(), df['BTC-USD'].rolling(50).mean()
-            df['IWM_SPYG_Ratio'], df['IWM_SPYG_MA50'] = df['IWM'] / df['SPYG'], (df['IWM'] / df['SPYG']).rolling(50).mean()
+            df['UUP_MA50'] = df['UUP'].rolling(50).mean()
+            df['TNX_MA50'] = df['^TNX'].rolling(50).mean()
+            df['BTC_MA50'] = df['BTC-USD'].rolling(50).mean()
+            df['IWM_SPYG_Ratio'] = df['IWM'] / df['SPYG']
+            df['IWM_SPYG_MA50'] = df['IWM_SPYG_Ratio'].rolling(50).mean()
             for sec in SECTOR_TICKERS: df[f'{sec}_1M'] = df[sec].pct_change(21)
             result = df.dropna()
             if not result.empty: return result
@@ -183,14 +285,16 @@ def get_target_v45(row):
     if row['QQQ'] < row['QQQ_MA200']: return 3
     if row['QQQ_DD'] < -0.10 and credit_stress: return 3
     bull_trend = row['QQQ'] >= row['QQQ_MA200'] and row['QQQ_MA50'] >= row['QQQ_MA200']
-    low_vix, credit_ok = row['VIX_MA20'] < 22, row['HYG_IEF_Ratio'] >= row['HYG_IEF_MA50']
+    low_vix    = row['VIX_MA20'] < 22
+    credit_ok  = row['HYG_IEF_Ratio'] >= row['HYG_IEF_MA50']
     if bull_trend and low_vix and credit_ok: return 1
     return 2
 
 def apply_asymmetric_delay(targets):
     res = []; hist_curr = 3; pend = None; cnt = 0
     for t in targets:
-        if t > hist_curr: hist_curr = t; pend = None; cnt = 0
+        if t > hist_curr:  
+            hist_curr = t; pend = None; cnt = 0
         elif t < hist_curr:
             if hist_curr == 3 and t <= 2:
                 hist_curr = 2
@@ -205,12 +309,55 @@ def apply_asymmetric_delay(targets):
         res.append(hist_curr)
     return pd.Series(res, index=targets.index).shift(1).bfill()
 
+@st.cache_data(ttl=3600)
+def load_custom_backtest_data(start_date, end_date):
+    fetch_start = pd.to_datetime(start_date) - timedelta(days=400)
+    data = yf.download(TICKERS, start=fetch_start.strftime("%Y-%m-%d"), end=(pd.to_datetime(end_date) + timedelta(days=1)).strftime("%Y-%m-%d"), progress=False, auto_adjust=True)['Close']
+    if 'QQQ' in data.columns: data = data.dropna(subset=['QQQ'])
+    bt_df = pd.DataFrame(index=data.index)
+    for t in TICKERS: bt_df[t] = data[t]
+    bt_df = bt_df.ffill().bfill()
+    bt_df['QQQ_MA20'] = bt_df['QQQ'].rolling(20).mean()
+    bt_df['QQQ_MA50'] = bt_df['QQQ'].rolling(50).mean()
+    bt_df['QQQ_MA200'] = bt_df['QQQ'].rolling(200).mean()
+    bt_df['TQQQ_MA200'] = bt_df['TQQQ'].rolling(200).mean()
+    bt_df['SMH_MA50'] = bt_df['SMH'].rolling(50).mean()
+    bt_df['VIX_MA5'] = bt_df['^VIX'].rolling(5).mean()
+    bt_df['VIX_MA20'] = bt_df['^VIX'].rolling(20).mean()
+    bt_df['VIX_MA50'] = bt_df['^VIX'].rolling(50).mean()
+    bt_df['SMH_3M_Ret'] = bt_df['SMH'].pct_change(63)
+    bt_df['SMH_1M_Ret'] = bt_df['SMH'].pct_change(21)
+    bt_df['SMH_RSI'] = ta.rsi(bt_df['SMH'], length=14)
+    bt_df['HYG_IEF_Ratio'] = bt_df['HYG'] / bt_df['IEF']
+    bt_df['HYG_IEF_MA20'] = bt_df['HYG_IEF_Ratio'].rolling(20).mean()
+    bt_df['HYG_IEF_MA50'] = bt_df['HYG_IEF_Ratio'].rolling(50).mean()
+    bt_df['QQQ_20d_Ret'] = bt_df['QQQ'].pct_change(20)
+    bt_df['QQQE_20d_Ret'] = bt_df['QQQE'].pct_change(20)
+    bt_df['QQQ_RSI'] = ta.rsi(bt_df['QQQ'], length=14)
+    bt_df['GLD_SPYG_Ratio'] = bt_df['GLD'] / bt_df['SPYG']
+    bt_df['GLD_SPYG_MA50'] = bt_df['GLD_SPYG_Ratio'].rolling(50).mean()
+    bt_df['QQQ_High52'] = bt_df['QQQ'].rolling(252).max()
+    bt_df['QQQ_DD'] = (bt_df['QQQ'] / bt_df['QQQ_High52']) - 1
+    bt_df['UUP_MA50'] = bt_df['UUP'].rolling(50).mean()
+    bt_df['TNX_MA50'] = bt_df['^TNX'].rolling(50).mean()
+    bt_df['BTC_MA50'] = bt_df['BTC-USD'].rolling(50).mean()
+    bt_df['IWM_SPYG_Ratio'] = bt_df['IWM'] / bt_df['SPYG']
+    bt_df['IWM_SPYG_MA50'] = bt_df['IWM_SPYG_Ratio'].rolling(50).mean()
+    bt_df = bt_df.dropna()
+    if bt_df.empty: return bt_df
+    bt_df['Target'] = bt_df.apply(get_target_v45, axis=1)
+    bt_df['Regime'] = apply_asymmetric_delay(bt_df['Target'])
+    bt_df = bt_df.loc[pd.to_datetime(start_date):pd.to_datetime(end_date)]
+    return bt_df
+
 REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPYG','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
 
 @st.cache_data(ttl=15)
 def fetch_realtime_prices():
     prices = {}
-    now_kst = datetime.now(timezone.utc) + timedelta(hours=9)
+    now_utc = datetime.now(timezone.utc)
+    now_kst = now_utc + timedelta(hours=9)
+    fetch_time = now_kst.strftime("%Y-%m-%d %H:%M:%S")
     try:
         batch_data = yf.download(REALTIME_TICKERS, period="2d", interval="1m", prepost=True, progress=False, auto_adjust=True, threads=True)['Close']
         if isinstance(batch_data, pd.Series): batch_data = batch_data.to_frame(name=REALTIME_TICKERS[0])
@@ -230,7 +377,7 @@ def fetch_realtime_prices():
                 price = info.get('last_price') or info.get('lastPrice')
                 if price and price > 0: prices[ticker] = float(price)
             except: pass
-    return prices, now_kst.strftime("%Y-%m-%d %H:%M:%S")
+    return prices, fetch_time
 
 @st.cache_data(ttl=1800)
 def fetch_fear_and_greed():
@@ -255,10 +402,10 @@ def fetch_macro_news():
 
 @st.cache_data(ttl=300)
 def fetch_global_markets():
-    gt = {'SPYG':'S&P 500 Growth','QQQ':'Nasdaq 100','DIA':'Dow Jones','IWM':'Russell 2000','EWJ':'Japan','EWT':'Taiwan','EWY':'Korea','FXI':'China','VGK':'Europe','EWG':'Germany','EWU':'UK','EWQ':'France','EWC':'Canada','EEM':'Emg Mkt','EWZ':'Brazil','EWA':'Australia'}
-    at = {'^TNX':'US 10Y','GLD':'Gold','SLV':'Silver','USO':'Oil','BTC-USD':'Bitcoin','ETH-USD':'Ethereum','UUP':'DXY'}
-    lt = {'AAPL':'Apple','MSFT':'Microsoft','NVDA':'Nvidia','AMZN':'Amazon','GOOGL':'Alphabet','META':'Meta','TSLA':'Tesla','AVGO':'Broadcom','AMD':'AMD','TSM':'TSMC'}
-    all_t = list(gt.keys()) + list(at.keys()) + list(lt.keys())
+    global_tickers = {'SPYG':'S&P 500 Growth','QQQ':'Nasdaq 100','DIA':'Dow Jones','IWM':'Russell 2000','EWJ':'Japan','EWT':'Taiwan','EWY':'Korea','FXI':'China','VGK':'Europe','EWG':'Germany','EWU':'UK','EWQ':'France','EWC':'Canada','EEM':'Emg Mkt','EWZ':'Brazil','EWA':'Australia'}
+    asset_tickers = {'^TNX':'US 10Y','GLD':'Gold','SLV':'Silver','USO':'Oil','BTC-USD':'Bitcoin','ETH-USD':'Ethereum','UUP':'DXY'}
+    leader_tickers = {'AAPL':'Apple','MSFT':'Microsoft','NVDA':'Nvidia','AMZN':'Amazon','GOOGL':'Alphabet','META':'Meta','TSLA':'Tesla','AVGO':'Broadcom','AMD':'AMD','TSM':'TSMC'}
+    all_t = list(global_tickers.keys()) + list(asset_tickers.keys()) + list(leader_tickers.keys())
     results = {}
     try:
         end = datetime.now()
@@ -270,20 +417,27 @@ def fetch_global_markets():
                 if len(s) >= 2: results[t] = {'price': float(s.iloc[-1]), 'chg': float((s.iloc[-1] / s.iloc[-2] - 1) * 100)}
                 elif len(s) == 1: results[t] = {'price': float(s.iloc[-1]), 'chg': 0.0}
     except: pass
-    return results, gt, at, lt
+    return results, global_tickers, asset_tickers, leader_tickers
 
-with st.spinner('데이터 수집 중...'):
+# ==========================================
+# 데이터 처리 메인 루프
+# ==========================================
+with st.spinner('시장 데이터 수집 중...'):
     df = load_data()
     if df is not None and not df.empty: st.session_state['_df_cache'] = df
     elif '_df_cache' in st.session_state: df = st.session_state['_df_cache']
     rt_prices, last_update_time = fetch_realtime_prices()
 
-if df is None or df.empty: st.error("야후 파이낸스 연결 실패"); st.stop()
+if df is None or df.empty:
+    st.error("야후 파이낸스 연결 실패")
+    st.stop()
 
 last_index = df.index[-1]
 rt_injected = []
 for ticker, price in rt_prices.items():
-    if ticker in df.columns and price > 0: df.at[last_index, ticker] = price; rt_injected.append(ticker)
+    if ticker in df.columns and price > 0:
+        df.at[last_index, ticker] = price
+        rt_injected.append(ticker)
 
 if 'QQQ' in rt_injected: df.at[last_index, 'QQQ_DD'] = (df.at[last_index, 'QQQ'] / df['QQQ_High52'].iloc[-1]) - 1
 if 'HYG' in rt_injected and 'IEF' in rt_injected: df.at[last_index, 'HYG_IEF_Ratio'] = df.at[last_index, 'HYG'] / df.at[last_index, 'IEF']
@@ -292,12 +446,14 @@ if 'GLD' in rt_injected and 'SPYG' in rt_injected: df.at[last_index, 'GLD_SPYG_R
 
 last_row = df.iloc[-1].copy()
 rt_ok, rt_label = len(rt_injected) >= 3, f"⬤ LIVE {len(rt_injected)} feeds" if len(rt_injected) >= 3 else "⬤ DELAYED"
+
 vix_close, vix_ma20 = last_row['^VIX'], last_row['VIX_MA20']
 qqq_close, qqq_ma50, qqq_ma200 = last_row['QQQ'], last_row['QQQ_MA50'], last_row['QQQ_MA200']
 smh_close, smh_ma50, smh_3m, smh_1m, smh_rsi = last_row['SMH'], last_row['SMH_MA50'], last_row['SMH_3M_Ret'], last_row['SMH_1M_Ret'], last_row['SMH_RSI']
 
 df['Target'] = df.apply(get_target_v45, axis=1)
 df['Regime'] = apply_asymmetric_delay(df['Target'])
+
 live_regime, hist_regime = get_target_v45(last_row), int(df.iloc[-1]['Regime'])
 
 if live_regime > hist_regime: curr_regime = live_regime
@@ -305,6 +461,7 @@ elif hist_regime == 3 and live_regime <= 2: curr_regime = 2
 else: curr_regime = hist_regime
 
 smh_cond = (smh_close > smh_ma50) and (smh_3m > 0.05 or smh_1m > 0.10) and (smh_rsi > 50)
+
 def get_weights_v45(reg, smh_ok):
     w = {t: 0.0 for t in ASSET_LIST}; semi = 'SOXL' if smh_ok else 'USD'
     if reg == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'], w['SPYG'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
@@ -312,6 +469,7 @@ def get_weights_v45(reg, smh_ok):
     elif reg == 3: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.35, 0.15
     elif reg == 4: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.40, 0.10
     return w
+
 target_weights = get_weights_v45(curr_regime, smh_cond)
 
 if curr_regime == live_regime: regime_committee_msg = "🟢 조건 부합 (안정)"
@@ -325,38 +483,42 @@ radar_layout = dict(height=200, margin=dict(l=10, r=10, t=15, b=15), paper_bgcol
 _ax, _ax_r = dict(gridcolor='rgba(0,0,0,0.07)', linecolor='rgba(0,0,0,0.12)', showgrid=True, zeroline=False), dict(gridcolor='rgba(0,0,0,0.07)', zeroline=False, showgrid=True)
 regime_info = {1:("R1 BULL","풀 가동"),2:("R2 CORR","방어 진입"), 3:("R3 BEAR","대피"),4:("R4 PANIC","최대 방어")}
 
-st.markdown(apply_theme(css_block), unsafe_allow_html=True)
-
-# --- 사이드바 ---
+# ==========================================
+# 사이드바 및 공통 헤더
+# ==========================================
 st.sidebar.markdown(apply_theme(f"""<div style="padding:22px 20px 16px;background:{bg_color};border-bottom:1px solid rgba(0,0,0,0.09);"><div style="font-family:'DM Mono';font-size:0.52em;color:{tc_label};letter-spacing:0.26em;text-transform:uppercase;margin-bottom:8px;">Quantitative Engine</div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:1.65em;font-weight:800;color:{tc_heading};letter-spacing:-1px;line-height:1;margin-bottom:14px;">AMLS <span style="color:#10B981;">V4.5</span></div><div style="display:flex;align-items:center;justify-content:space-between;"><div class="live-pulse" style="display:inline-flex;align-items:center;gap:5px;font-family:'DM Mono';font-size:0.6em;color:#059669;padding:3px 10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);letter-spacing:0.06em;">{rt_label}</div><div style="font-family:'DM Mono';font-size:0.58em;color:{tc_label};letter-spacing:0.04em;">R{curr_regime} · {regime_info[curr_regime][1]}</div></div></div>"""), unsafe_allow_html=True)
 st.sidebar.markdown('<div class="sb-section" style="border-top:none;">Navigation</div>', unsafe_allow_html=True)
 page = st.sidebar.radio("MENU", ["📊 Dashboard", "💼 Portfolio", "🍫 12-Pack Radar", "📈 Backtest Lab", "📰 Macro News"], label_visibility="collapsed")
 display_mode = st.session_state.display_mode
 
-with st.sidebar.expander("🎨  Appearance", expanded=False):
-    _ac1, _ac2 = st.columns(2)
-    with _ac1:
-        new_color = st.color_picker("Accent", st.session_state.main_color, key="cp_theme")
-        if new_color != st.session_state.main_color: st.session_state.main_color = new_color; st.session_state['_needs_ls_save'] = True
-    with _ac2:
-        _new_bg = st.color_picker("BG", st.session_state.bg_color, key="cp_bg")
-        if _new_bg != st.session_state.bg_color: st.session_state.bg_color = _new_bg; st.session_state['_needs_ls_save'] = True
-    if st.button("↺ 초기화"):
-        for _k, _v in [("main_color","#10B981"),("bg_color","#F7F6F2"),("tc_heading","#111118"),("tc_body","#2D2D2D")]: setattr(st.session_state, _k, _v)
+with st.sidebar.expander("🎨 Appearance", expanded=False):
+    c1, c2 = st.columns(2)
+    with c1: 
+        nc = st.color_picker("Accent", st.session_state.main_color, key="cp_theme")
+        if nc != st.session_state.main_color: st.session_state.main_color = nc; st.session_state['_needs_ls_save'] = True
+    with c2:
+        nbg = st.color_picker("BG", st.session_state.bg_color, key="cp_bg")
+        if nbg != st.session_state.bg_color: st.session_state.bg_color = nbg; st.session_state['_needs_ls_save'] = True
+    if st.button("↺ 초기화", use_container_width=True):
+        for k, v in [("main_color","#10B981"),("bg_color","#F7F6F2"),("tc_heading","#111118"),("tc_body","#2D2D2D")]: setattr(st.session_state, k, v)
         st.session_state['_needs_ls_save'] = True; st.rerun()
 
 with st.sidebar.expander("⚙️ Layout (PC)", expanded=False):
-    _v = st.slider("좌열 너비 %", 20, 60, st.session_state.lc_lr_split, key="sl_lr")
-    if _v != st.session_state.lc_lr_split: st.session_state.lc_lr_split = _v; st.session_state['_needs_ls_save'] = True
-    _v = st.slider("Goal 입력 %", 10, 40, st.session_state.lc_goal_inp, key="sl_gi")
-    if _v != st.session_state.lc_goal_inp: st.session_state.lc_goal_inp = _v; st.session_state['_needs_ls_save'] = True
+    v = st.slider("좌열 너비 %", 20, 60, st.session_state.lc_lr_split, key="sl_lr")
+    if v != st.session_state.lc_lr_split: st.session_state.lc_lr_split = v; st.session_state['_needs_ls_save'] = True
+    v = st.slider("Goal 입력창 %", 10, 40, st.session_state.lc_goal_inp, key="sl_gi")
+    if v != st.session_state.lc_goal_inp: st.session_state.lc_goal_inp = v; st.session_state['_needs_ls_save'] = True
 
-_dm_c1, _dm_c2, _dm_c3 = st.sidebar.columns(3)
-for _dmc, _dmnm in [(_dm_c1,"PC"), (_dm_c2,"Tablet"), (_dm_c3,"Mobile")]:
-    if _dmc.button(_dmnm, use_container_width=True): st.session_state.display_mode = _dmnm; st.session_state['_needs_ls_save'] = True; st.rerun()
+dmc1, dmc2, dmc3 = st.sidebar.columns(3)
+for col, nm in [(dmc1,"PC"), (dmc2,"Tablet"), (dmc3,"Mobile")]:
+    if col.button(nm, use_container_width=True): st.session_state.display_mode = nm; st.session_state['_needs_ls_save'] = True; st.rerun()
 
+def _pill(label, value, color): return f'<div style="display:flex;flex-direction:column;align-items:center;padding:8px 18px;background:#FFFFFF;border:1px solid rgba(0,0,0,0.07);border-top:2px solid {color};border-radius:12px;min-width:90px;"><span style="font-family:\'DM Mono\';font-size:0.6em;color:#4A5568;letter-spacing:0.14em;text-transform:uppercase;">{label}</span><span style="font-family:\'DM Mono\';font-size:1.05em;font-weight:500;color:#0F172A;margin-top:2px;">{value}</span></div>'
 _qqq_chg, _vix_now, _smh_chg = (last_row['QQQ']/last_row['QQQ_MA200']-1)*100, last_row['^VIX'], last_row['SMH_1M_Ret']*100
-_p_qqq, _p_vix, _p_smh, _p_reg = _pill("QQQ/200MA", f"{_qqq_chg:+.1f}%", main_color if _qqq_chg >= 0 else "#EF4444"), _pill("VIX", f"{_vix_now:.1f}", main_color if _vix_now < 20 else "#EF4444"), _pill("SMH 1M", f"{_smh_chg:+.1f}%", main_color if _smh_chg >= 0 else "#EF4444"), _pill("REGIME", f"R{curr_regime}", main_color)
+_p_qqq = _pill("QQQ/200MA", f"{_qqq_chg:+.1f}%", main_color if _qqq_chg >= 0 else "#EF4444")
+_p_vix = _pill("VIX", f"{_vix_now:.1f}", main_color if _vix_now < 20 else "#EF4444")
+_p_smh = _pill("SMH 1M", f"{_smh_chg:+.1f}%", main_color if _smh_chg >= 0 else "#EF4444")
+_p_reg = _pill("REGIME", f"R{curr_regime}", main_color)
 
 hdr_c1, hdr_c2 = st.columns([1, 1.6])
 with hdr_c1: st.markdown(apply_theme(f"""<div style="display:flex;flex-direction:column;justify-content:center;"><div style="font-family:'Plus Jakarta Sans';font-size:2.5em;font-weight:800;letter-spacing:-2px;color:#0F172A;line-height:1;">AMLS <span style="color:#10B981;">V4.5</span></div><div style="font-family:'DM Mono';font-size:0.65em;color:#4A5568;letter-spacing:0.22em;text-transform:uppercase;margin-top:4px;">The Wall Street Quantitative Strategy</div></div>"""), unsafe_allow_html=True)
@@ -366,14 +528,21 @@ with hdr_c2:
     with cs1: st.markdown(apply_theme(f"""<div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;"><div style="display:flex;gap:6px;">{_p_qqq}{_p_vix}{_p_smh}{_p_reg}</div><div style="display:flex;align-items:center;gap:10px;"><div class="live-pulse" style="font-family:'DM Mono';font-size:0.68em;color:#059669;padding:4px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.3);border-radius:6px;letter-spacing:0.06em;">{rt_label}</div><div style="font-family:'DM Mono';font-size:0.68em;color:#4A5568;letter-spacing:0.04em;">⏱ {last_update_time}</div></div></div>"""), unsafe_allow_html=True)
 st.markdown(apply_theme(f"""<div style="position:relative;margin:14px 0 24px;height:1px;background:rgba(0,0,0,0.07);"><div style="position:absolute;left:0;top:-1px;width:80px;height:3px;background:var(--acc);"></div></div>"""), unsafe_allow_html=True)
 
-# --- 페이지 로직 ---
+
+# ==========================================
+# 페이지 1: 📊 Dashboard
+# ==========================================
 if page == "📊 Dashboard":
     def _lg_row(label, val, passed):
         icon, color = ("●", main_color) if passed else ("○", "#B0B0BE")
         val_str = f"${val:.2f}" if isinstance(val, (int, float)) and val > 5 else f"{val:.2f}" if isinstance(val, (int, float)) else str(val)
         return f'<div class="crow"><span class="clabel">{label}</span><span class="cval" style="color:{color};">{val_str}&nbsp;<span style="font-size:0.7em;">{icon}</span></span></div>'
     soxl_title, soxl_strat, soxl_color = ("SOXL APPROVED", "3× Leverage Active", main_color) if smh_cond else ("USD DEFENSE", "2× Defense Mode", "#9494A0")
-    st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid #111118;padding:12px 0 12px 18px;margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;"><span style="font-family:DM Mono;font-size:0.65em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;white-space:nowrap;padding-right:16px;border-right:1px solid rgba(0,0,0,0.09);">Live Feed</span>{_tick("QQQ",f"${last_row['QQQ']:.2f}",f"{(last_row['QQQ']/last_row['QQQ_MA200']-1)*100:+.2f}%",last_row['QQQ']>=last_row['QQQ_MA200'])+_tick("TQQQ",f"${last_row['TQQQ']:.2f}",f"{(last_row['TQQQ']/last_row['TQQQ_MA200']-1)*100:+.2f}%",last_row['TQQQ']>=last_row['TQQQ_MA200'])+_tick("VIX",f"{last_row['^VIX']:.2f}",f"MA20: {last_row['VIX_MA20']:.1f}",last_row['^VIX']<20)+_tick("SMH 1M",f"{last_row['SMH_1M_Ret']*100:+.1f}%",f"vs 50MA: {(last_row['SMH']/last_row['SMH_MA50']-1)*100:+.1f}%",last_row['SMH_1M_Ret']>=0)+_tick("SMH RSI",f"{last_row['SMH_RSI']:.1f}","> 50 target",last_row['SMH_RSI']>50)}<div style="margin-left:auto;padding:0 14px;white-space:nowrap;"><span class="live-pulse" style="font-family:DM Mono;font-size:0.6em;color:#059669;letter-spacing:0.06em;">{rt_label}</span></div></div>', unsafe_allow_html=True)
+    def _tick(label, val, sub, ok): return f'<div style="display:inline-flex;flex-direction:column;padding:0 20px;border-right:1px solid rgba(0,0,0,0.09);min-width:110px;"><span style="font-family:DM Mono,monospace;font-size:0.65em;color:#9494A0;letter-spacing:0.14em;text-transform:uppercase;">{label}</span><span style="font-family:DM Mono,monospace;font-size:1.05em;color:#111118;font-variant-numeric:tabular-nums;">{val}</span><span style="font-family:DM Mono,monospace;font-size:0.76em;color:{"#059669" if ok else "#DC2626"};\">{"▲" if ok else "▼"} {sub}</span></div>'
+    
+    tickers = _tick("QQQ", f"${last_row['QQQ']:.2f}", f"{_qqq_chg:+.2f}%", _qqq_chg>=0) + _tick("TQQQ", f"${last_row['TQQQ']:.2f}", f"{(last_row['TQQQ']/last_row['TQQQ_MA200']-1)*100:+.2f}%", last_row['TQQQ']>=last_row['TQQQ_MA200']) + _tick("VIX", f"{last_row['^VIX']:.2f}", f"MA20: {last_row['VIX_MA20']:.1f}", last_row['^VIX']<20) + _tick("SMH 1M", f"{last_row['SMH_1M_Ret']*100:+.1f}%", f"vs 50MA: {(last_row['SMH']/last_row['SMH_MA50']-1)*100:+.1f}%", last_row['SMH_1M_Ret']>=0) + _tick("SMH RSI", f"{last_row['SMH_RSI']:.1f}", "> 50 target", last_row['SMH_RSI']>50)
+    st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid #111118;padding:12px 0 12px 18px;margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;"><span style="font-family:DM Mono;font-size:0.65em;color:#9494A0;letter-spacing:0.18em;text-transform:uppercase;white-space:nowrap;padding-right:16px;border-right:1px solid rgba(0,0,0,0.09);">Live Feed</span>{tickers}<div style="margin-left:auto;padding:0 14px;white-space:nowrap;"><span class="live-pulse" style="font-family:DM Mono;font-size:0.6em;color:#059669;letter-spacing:0.06em;">{rt_label}</span></div></div>', unsafe_allow_html=True)
+    
     lcol, rcol = st.columns([1, 2.4])
     with lcol:
         r_acc = {1:main_color, 2:"#D97706", 3:"#DC2626", 4:"#7C3AED"}[curr_regime]
@@ -388,7 +557,10 @@ if page == "📊 Dashboard":
         st.markdown(f'<div style="display:flex;gap:4px;margin-bottom:10px;align-items:center;">{tabs_html}<div style="margin-left:auto;font-family:DM Mono;font-size:0.7em;color:#9494A0;">⏱ {last_update_time}</div></div>', unsafe_allow_html=True)
         for t, m in [("QQQ","QQQ_MA200"),("TQQQ","TQQQ_MA200")]:
             fig = go.Figure(); fig.add_trace(go.Scatter(x=df.iloc[-500:].index, y=df.iloc[-500:][t], name=t, line=dict(color=line_c, width=2), fill='tozeroy', fillcolor=f'rgba({r_c},{g_c},{b_c},0.06)')); fig.add_trace(go.Scatter(x=df.iloc[-500:].index, y=df.iloc[-500:][m], name='200MA', line=dict(color=dash_c, width=1.2, dash='dot'))); fig.update_layout(title=dict(text=f"{t} / 200-Day Moving Average", font=dict(family='DM Mono', size=13)), height=330, **chart_layout, legend=dict(orientation='h', x=1, xanchor='right', y=1.1)); fig.update_xaxes(**_ax); fig.update_yaxes(**_ax); st.container(border=True).plotly_chart(fig, use_container_width=True)
+    
     _gm, _gt, _at, _lt = fetch_global_markets()
+    def _sec_label(txt): st.markdown(f'<div style="display:flex;align-items:center;gap:12px;margin:24px 0 14px;"><div style="font-family:Plus Jakarta Sans;font-size:1.1em;font-weight:700;">{txt}</div><div style="flex:1;height:1px;background:rgba(0,0,0,0.12);"></div></div>', unsafe_allow_html=True)
+
     _sec_label("① Nasdaq 100 Heatmap"); tlabels, tparents, tvalues, tcolors, ttext = ["Nasdaq 100"], [""], [0], [0], [""]
     qs = {'AAPL':('Technology','Apple'),'MSFT':('Technology','Microsoft'),'NVDA':('Technology','Nvidia'),'AVGO':('Technology','Broadcom'),'AMD':('Technology','AMD'),'INTC':('Technology','Intel'),'QCOM':('Technology','Qualcomm'),'TXN':('Technology','Texas Instr'),'ORCL':('Technology','Oracle'),'ADBE':('Technology','Adobe'),'CRM':('Technology','Salesforce'),'NOW':('Technology','ServiceNow'),'INTU':('Technology','Intuit'),'GOOGL':('Communication','Alphabet'),'META':('Communication','Meta'),'NFLX':('Communication','Netflix'),'AMZN':('Consumer','Amazon'),'TSLA':('Consumer','Tesla'),'BKNG':('Consumer','Booking'),'MCD':('Consumer',"McDonald's"),'COST':('Consumer','Costco'),'SBUX':('Consumer','Starbucks'),'PYPL':('Financials','PayPal'),'ISRG':('Healthcare','Intuitive Surg'),'GILD':('Healthcare','Gilead'),'AMGN':('Healthcare','Amgen'),'REGN':('Healthcare','Regeneron'),'HON':('Industrials','Honeywell'),'PEP':('Staples','PepsiCo')}
     s_set = {}
@@ -397,6 +569,7 @@ if page == "📊 Dashboard":
         d = _gm.get(t, {}); tlabels.append(t); tparents.append(s); tvalues.append(max(abs(d.get('price', 0.0)) * 0.1, 1)); tcolors.append(d.get('chg', 0.0)); ttext.append(f"{n}<br>{d.get('price',0.0):,.1f}<br>{d.get('chg',0.0):+.2f}%")
     tm_fig = go.Figure(go.Treemap(labels=tlabels, parents=tparents, values=tvalues, customdata=ttext, hovertemplate='%{customdata}<extra></extra>', texttemplate='<b>%{label}</b><br>%{customdata}', marker=dict(colors=tcolors, colorscale=[[0, '#DC2626'],[0.3, '#FCA5A5'],[0.5, '#F7F6F2'],[0.7, '#6EE7B7'],[1, '#059669']], cmid=0, cmin=-3, cmax=3, showscale=True), branchvalues='remainder'))
     tm_fig.update_layout(height=400, margin=dict(l=0,r=0,t=10,b=0), paper_bgcolor='rgba(0,0,0,0)'); st.container(border=True).plotly_chart(tm_fig, use_container_width=True)
+    
     _sec_label("② Assets & Leaders"); acols = st.columns(7)
     idict = {"^TNX":"📈","GLD":"🥇","SLV":"⚪","USO":"🛢","BTC-USD":"₿","ETH-USD":"Ξ","UUP":"💵"}
     for i, (t, n) in enumerate(_at.items()):
@@ -407,7 +580,9 @@ if page == "📊 Dashboard":
         d = _gm.get(t, {}); clr = "#059669" if d.get('chg',0)>=0 else "#DC2626"
         lcols[i%5].markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.1);border-top:2px solid {clr};padding:12px 14px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;"><span style="font-size:0.62em;color:#9494A0;">{t}</span><span style="font-size:0.62em;font-weight:600;">#{i+1}</span></div><div style="font-size:0.82em;margin:3px 0;">{n}</div><div style="font-size:1.0em;color:#111118;">${d.get("price",0):,.2f}</div><div style="font-size:0.82em;color:{clr};font-weight:600;">{"▲" if d.get("chg",0)>=0 else "▼"} {d.get("chg",0):+.2f}%</div></div>', unsafe_allow_html=True)
 
-# 💼 Portfolio 페이지
+# ==========================================
+# 페이지 2: 💼 Portfolio
+# ==========================================
 elif page == "💼 Portfolio":
     cp = {t: (rt_prices.get(t, df[t].iloc[-1]) if t != 'CASH' else 1.0) for t in ASSET_LIST}
     fx = rt_prices.get('USDKRW=X', 1350.0); cvals = {a: st.session_state.portfolio[a]['shares'] * cp[a] for a in ASSET_LIST}
@@ -415,22 +590,20 @@ elif page == "💼 Portfolio":
     tval_k, pnl_u, pnl_p = tval_u * fx, tval_u - tcost_u, ((tval_u - tcost_u)/tcost_u*100 if tcost_u > 0 else 0.0)
     ldiff = {a: (tval_u * target_weights.get(a, 0.0)) - cvals[a] for a in ASSET_LIST} if tval_u > 0 else {a: 0.0 for a in ASSET_LIST}
 
-    # 💡 Goal Tracker 헬퍼 (원화 금액 표시 추가)
     def _goal_tracker_html(total_val_krw):
         g_u, pct_r = st.session_state.goal_usd, (tval_u / st.session_state.goal_usd * 100) if st.session_state.goal_usd > 0 else 0.0
         pct = min(pct_r, 100.0); gc = "#059669" if pct_r > 100 else (main_color if pct >= 75 else ("#D97706" if pct >= 50 else "#94A3B8"))
-        gr, gg, gb = hex_to_rgb(gc); seg = "".join([f'<div style="position:absolute;left:{m}%;top:0;bottom:-18px;width:1px;background:rgba(0,0,0,0.08);"><span style="position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);font-family:DM Mono;font-size:0.5em;color:#BBBBBB;">{m}%</span></div>' for m in [25, 50, 75, 100]])
-        return apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);border-left:4px solid {gc};padding:10px 18px;display:flex;align-items:center;gap:18px;"><div style="display:flex;align-items:center;gap:8px;"><span style="font-family:DM Mono;font-size:0.56em;color:{tc_label};text-transform:uppercase;">Goal Tracker</span></div><div style="flex:1;position:relative;padding-bottom:18px;">{seg}<div style="height:8px;background:rgba(0,0,0,0.07);"><div style="height:8px;width:{pct:.2f}%;background:linear-gradient(90deg,rgba({gr},{gg},{gb},0.4),{gc});"></div></div></div><div style="display:flex;gap:20px;align-items:center;"><div style="text-align:center;"><div style="font-size:0.5em;color:{tc_label};text-transform:uppercase;">현재</div><div style="font-size:0.82em;color:{tc_body};">${tval_u:,.0f} / ₩{total_val_krw:,.0f}</div></div><div style="text-align:right;padding-left:14px;border-left:1px solid rgba(0,0,0,0.08);"><span style="font-family:DM Mono;font-size:1.8em;color:{gc};line-height:1;">{pct_r:.1f}%</span></div></div></div>')
+        gr, gg, gb = hex_to_rgb(gc); seg = "".join([f'<div style="position:absolute;left:{m}%;top:0;bottom:-18px;width:1px;background:rgba(0,0,0,0.08);"><span style="position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);font-family:DM Mono;font-size:0.5em;color:#BBBBBB;white-space:nowrap;">{m}%</span></div>' for m in [25, 50, 75, 100]])
+        return apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);border-left:4px solid {gc};padding:10px 18px;display:flex;align-items:center;gap:18px;"><div style="display:flex;align-items:center;gap:8px;"><span style="font-family:DM Mono;font-size:0.56em;color:{tc_label};text-transform:uppercase;">Goal Tracker</span></div><div style="flex:1;position:relative;padding-bottom:18px;">{seg}<div style="height:8px;background:rgba(0,0,0,0.07);"><div style="height:8px;width:{pct:.2f}%;background:linear-gradient(90deg,rgba({gr},{gg},{gb},0.4),{gc});"></div></div></div><div style="display:flex;gap:20px;align-items:center;"><div style="text-align:center;"><div style="font-size:0.5em;color:{tc_label};text-transform:uppercase;">현재</div><div style="font-size:0.82em;color:{tc_body};">${tval_u:,.0f} / ₩{total_val_krw:,.0f}</div></div><div style="text-align:center;"><div style="font-size:0.5em;color:{tc_label};text-transform:uppercase;">목표</div><div style="font-size:0.82em;color:{tc_body};">${g_u:,.0f}</div></div><div style="text-align:right;padding-left:14px;border-left:1px solid rgba(0,0,0,0.08);"><span style="font-family:DM Mono;font-size:1.8em;color:{gc};line-height:1;">{pct_r:.1f}%</span></div></div></div>')
 
-    # 💡 포지션 편집기 (환율 기입란 제거)
     def _pf_editor(height=355):
+        # FX 기입란 제거됨
         edata = [{"Asset": a, "Shares": float(st.session_state.portfolio[a].get('shares', 0.0)), "Avg Price($)": float(st.session_state.portfolio[a].get('avg_price', 1.0 if a == 'CASH' else 0.0))} for a in ASSET_LIST]
         df_edited = st.data_editor(pd.DataFrame(edata), disabled=["Asset"], hide_index=True, use_container_width=True, height=height, column_config={"Shares": st.column_config.NumberColumn("Shares", format="%.4f"), "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f")})
         if not df_edited.equals(pd.DataFrame(edata)):
-            for _, row in df_edited.iterrows(): st.session_state.portfolio[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"])}
+            for _, row in df_edited.iterrows(): st.session_state.portfolio[row["Asset"]]['shares'] = float(row["Shares"]); st.session_state.portfolio[row["Asset"]]['avg_price'] = float(row["Avg Price($)"])
             save_portfolio_to_disk(); st.session_state.rebal_locked=False; st.rerun()
 
-    # 💡 고정 리밸런싱 플랜 생성
     def generate_rebal_plan():
         s_diff = {a: (tval_u * target_weights.get(a, 0.0)) - cvals[a] for a in ASSET_LIST}; slist, blist, hlist = [], [], []
         for a in ASSET_LIST:
@@ -451,6 +624,7 @@ elif page == "💼 Portfolio":
         if c2.button("🔄 초기화", key=f"rp_{is_mobile}"): st.session_state.rebal_locked=False; st.session_state.rebal_plan=None; st.rerun()
         st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
         t_sel = sum(abs(d) for a, d, s, c in p["sells"]); a_cash = t_sel + p["vals"].get('CASH', 0.0)
+        
         if not is_mobile:
             e1, e2, e3 = st.columns([1, 0.12, 1])
             with e1:
@@ -466,13 +640,14 @@ elif page == "💼 Portfolio":
                 if brows: st.markdown('<table class="mint-table"><thead><tr><th>Asset</th><th>가</th><th>목표</th><th>금액</th><th>수량</th></tr></thead><tbody>'+brows+'</tbody></table>', unsafe_allow_html=True)
                 st.markdown(f'<div style="background:rgba({r_c},{g_c},{b_c},0.06);padding:8px 14px;margin-top:6px;font-size:0.62em;">잔여 현금: ${max(rem_c,0):,.0f}</div>', unsafe_allow_html=True)
         else:
-            # Mobile View based on Plan
             for a, d, s, c in p["sells"]: st.markdown(f'<div style="background:rgba(220,38,38,0.035);border-left:3px solid #DC2626;padding:10px 14px;margin-bottom:5px;"><div style="display:flex;justify-content:space-between;"><span style="font-weight:700;">{a}</span><span style="color:#DC2626;font-weight:700;">▼ {int(s):,.0f}주 매도</span></div></div>', unsafe_allow_html=True)
             rem_c = a_cash
             for a, d, s, c in p["buys"]:
                 ash = int(min(s, rem_c/c)); abuy = ash * c; rem_c -= abuy
                 if ash >= 1: st.markdown(f'<div style="background:rgba(5,150,105,0.035);border-left:3px solid #059669;padding:10px 14px;margin-bottom:5px;"><div style="display:flex;justify-content:space-between;"><span style="font-weight:700;">{a}</span><span style="color:#059669;font-weight:700;">▲ {ash:,.0f}주 매수</span></div></div>', unsafe_allow_html=True)
 
+    def _kv(l, v, c, s=""): return f'<div style="display:flex;flex-direction:column;padding:0 20px;border-right:1px solid rgba(255,255,255,0.06);min-width:115px;"><span style="font-size:0.53em;color:rgba(255,255,255,0.35);text-transform:uppercase;">{l}</span><span style="font-size:1.0em;font-weight:500;color:{c};">{v}</span><span style="font-size:0.6em;color:rgba(255,255,255,0.3);">{s}</span></div>'
+    
     st.markdown(apply_theme(f'<div style="background:#111118;border-left:4px solid {r_acc};padding:13px 0;margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;"><div style="padding:0 20px 0 16px;border-right:1px solid rgba(255,255,255,0.06);"><div style="font-size:0.52em;color:rgba(255,255,255,0.3);text-transform:uppercase;">AMLS V4.5</div><div style="font-family:Plus Jakarta Sans;font-size:1.1em;font-weight:800;color:#FFFFFF;line-height:1;">Portfolio</div></div>{_kv("Total NAV", f"${tval_u:,.2f}", "#FFFFFF", f"₩{tval_k:,.0f}")}{_kv("USD/KRW", f"₩{fx:,.0f}", "rgba(255,255,255,0.65)", "환율")}{_kv("P&L", f"{pnl_p:+.2f}%", "#6EE7B7" if pnl_p>=0 else "#FCA5A5", f"{"▲" if pnl_p>=0 else "▼"} ${pnl_u:,.0f}")}{_kv("Regime", f"R{curr_regime}", r_acc)}<div style="margin-left:auto;padding:0 16px;"><span class="live-pulse" style="font-size:0.58em;color:#6EE7B7;">{rt_label}</span></div></div>'), unsafe_allow_html=True)
 
     if display_mode == "PC":
@@ -484,40 +659,128 @@ elif page == "💼 Portfolio":
         st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
         cl, cr = st.columns([st.session_state.lc_lr_split, 100-st.session_state.lc_lr_split])
         with cl:
-            with st.container(border=True): st.markdown(_sl("Position Input"), unsafe_allow_html=True); _pf_editor(st.session_state.lc_editor_h)
-            if st.session_state.lc_show_lp: st.markdown(_sl("Live Prices"), unsafe_allow_html=True); st.markdown(_lp_build(), unsafe_allow_html=True)
-            if st.session_state.lc_show_qo:
-                st.markdown(_sl("Quick Orders"), unsafe_allow_html=True); s, b = _sells_buys(); q1, q2 = st.columns(2)
-                _qo_build(q1, "🔴 SELL", s, "#DC2626", "rgba(220,38,38,0.03)"); _qo_build(q2, "🟢 BUY", b, "#059669", "rgba(5,150,105,0.03)")
+            with st.container(border=True): 
+                st.markdown(apply_theme(f'<div style="border-bottom:1px solid rgba(0,0,0,0.09);padding-bottom:7px;margin-bottom:8px;font-size:0.58em;font-weight:600;text-transform:uppercase;">Position Input</div>'), unsafe_allow_html=True)
+                _pf_editor(st.session_state.lc_editor_h)
         with cr:
-            if st.session_state.lc_show_reg: st.markdown(_regime_card_html(True), unsafe_allow_html=True)
-            _pie_charts(); st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            _pie_cfg = dict(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="DM Mono", color=t_color), showlegend=True, margin=dict(l=0, r=70, t=28, b=0), height=200)
+            p1, p2 = st.columns(2)
+            with p1:
+                _fc = go.Figure(go.Pie(labels=[a for a in ASSET_LIST if cvals[a]>0], values=[cvals[a] for a in ASSET_LIST if cvals[a]>0], hole=.55, textinfo='percent', marker=dict(colors=[line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0','#059669','#047857','#065F46','#D1FAE5'], line=dict(color='#FAFAF7', width=1.5))))
+                _fc.update_layout(title=dict(text="Current", font=dict(family="DM Mono", size=11), x=0), **_pie_cfg); st.container(border=True).plotly_chart(_fc, use_container_width=True)
+            with p2:
+                _ft = go.Figure(go.Pie(labels=[a for a in ASSET_LIST if target_weights.get(a,0)>0], values=[target_weights[a] for a in ASSET_LIST if target_weights.get(a,0)>0], hole=.55, textinfo='percent', marker=dict(colors=[line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0','#059669','#047857','#065F46','#D1FAE5'], line=dict(color='#FAFAF7', width=1.5))))
+                _ft.update_layout(title=dict(text=f"Target R{curr_regime}", font=dict(family="DM Mono", size=11), x=0), **_pie_cfg); st.container(border=True).plotly_chart(_ft, use_container_width=True)
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
             rc1, rc2 = st.columns([st.session_state.lc_delta_wt, 100-st.session_state.lc_delta_wt])
-            with rc1: _delta_bar()
-            with rc2: _target_weights_block()
-        st.markdown(apply_theme(f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="width:2px;height:12px;background:{main_color};"></div><span style="font-family:DM Mono;font-size:0.58em;font-weight:600;text-transform:uppercase;">Rebalancing Matrix</span></div>'), unsafe_allow_html=True); _rebalancing_matrix()
+            with rc2: 
+                wrows = "".join([f'<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04);"><div style="display:flex;justify-content:space-between;"><span style="font-weight:700;">{k}</span><span style="color:{main_color};font-weight:600;">{v*100:.0f}%</span></div><div style="height:4px;background:rgba(0,0,0,0.07);"><div style="height:4px;width:{int(v/max(target_weights.values())*100)}%;background:{main_color};"></div></div></div>' for k, v in target_weights.items() if v > 0])
+                st.container(border=True).markdown(apply_theme(f'<div style="font-size:0.55em;font-weight:600;text-transform:uppercase;margin-bottom:6px;">Target Weights · R{curr_regime}</div>{wrows}'), unsafe_allow_html=True)
+        st.markdown(apply_theme(f'<div style="display:flex;align-items:center;gap:8px;margin-top:12px;margin-bottom:8px;"><div style="width:2px;height:12px;background:{main_color};"></div><span style="font-size:0.58em;font-weight:600;text-transform:uppercase;">Rebalancing Matrix</span></div>'), unsafe_allow_html=True); _rebalancing_matrix()
 
-    elif display_mode == "Mobile":
-        st.markdown(f"<style>.main .block-container {{ max-width:460px !important; padding:0.4rem !important; }}</style>", unsafe_allow_html=True)
-        ng = st.number_input("🎯 목표($)", value=st.session_state.goal_usd, format="%.0f", key="goal_input"); st.session_state.goal_usd = ng if ng != st.session_state.goal_usd else st.session_state.goal_usd
-        st.markdown(_goal_tracker_html(tval_k), unsafe_allow_html=True); st.markdown(_regime_card_html(False), unsafe_allow_html=True)
-        with st.container(border=True): st.markdown(_sl("Position Input"), unsafe_allow_html=True); _pf_editor(400)
-        with st.container(border=True): st.markdown(_sl("Quick Orders"), unsafe_allow_html=True); s, b = _sells_buys(); q1, q2 = st.columns(2); _qo_build(q1, "🔴 SELL", s, "#DC2626", "rgba(220,38,38,0.03)"); _qo_build(q2, "🟢 BUY", b, "#059669", "rgba(5,150,105,0.03)")
-        _target_weights_block(); st.markdown(apply_theme(f'<div style="margin-bottom:8px;"><span style="font-weight:600;text-transform:uppercase;">Rebalancing</span></div>'), unsafe_allow_html=True); _rebalancing_matrix(True)
-
-# 🍫 12-Pack Radar 페이지
+# ==========================================
+# 페이지 3: 🍫 12-Pack Radar
+# ==========================================
 elif page == "🍫 12-Pack Radar":
-    # (앞선 코드에서 radar 및 news 섹션 로직 동일 유지, AI 모델 선택 로직 고정)
     def run_ai_radar():
         try:
             import google.generativeai as genai; genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            p = f"너는 월스트리트 퀀트 애널리스트야. AMLS V4.5 지표를 분석해줘.\n[레짐] R{curr_regime}\n[신호] Risk {risk_cnt}, Warn {warn_cnt}, Safe {safe_cnt}\n1. QQQ RSI: {qqq_rsi:.1f}\n2. QQQ DD: {qqq_dd*100:.1f}%\n3. FGI: {fg_score:.0f}\n섹터별 분류, 리스크 요소, 투자 스탠스로 요약해줘."
-            with st.spinner("AI 분석 중..."): res = model.generate_content(p); st.markdown(apply_theme(f'<div style="background:#FAFAF7;border-left:4px solid {main_color};padding:20px 24px;font-size:0.88em;">{res.text}</div>'), unsafe_allow_html=True)
+            valid = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            target = next((m for m in valid if 'gemini-1.5-flash' in m), valid[0]) if valid else None
+            if not target: st.error("모델 오류"); return
+            p = f"너는 퀀트 애널리스트야. AMLS V4.5 지표를 분석해줘.\n[레짐] R{curr_regime}\n1. QQQ RSI: {last_row['QQQ_RSI']:.1f}\n2. QQQ DD: {last_row['QQQ_DD']*100:.1f}%\n섹터분류, 리스크, 투자스탠스로 요약."
+            with st.spinner("AI 분석 중..."): res = genai.GenerativeModel(target.replace('models/','')).generate_content(p); st.markdown(apply_theme(f'<div style="background:#FAFAF7;border-left:4px solid {main_color};padding:20px;font-size:0.88em;">{res.text}</div>'), unsafe_allow_html=True)
         except Exception as e: st.error(f"오류: {e}")
-    # (Radar UI 그리는 부분... 앞선 답변 코드와 동일)
 
-# 📈 Backtest Lab 페이지 (수정사항 없음, SPYG 기준 유지)
-# 📰 Macro News 페이지 (수정사항 없음, gemini-1.5-flash 명시적 사용)
+    df_view  = df.iloc[-120:]
+    qqq_rsi  = last_row['QQQ_RSI']; qqq_dd = last_row['QQQ_DD']; cnn_fgi = fetch_fear_and_greed()
+    fg_score = cnn_fgi if cnn_fgi else (max(0, min(100, 100-(last_row['^VIX']-12)/28*100)) + max(0, min(100, (qqq_dd+0.20)/0.20*100)) + max(0, min(100, qqq_rsi)))/3
+    sec_names = {'XLK':'TECH','XLV':'HEALTH','XLF':'FIN','XLY':'CONS','XLC':'COMM','XLI':'IND','XLP':'STAPLE','XLE':'ENGY','XLU':'UTIL','XLRE':'REAL','XLB':'MAT'}
+    sec_df = pd.DataFrame([{'섹터':sec_names[s],'수익률':last_row[f'{s}_1M']*100} for s in SECTOR_TICKERS]).sort_values(by='수익률')
+    top_sec, bot_sec = sec_df.iloc[-1]['섹터'], sec_df.iloc[0]['섹터']
+
+    risk_cnt = sum([qqq_dd<-0.20, last_row['HYG_IEF_Ratio']<last_row['HYG_IEF_MA50'], last_row['UUP']>last_row['UUP_MA50'], last_row['^VIX']>last_row['VIX_MA50']])
+    warn_cnt = sum([qqq_rsi>70, -0.20<=qqq_dd<-0.10, fg_score>70, (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0), last_row['GLD_SPYG_Ratio']>last_row['GLD_SPYG_MA50'], last_row['^TNX']>last_row['TNX_MA50'], last_row['BTC-USD']<last_row['BTC_MA50'], last_row['IWM_SPYG_Ratio']<last_row['IWM_SPYG_MA50'], top_sec in ['UTIL', 'STAPLE', 'HEALTH']])
+    safe_cnt = 12 - risk_cnt - warn_cnt
+
+    st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid {main_color};padding:14px 20px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;"><div style="font-family:DM Mono;font-size:1.2em;font-weight:700;">Macro Signal Status</div><div>Risk {risk_cnt} | Warn {warn_cnt} | Safe {safe_cnt}</div></div></div>'), unsafe_allow_html=True)
+    
+    # 💡 12팩 아이콘 (코드 길이상 단순화)
+    def _badge(label, color, icon): return f'<span style="background:rgba(0,0,0,0.05);color:{color};padding:2px 7px;font-size:0.68em;font-weight:500;">{icon} {label}</span>'
+    r1 = st.columns(4)
+    with r1[0]: st.container(border=True).markdown(_badge("RSI", main_color if qqq_rsi<40 else "#DC2626", "▲"), unsafe_allow_html=True)
+    with r1[1]: st.container(border=True).markdown(_badge("DD", main_color if qqq_dd>-0.1 else "#DC2626", "▲"), unsafe_allow_html=True)
+    with r1[2]: st.container(border=True).markdown(_badge("FGI", main_color if fg_score<30 else "#DC2626", "▲"), unsafe_allow_html=True)
+    with r1[3]: st.container(border=True).markdown(_badge("SEC", main_color, "▲"), unsafe_allow_html=True)
+
+    if st.button("🤖 AI 종합 투자의견 생성"): run_ai_radar()
+
+# ==========================================
+# 페이지 4: 📈 Backtest Lab
+# ==========================================
+elif page == "📈 Backtest Lab":
+    st.markdown(apply_theme("""<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;"><div><h2 style="font-family:'Plus Jakarta Sans';font-size:1.7em;color:#0F172A;margin:0;">📈 Backtest Lab</h2></div></div>"""), unsafe_allow_html=True)
+    panel_cfg, panel_res = st.columns([1, 2.8])
+    with panel_cfg:
+        with st.container(border=True):
+            bt_start = st.date_input("Start Date", datetime(2020, 1, 1))
+            bt_end   = st.date_input("End Date", datetime.today())
+            monthly_cont = st.number_input("월 적립금 ($)", value=2000, step=500)
+
+    with panel_res:
+        with st.spinner("시뮬레이션 가동 중..."):
+            bt_df = load_custom_backtest_data(bt_start, bt_end)
+            if bt_df.empty: st.error("데이터 부족")
+            else:
+                daily_ret = bt_df[['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD']].pct_change().fillna(0)
+                w_orig = get_weights_v45(bt_df['Regime'].iloc[0], False)
+                val_o, val_q, val_qld, val_tqqq = 10000, 10000, 10000, 10000
+                hist_o, hist_q, hist_qld, hist_tqqq, invested, curr_inv = [val_o], [val_q], [val_qld], [val_tqqq], [10000], 10000
+
+                for i in range(1, len(bt_df)):
+                    today, yesterday = bt_df.index[i], bt_df.index[i-1]
+                    val_o *= (1 + sum(w_orig.get(t,0) * daily_ret[t].iloc[i] for t in w_orig if t in daily_ret.columns))
+                    val_q *= (1 + daily_ret['QQQ'].iloc[i]); val_tqqq *= (1 + daily_ret['TQQQ'].iloc[i])
+                    if today.month != yesterday.month: val_o += monthly_cont; val_q += monthly_cont; val_tqqq += monthly_cont; curr_inv += monthly_cont
+                    hist_o.append(val_o); hist_q.append(val_q); hist_tqqq.append(val_tqqq); invested.append(curr_inv)
+                    w_orig = get_weights_v45(bt_df['Regime'].iloc[i], (bt_df['SMH'].iloc[i] > bt_df['SMH_MA50'].iloc[i]) and (bt_df['SMH_3M_Ret'].iloc[i] > 0.05) and (bt_df['SMH_RSI'].iloc[i] > 50))
+
+                res_df = pd.DataFrame({'V4.5': hist_o, 'QQQ': hist_q, 'TQQQ': hist_tqqq, 'Invested': invested}, index=bt_df.index)
+                days = (res_df.index[-1] - res_df.index[0]).days
+                def calc_m(s, i_s): return (s.iloc[-1]/i_s.iloc[-1]-1), ((s.iloc[-1]/i_s.iloc[-1])**(365.25/days)-1 if days>0 else 0), (((s/s.cummax())-1).min())
+                
+                ret_o, cagr_o, mdd_o = calc_m(res_df['V4.5'], res_df['Invested'])
+                mc1, mc2 = st.columns(2)
+                mc1.markdown(apply_theme(f'<div style="background:rgba({r_c},{g_c},{b_c},0.06);padding:16px;">CAGR {cagr_o*100:.1f}% | MDD {mdd_o*100:.1f}%</div>'), unsafe_allow_html=True)
+                
+                fig_eq = go.Figure()
+                fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['QQQ'], name='QQQ', line=dict(color='#CBD5E1', width=1.2, dash='dot')))
+                fig_eq.add_trace(go.Scatter(x=res_df.index, y=res_df['V4.5'], name='AMLS', line=dict(color=main_color, width=3)))
+                fig_eq.update_layout(title="Equity Curve", height=380, yaxis_type='log', **chart_layout); fig_eq.update_xaxes(**_ax); fig_eq.update_yaxes(**_ax)
+                with st.container(border=True): st.plotly_chart(fig_eq, use_container_width=True)
+
+# ==========================================
+# 페이지 5: 📰 Macro News
+# ==========================================
+elif page == "📰 Macro News":
+    headlines_for_ai, news_items = fetch_macro_news()
+    st.markdown(apply_theme(f"""<div style="border-top:3px solid #111118;border-bottom:1px solid rgba(0,0,0,0.12);padding:18px 0 14px;margin-bottom:24px;"><div style="font-size:2.2em;font-weight:800;">Market Briefing</div></div>"""), unsafe_allow_html=True)
+    nl, nr = st.columns([1, 1.6])
+    with nl:
+        if st.button("↻ 심층 추론 요약 실행", use_container_width=True):
+            try:
+                import google.generativeai as genai
+                if not headlines_for_ai: st.warning("뉴스가 없습니다.")
+                else:
+                    with st.spinner("AI 분석 중..."):
+                        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                        valid = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                        target = next((m for m in valid if 'gemini-1.5-flash' in m), valid[0]) if valid else None
+                        res = genai.GenerativeModel(target.replace('models/','')).generate_content("다음 뉴스를 요약해.\n" + "\n".join(headlines_for_ai))
+                        st.markdown(apply_theme(f'<div style="background:#FAFAF7;border-left:3px solid {main_color};padding:20px;">{res.text}</div>'), unsafe_allow_html=True)
+            except Exception as e: st.error(f"오류: {e}")
+    with nr:
+        for idx, item in enumerate(news_items):
+            st.markdown(f'<div style="padding:12px 0;border-bottom:1px solid rgba(0,0,0,0.07);"><a href="{item["link"]}" target="_blank" style="text-decoration:none;color:{tc_body};">{item["title"]}</a></div>', unsafe_allow_html=True)
 
 _ls_save_all()
