@@ -107,9 +107,9 @@ def apply_theme(text):
     return text.replace("#10B981", main_color).replace("#10b981", main_color).replace("16, 185, 129", f"{r_c}, {g_c}, {b_c}").replace("16,185,129", f"{r_c},{g_c},{b_c}")
 
 SECTOR_TICKERS = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','XLB']
-CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPY','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
+CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
 TICKERS        = CORE_TICKERS + SECTOR_TICKERS
-ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPY','QQQ','GLD','CASH']
+ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
 PORTFOLIO_FILE = 'portfolio_autosave.json'
 
 def sanitize_portfolio():
@@ -256,7 +256,7 @@ def load_custom_backtest_data(start_date, end_date):
     bt_df = bt_df.loc[pd.to_datetime(start_date):pd.to_datetime(end_date)]
     return bt_df
 
-REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPY','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
+REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPYG','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
 
 @st.cache_data(ttl=15)
 def fetch_realtime_prices():
@@ -370,8 +370,8 @@ smh_cond = (smh_close > smh_ma50) and (smh_3m > 0.05 or smh_1m > 0.10) and (smh_
 def get_weights_v45(reg, smh_ok):
     w = {t: 0.0 for t in ASSET_LIST}
     semi = 'SOXL' if smh_ok else 'USD'
-    if reg == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'], w['SPY'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
-    elif reg == 2: w['TQQQ'], w['QLD'], w['SSO'], w['USD'], w['GLD'], w['SPY'] = 0.15, 0.30, 0.25, 0.10, 0.15, 0.05
+    if reg == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'], w['SPYG'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
+    elif reg == 2: w['TQQQ'], w['QLD'], w['SSO'], w['USD'], w['GLD'], w['SPYG'] = 0.15, 0.30, 0.25, 0.10, 0.15, 0.05
     elif reg == 3: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.35, 0.15
     elif reg == 4: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.40, 0.10
     return w
@@ -735,18 +735,18 @@ elif page == "💼 Portfolio":
         else: _gc, _gbadge = "#94A3B8", "GROWING"
         _gr, _gg, _gb = hex_to_rgb(_gc)
         _seg = "".join([f'<div style="position:absolute;left:{m}%;top:0;bottom:-18px;width:1px;background:rgba(0,0,0,0.08);"><span style="position:absolute;top:calc(100% + 2px);left:50%;transform:translateX(-50%);font-family:DM Mono,monospace;font-size:0.5em;color:#BBBBBB;white-space:nowrap;">{m}%</span></div>' for m in [25, 50, 75, 100]])
-        return apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);border-left:4px solid {_gc};padding:10px 18px;display:flex;align-items:center;gap:18px;"><div style="display:flex;align-items:center;gap:8px;flex-shrink:0;"><span style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;">Goal Tracker</span><span style="background:rgba({_gr},{_gg},{_gb},0.1);border:1px solid rgba({_gr},{_gg},{_gb},0.28);color:{_gc};font-family:DM Mono,monospace;font-size:0.55em;padding:1px 8px;">{_gbadge}</span></div><div style="flex:1;position:relative;padding-bottom:18px;">{_seg}<div style="height:8px;background:rgba(0,0,0,0.07);"><div style="height:8px;width:{_pct:.2f}%;background:linear-gradient(90deg,rgba({_gr},{_gg},{_gb},0.4),{_gc});"></div></div></div><div style="display:flex;gap:20px;flex-shrink:0;align-items:center;"><div style="text-align:center;"><div style="font-family:DM Mono,monospace;font-size:0.5em;color:{tc_label};text-transform:uppercase;letter-spacing:0.1em;">현재</div><div style="font-family:DM Mono,monospace;font-size:0.82em;color:{tc_body};font-variant-numeric:tabular-nums;">${total_val_usd:,.0f}</div></div><div style="text-align:center;"><div style="font-family:DM Mono,monospace;font-size:0.5em;color:{tc_label};text-transform:uppercase;letter-spacing:0.1em;">목표</div><div style="font-family:DM Mono,monospace;font-size:0.82em;color:{tc_body};font-variant-numeric:tabular-nums;">${_goal:,.0f}</div></div><div style="text-align:right;padding-left:14px;border-left:1px solid rgba(0,0,0,0.08);"><span style="font-family:DM Mono,monospace;font-size:1.8em;font-weight:400;color:{_gc};font-variant-numeric:tabular-nums;letter-spacing:-1.5px;line-height:1;">{_pct_raw:.1f}%</span></div></div></div>')
+        return apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.11);border-left:4px solid {_gc};padding:10px 18px;display:flex;align-items:center;gap:18px;"><div style="display:flex;align-items:center;gap:8px;flex-shrink:0;"><span style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;">Goal Tracker</span><span style="background:rgba({_gr},{_gg},{_gb},0.1);border:1px solid rgba({_gr},{_gg},{_gb},0.28);color:{_gc};font-family:DM Mono,monospace;font-size:0.55em;padding:1px 8px;">{_gbadge}</span></div><div style="flex:1;position:relative;padding-bottom:18px;">{_seg}<div style="height:8px;background:rgba(0,0,0,0.07);"><div style="height:8px;width:{_pct:.2f}%;background:linear-gradient(90deg,rgba({_gr},{_gg},{_gb},0.4),{_gc});"></div></div></div><div style="display:flex;gap:20px;flex-shrink:0;align-items:center;"><div style="text-align:center;"><div style="font-family:DM Mono,monospace;font-size:0.5em;color:{tc_label};text-transform:uppercase;letter-spacing:0.1em;">현재</div><div style="font-family:DM Mono,monospace;font-size:0.82em;color:{tc_body};font-variant-numeric:tabular-nums;">${total_val_usd:,.0f}<br><span style="font-size:0.7em;color:{tc_label};">₩{total_val_usd * cur_fx:,.0f}</span></div></div><div style="text-align:center;"><div style="font-family:DM Mono,monospace;font-size:0.5em;color:{tc_label};text-transform:uppercase;letter-spacing:0.1em;">목표</div><div style="font-family:DM Mono,monospace;font-size:0.82em;color:{tc_body};font-variant-numeric:tabular-nums;">${_goal:,.0f}<br><span style="font-size:0.7em;color:{tc_label};">₩{_goal * cur_fx:,.0f}</span></div></div><div style="text-align:right;padding-left:14px;border-left:1px solid rgba(0,0,0,0.08);"><span style="font-family:DM Mono,monospace;font-size:1.8em;font-weight:400;color:{_gc};font-variant-numeric:tabular-nums;letter-spacing:-1.5px;line-height:1;">{_pct_raw:.1f}%</span></div></div></div>')
 
     def _regime_card_html(horizontal=False):
         if horizontal: return apply_theme(f'<div style="background:rgba({r_c},{g_c},{b_c},0.07);border:1px solid rgba({r_c},{g_c},{b_c},0.22);border-left:4px solid {r_acc};padding:12px 20px;display:flex;align-items:center;gap:32px;"><div style="flex:1;"><div style="font-family:DM Mono,monospace;font-size:0.53em;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:3px;">Current Regime</div><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.5em;font-weight:800;color:{r_acc};letter-spacing:-0.5px;line-height:1;margin-bottom:1px;">{regime_info[curr_regime][0]}</div><div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_muted};letter-spacing:0.1em;text-transform:uppercase;">{regime_info[curr_regime][1]}</div></div><div style="width:1px;height:48px;background:rgba({r_c},{g_c},{b_c},0.2);flex-shrink:0;"></div><div style="flex:1;font-family:DM Mono,monospace;font-size:0.64em;color:{tc_muted};">{regime_committee_msg}</div></div>')
         else: return apply_theme(f'<div style="background:rgba({r_c},{g_c},{b_c},0.07);border:1px solid rgba({r_c},{g_c},{b_c},0.22);border-left:4px solid {r_acc};padding:14px 16px;margin-bottom:10px;"><div style="font-family:DM Mono,monospace;font-size:0.53em;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px;">Current Regime</div><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.45em;font-weight:800;color:{r_acc};letter-spacing:-0.5px;line-height:1;margin-bottom:2px;">{regime_info[curr_regime][0]}</div><div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_muted};letter-spacing:0.1em;text-transform:uppercase;">{regime_info[curr_regime][1]}</div><div style="margin-top:7px;padding-top:7px;border-top:1px solid rgba({r_c},{g_c},{b_c},0.18);font-family:DM Mono,monospace;font-size:0.58em;color:{tc_muted};">{regime_committee_msg}</div></div>')
 
     def _pf_editor(height=355):
-        _edata = [{"Asset": asset, "Shares": float(st.session_state.portfolio.get(asset, {}).get('shares', 0.0)), "Avg Price($)": float(st.session_state.portfolio.get(asset, {}).get('avg_price', 1.0 if asset == 'CASH' else 0.0)), "FX Rate(₩)": float(st.session_state.portfolio.get(asset, {}).get('fx', 1350.0))} for asset in ASSET_LIST]
+        _edata = [{"Asset": asset, "Shares": float(st.session_state.portfolio.get(asset, {}).get('shares', 0.0)), "Avg Price($)": float(st.session_state.portfolio.get(asset, {}).get('avg_price', 1.0 if asset == 'CASH' else 0.0))} for asset in ASSET_LIST]
         _df_ed = pd.DataFrame(_edata)
-        _df_edited = st.data_editor(_df_ed, disabled=["Asset"], hide_index=True, use_container_width=True, key="pf_editor", height=height, column_config={"Shares": st.column_config.NumberColumn("Shares", format="%.4f"), "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"), "FX Rate(₩)": st.column_config.NumberColumn("FX(₩)", format="%.0f")})
+        _df_edited = st.data_editor(_df_ed, disabled=["Asset"], hide_index=True, use_container_width=True, key="pf_editor", height=height, column_config={"Shares": st.column_config.NumberColumn("Shares", format="%.4f"), "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f")})
         if not _df_edited.equals(_df_ed):
-            for _, row in _df_edited.iterrows(): st.session_state.portfolio[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"]), 'fx': float(row["FX Rate(₩)"])}
+            for _, row in _df_edited.iterrows(): st.session_state.portfolio[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"]), 'fx': 1350.0}
             save_portfolio_to_disk(); st.session_state.rebal_locked=False; st.rerun()
 
     def _pie_charts():
@@ -1205,7 +1205,7 @@ elif page == "📈 Backtest Lab":
             bt_df = load_custom_backtest_data(bt_start, bt_end)
             if bt_df.empty: st.error("해당 기간의 데이터가 부족합니다.")
             else:
-                daily_ret = bt_df[['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPY','SMH','GLD']].pct_change().fillna(0)
+                daily_ret = bt_df[['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD']].pct_change().fillna(0)
                 w_orig = get_weights_v45(bt_df['Regime'].iloc[0], False)
                 val_o, val_q, val_qld, val_tqqq = 10000, 10000, 10000, 10000
                 hist_o, hist_q, hist_qld, hist_tqqq, invested, curr_inv = [val_o], [val_q], [val_qld], [val_tqqq], [10000], 10000
