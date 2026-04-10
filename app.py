@@ -744,11 +744,45 @@ elif page == "💼 Portfolio":
         else: return apply_theme(f'<div style="background:rgba({r_c},{g_c},{b_c},0.07);border:1px solid rgba({r_c},{g_c},{b_c},0.22);border-left:4px solid {r_acc};padding:14px 16px;margin-bottom:10px;"><div style="font-family:DM Mono,monospace;font-size:0.53em;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px;">Current Regime</div><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.45em;font-weight:800;color:{r_acc};letter-spacing:-0.5px;line-height:1;margin-bottom:2px;">{regime_info[curr_regime][0]}</div><div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_muted};letter-spacing:0.1em;text-transform:uppercase;">{regime_info[curr_regime][1]}</div><div style="margin-top:7px;padding-top:7px;border-top:1px solid rgba({r_c},{g_c},{b_c},0.18);font-family:DM Mono,monospace;font-size:0.58em;color:{tc_muted};">{regime_committee_msg}</div></div>')
 
     def _pf_editor(height=355):
-        _edata = [{"Asset": asset, "Shares": float(st.session_state.portfolio.get(asset, {}).get('shares', 0.0)), "Avg Price($)": float(st.session_state.portfolio.get(asset, {}).get('avg_price', 1.0 if asset == 'CASH' else 0.0))} for asset in ASSET_LIST]
-        _df_ed = pd.DataFrame(_edata)
-        _df_edited = st.data_editor(_df_ed, disabled=["Asset"], hide_index=True, use_container_width=True, key="pf_editor", height=height, column_config={"Shares": st.column_config.NumberColumn("Shares", format="%.4f"), "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f")})
-        if not _df_edited.equals(_df_ed):
-            for _, row in _df_edited.iterrows(): st.session_state.portfolio[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"]), 'fx': 1350.0}
+        edata = []
+        for a in ASSET_LIST:
+            shares = float(st.session_state.portfolio[a].get('shares', 0.0))
+            avg_p = float(st.session_state.portfolio[a].get('avg_price', 1.0 if a == 'CASH' else 0.0))
+            cur_p = cp[a] # 이미 위에서 계산된 현재가(cp 딕셔너리) 사용
+            
+            # 수익률 계산 (현금은 제외, 평단가가 0 이상일 때만 계산)
+            ret_pct = ((cur_p / avg_p) - 1) * 100 if a != 'CASH' and avg_p > 0 else 0.0
+            
+            edata.append({
+                "Asset": a, 
+                "Shares": shares, 
+                "Avg Price($)": avg_p,
+                "Current Price($)": cur_p,
+                "Return(%)": ret_pct
+            })
+            
+        df_edited = st.data_editor(
+            pd.DataFrame(edata), 
+            disabled=["Asset", "Current Price($)", "Return(%)"], # 현재가와 수익률은 사용자가 수정 못하게 잠금
+            hide_index=True, 
+            use_container_width=True, 
+            height=height, 
+            column_config={
+                "Shares": st.column_config.NumberColumn("Shares", format="%.4f"), 
+                "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"),
+                "Current Price($)": st.column_config.NumberColumn("Current($)", format="%.2f"),
+                "Return(%)": st.column_config.NumberColumn("Ret(%)", format="%+.2f%%") # + 부호가 붙도록 포맷팅
+            }
+        )
+        
+        # 사용자가 입력 가능한 부분(Shares, Avg Price)만 추출해서 변경 여부 확인
+        # (현재가와 수익률은 실시간 변동되므로 equals 비교에서 제외해야 무한 새로고침을 방지할 수 있습니다.)
+        df_input_only = df_edited[["Asset", "Shares", "Avg Price($)"]]
+        df_orig_input = pd.DataFrame(edata)[["Asset", "Shares", "Avg Price($)"]]
+        
+        if not df_input_only.equals(df_orig_input):
+            for _, row in df_edited.iterrows(): 
+                st.session_state.portfolio[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"])}
             save_portfolio_to_disk(); st.session_state.rebal_locked=False; st.rerun()
 
     def _pie_charts():
