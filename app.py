@@ -297,7 +297,9 @@ def fetch_fear_and_greed():
 def fetch_macro_news():
     headlines_for_ai, news_items = [], []
     try:
-        q = urllib.parse.quote("미국증시 OR 연준 OR 나스닥 OR 금리")
+        # 💡 "미국 금리", "FOMC" 등으로 좁히고, 한국 관련 단어(-한은, -한국은행, -코스피 등)는 검색에서 제외합니다.
+        search_query = '"미국증시" OR "나스닥" OR "연준" OR "FOMC" OR "파월" OR "미국 금리" OR "미국 CPI" -한은 -한국은행 -코스피 -코스닥 -금통위'
+        q = urllib.parse.quote(search_query)
         url  = f"https://news.google.com/rss/search?q={q}&hl=ko&gl=KR&ceid=KR:ko"
         root = ET.fromstring(urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})).read())
         for item in root.findall('.//item')[:12]:
