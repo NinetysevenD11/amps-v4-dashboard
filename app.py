@@ -2676,29 +2676,21 @@ elif page == "🤖 AI Quant Assistant":
         with st.chat_message("user"): st.markdown(prompt)
 
         with st.chat_message("assistant"):
-
             try:
-
                 import google.generativeai as genai
-
                 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-
                 valid = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-
                 target = next((m for m in valid if 'gemini-1.5-flash' in m), valid[0]) if valid else None
-
                 model = genai.GenerativeModel(target.replace('models/',''))
-
                 context = f"너는 퀀트 투자 조언자야. 현재 레짐: R{curr_regime}, VIX: {vix_close:.1f}, QQQ 200MA 이격도: {(qqq_close/qqq_ma200-1)*100:.1f}%. 이 상황을 바탕으로 답변해."
-
-                response = model.generate_content(f"{context}\n질문: {prompt}")
-
+                
+                # 🟢 이 부분을 스피너로 감싸주세요!
+                with st.spinner("🤖 AI가 시장 데이터를 기반으로 분석 중입니다..."):
+                    response = model.generate_content(f"{context}\n질문: {prompt}")
+                
                 st.markdown(response.text)
-
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
-
             except Exception as e:
-
                 st.error(f"API 연결 오류: {e}")
 
 
