@@ -1944,7 +1944,6 @@ elif page == "💼 Portfolio":
 
 
 
-    st.markdown(apply_theme(f'<div style="background:#111118;border-left:4px solid {r_acc};padding:13px 0;margin-bottom:14px;display:flex;align-items:center;overflow-x:auto;"><div style="padding:0 20px 0 16px;border-right:1px solid rgba(255,255,255,0.06);flex-shrink:0;"><div style="font-family:DM Mono,monospace;font-size:0.52em;color:rgba(255,255,255,0.3);letter-spacing:0.22em;text-transform:uppercase;margin-bottom:2px;">AMLS V4.5</div><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.1em;font-weight:800;color:#FFFFFF;letter-spacing:-0.3px;line-height:1;">Portfolio</div></div>{_kv("Total NAV", f"${total_val_usd:,.2f}", "#FFFFFF", f"₩{total_val_krw:,.0f}")}{_kv("USD / KRW", f"₩{cur_fx:,.0f}", "rgba(255,255,255,0.65)", "환율")}{_kv("P & L", f"{pnl_pct:+.2f}%", "#6EE7B7" if pnl_pct >= 0 else "#FCA5A5", f"{"▲" if pnl_pct >= 0 else "▼"} ${pnl_usd:,.0f}")}{_kv("Regime", f"R{curr_regime}  {regime_info[curr_regime][1]}", r_acc)}{_kv("투자원금", f"${invested_cost:,.0f}", "rgba(255,255,255,0.65)", "취득원가")}<div style="margin-left:auto;padding:0 16px;flex-shrink:0;"><span class="live-pulse" style="font-family:DM Mono,monospace;font-size:0.58em;color:#6EE7B7;letter-spacing:0.06em;">{rt_label}</span></div></div>'), unsafe_allow_html=True)
 
 
 
