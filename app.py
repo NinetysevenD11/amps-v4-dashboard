@@ -43,7 +43,17 @@ if 'rebal_locked' not in st.session_state: st.session_state.rebal_locked = False
 if 'rebal_plan'   not in st.session_state: st.session_state.rebal_plan   = None
 
 # ==========================================
-# 2. 로컬 스토리지 & 포트폴리오 로직
+# 2. 전역 상수 (티커 및 포트폴리오 설정) - 누락 복구 완료
+# ==========================================
+SECTOR_TICKERS   = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','XLB']
+CORE_TICKERS     = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
+TICKERS          = CORE_TICKERS + SECTOR_TICKERS
+ASSET_LIST       = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
+REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPYG','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
+PORTFOLIO_FILE   = 'portfolio_autosave.json'
+
+# ==========================================
+# 3. 로컬 스토리지 & 포트폴리오 로직
 # ==========================================
 def _ls_save_all():
     _layout = json.dumps({"display_mode": st.session_state.display_mode, "lc_lr_split": st.session_state.lc_lr_split, "lc_delta_wt": st.session_state.lc_delta_wt, "lc_editor_h": st.session_state.lc_editor_h, "lc_goal_inp": st.session_state.lc_goal_inp, "lc_pie_h": st.session_state.lc_pie_h, "lc_pie_split": st.session_state.lc_pie_split, "lc_bar_h": st.session_state.lc_bar_h, "lc_show_lp": st.session_state.lc_show_lp, "lc_show_qo": st.session_state.lc_show_qo, "lc_show_reg": st.session_state.lc_show_reg})
@@ -58,12 +68,6 @@ def _ls_load():
     if st.session_state._ls_loaded: return
     st.markdown("""<script>(function(){var keys=["amls_portfolio","amls_goal","amls_layout","amls_theme","amls_dispmode"];var changed=false;var params=new URLSearchParams(window.location.search);keys.forEach(function(k){var v=localStorage.getItem(k);if(v&&!params.has(k)){params.set(k,encodeURIComponent(v));changed=true;}});if(changed){var newUrl=window.location.pathname+"?"+params.toString();window.location.reload();}})();</script>""", unsafe_allow_html=True)
     st.session_state._ls_loaded = True
-
-SECTOR_TICKERS = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','XLB']
-CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
-TICKERS        = CORE_TICKERS + SECTOR_TICKERS
-ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
-PORTFOLIO_FILE = 'portfolio_autosave.json'
 
 def _restore_from_qp():
     _qp, _changed = st.query_params.to_dict(), False
@@ -149,7 +153,7 @@ def save_portfolio_to_disk():
     st.session_state['_needs_ls_save'] = True
 
 # ==========================================
-# 3. 데이터 로딩 및 엔진 로직
+# 4. 데이터 수집 및 백엔드 로직
 # ==========================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_data():
@@ -226,47 +230,6 @@ def apply_asymmetric_delay(targets):
         res.append(hist_curr)
     return pd.Series(res, index=targets.index).shift(1).bfill()
 
-@st.cache_data(ttl=3600)
-def load_custom_backtest_data(start_date, end_date):
-    fetch_start = pd.to_datetime(start_date) - timedelta(days=400)
-    data = yf.download(TICKERS, start=fetch_start.strftime("%Y-%m-%d"), end=(pd.to_datetime(end_date) + timedelta(days=1)).strftime("%Y-%m-%d"), progress=False, auto_adjust=True)['Close']
-    if 'QQQ' in data.columns: data = data.dropna(subset=['QQQ'])
-    bt_df = pd.DataFrame(index=data.index)
-    for t in TICKERS: bt_df[t] = data[t]
-    bt_df = bt_df.ffill().bfill()
-    bt_df['QQQ_MA20'] = bt_df['QQQ'].rolling(20).mean()
-    bt_df['QQQ_MA50'] = bt_df['QQQ'].rolling(50).mean()
-    bt_df['QQQ_MA200'] = bt_df['QQQ'].rolling(200).mean()
-    bt_df['TQQQ_MA200'] = bt_df['TQQQ'].rolling(200).mean()
-    bt_df['SMH_MA50'] = bt_df['SMH'].rolling(50).mean()
-    bt_df['VIX_MA5'] = bt_df['^VIX'].rolling(5).mean()
-    bt_df['VIX_MA20'] = bt_df['^VIX'].rolling(20).mean()
-    bt_df['VIX_MA50'] = bt_df['^VIX'].rolling(50).mean()
-    bt_df['SMH_3M_Ret'] = bt_df['SMH'].pct_change(63)
-    bt_df['SMH_1M_Ret'] = bt_df['SMH'].pct_change(21)
-    bt_df['SMH_RSI'] = ta.rsi(bt_df['SMH'], length=14)
-    bt_df['HYG_IEF_Ratio'] = bt_df['HYG'] / bt_df['IEF']
-    bt_df['HYG_IEF_MA20'] = bt_df['HYG_IEF_Ratio'].rolling(20).mean()
-    bt_df['HYG_IEF_MA50'] = bt_df['HYG_IEF_Ratio'].rolling(50).mean()
-    bt_df['QQQ_20d_Ret'] = bt_df['QQQ'].pct_change(20)
-    bt_df['QQQE_20d_Ret'] = bt_df['QQQE'].pct_change(20)
-    bt_df['QQQ_RSI'] = ta.rsi(bt_df['QQQ'], length=14)
-    bt_df['GLD_SPYG_Ratio'] = bt_df['GLD'] / bt_df['SPYG']
-    bt_df['GLD_SPYG_MA50'] = bt_df['GLD_SPYG_Ratio'].rolling(50).mean()
-    bt_df['QQQ_High52'] = bt_df['QQQ'].rolling(252).max()
-    bt_df['QQQ_DD'] = (bt_df['QQQ'] / bt_df['QQQ_High52']) - 1
-    bt_df['UUP_MA50'] = bt_df['UUP'].rolling(50).mean()
-    bt_df['TNX_MA50'] = bt_df['^TNX'].rolling(50).mean()
-    bt_df['BTC_MA50'] = bt_df['BTC-USD'].rolling(50).mean()
-    bt_df['IWM_SPYG_Ratio'] = bt_df['IWM'] / bt_df['SPYG']
-    bt_df['IWM_SPYG_MA50'] = bt_df['IWM_SPYG_Ratio'].rolling(50).mean()
-    bt_df = bt_df.dropna()
-    if bt_df.empty: return bt_df
-    bt_df['Target'] = bt_df.apply(get_target_v45, axis=1)
-    bt_df['Regime'] = apply_asymmetric_delay(bt_df['Target'])
-    bt_df = bt_df.loc[pd.to_datetime(start_date):pd.to_datetime(end_date)]
-    return bt_df
-
 @st.cache_data(ttl=15)
 def fetch_realtime_prices():
     prices = {}
@@ -332,6 +295,47 @@ def fetch_global_markets():
     except: pass
     return results, gt, at, lt
 
+@st.cache_data(ttl=3600)
+def load_custom_backtest_data(start_date, end_date):
+    fetch_start = pd.to_datetime(start_date) - timedelta(days=400)
+    data = yf.download(TICKERS, start=fetch_start.strftime("%Y-%m-%d"), end=(pd.to_datetime(end_date) + timedelta(days=1)).strftime("%Y-%m-%d"), progress=False, auto_adjust=True)['Close']
+    if 'QQQ' in data.columns: data = data.dropna(subset=['QQQ'])
+    bt_df = pd.DataFrame(index=data.index)
+    for t in TICKERS: bt_df[t] = data[t]
+    bt_df = bt_df.ffill().bfill()
+    bt_df['QQQ_MA20'] = bt_df['QQQ'].rolling(20).mean()
+    bt_df['QQQ_MA50'] = bt_df['QQQ'].rolling(50).mean()
+    bt_df['QQQ_MA200'] = bt_df['QQQ'].rolling(200).mean()
+    bt_df['TQQQ_MA200'] = bt_df['TQQQ'].rolling(200).mean()
+    bt_df['SMH_MA50'] = bt_df['SMH'].rolling(50).mean()
+    bt_df['VIX_MA5'] = bt_df['^VIX'].rolling(5).mean()
+    bt_df['VIX_MA20'] = bt_df['^VIX'].rolling(20).mean()
+    bt_df['VIX_MA50'] = bt_df['^VIX'].rolling(50).mean()
+    bt_df['SMH_3M_Ret'] = bt_df['SMH'].pct_change(63)
+    bt_df['SMH_1M_Ret'] = bt_df['SMH'].pct_change(21)
+    bt_df['SMH_RSI'] = ta.rsi(bt_df['SMH'], length=14)
+    bt_df['HYG_IEF_Ratio'] = bt_df['HYG'] / bt_df['IEF']
+    bt_df['HYG_IEF_MA20'] = bt_df['HYG_IEF_Ratio'].rolling(20).mean()
+    bt_df['HYG_IEF_MA50'] = bt_df['HYG_IEF_Ratio'].rolling(50).mean()
+    bt_df['QQQ_20d_Ret'] = bt_df['QQQ'].pct_change(20)
+    bt_df['QQQE_20d_Ret'] = bt_df['QQQE'].pct_change(20)
+    bt_df['QQQ_RSI'] = ta.rsi(bt_df['QQQ'], length=14)
+    bt_df['GLD_SPYG_Ratio'] = bt_df['GLD'] / bt_df['SPYG']
+    bt_df['GLD_SPYG_MA50'] = bt_df['GLD_SPYG_Ratio'].rolling(50).mean()
+    bt_df['QQQ_High52'] = bt_df['QQQ'].rolling(252).max()
+    bt_df['QQQ_DD'] = (bt_df['QQQ'] / bt_df['QQQ_High52']) - 1
+    bt_df['UUP_MA50'] = bt_df['UUP'].rolling(50).mean()
+    bt_df['TNX_MA50'] = bt_df['^TNX'].rolling(50).mean()
+    bt_df['BTC_MA50'] = bt_df['BTC-USD'].rolling(50).mean()
+    bt_df['IWM_SPYG_Ratio'] = bt_df['IWM'] / bt_df['SPYG']
+    bt_df['IWM_SPYG_MA50'] = bt_df['IWM_SPYG_Ratio'].rolling(50).mean()
+    bt_df = bt_df.dropna()
+    if bt_df.empty: return bt_df
+    bt_df['Target'] = bt_df.apply(get_target_v45, axis=1)
+    bt_df['Regime'] = apply_asymmetric_delay(bt_df['Target'])
+    bt_df = bt_df.loc[pd.to_datetime(start_date):pd.to_datetime(end_date)]
+    return bt_df
+
 # === 데이터 병합 및 메인 지표 계산 ===
 with st.spinner('데이터 수집 중...'):
     df = load_data()
@@ -366,7 +370,6 @@ if live_regime > hist_regime: curr_regime = live_regime
 elif hist_regime == 3 and live_regime <= 2: curr_regime = 2
 else: curr_regime = hist_regime
 
-# 💡 r_acc 글로벌 선언 (NameError 방지)
 r_acc = {1: main_color, 2: "#D97706", 3: "#DC2626", 4: "#7C3AED"}[curr_regime]
 
 smh_cond = (smh_close > smh_ma50) and (smh_3m > 0.05 or smh_1m > 0.10) and (smh_rsi > 50)
@@ -391,7 +394,7 @@ _ax, _ax_r = dict(gridcolor='rgba(0,0,0,0.07)', linecolor='rgba(0,0,0,0.12)', sh
 regime_info = {1:("R1 BULL","풀 가동"),2:("R2 CORR","방어 진입"), 3:("R3 BEAR","대피"),4:("R4 PANIC","최대 방어")}
 
 # ==========================================
-# 4. 테마 및 CSS 블록 주입
+# 4. 테마 및 CSS 블록
 # ==========================================
 css_block = f"""<style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
@@ -686,8 +689,8 @@ elif page == "🍫 12-Pack Radar":
             valid = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
             target = next((m for m in valid if 'gemini-1.5-flash' in m), valid[0]) if valid else None
             if not target: st.error("모델 오류"); return
-            p = f"너는 퀀트 애널리스트야. AMLS V4.5 지표를 분석해줘.\n[레짐] R{curr_regime}\n1. QQQ RSI: {last_row['QQQ_RSI']:.1f}\n2. QQQ DD: {last_row['QQQ_DD']*100:.1f}%\n섹터분류, 리스크, 투자스탠스로 요약."
-            with st.spinner("AI 분석 중..."): res = genai.GenerativeModel(target.replace('models/','')).generate_content(p); st.markdown(apply_theme(f'<div style="background:#FAFAF7;border-left:4px solid {main_color};padding:20px;font-size:0.88em;">{res.text}</div>'), unsafe_allow_html=True)
+            p = f"너는 월스트리트 퀀트 애널리스트야. AMLS V4.5 지표를 분석해줘.\n[레짐] R{curr_regime}\n[신호] Risk {risk_cnt}, Warn {warn_cnt}, Safe {safe_cnt}\n1. QQQ RSI: {last_row['QQQ_RSI']:.1f}\n2. QQQ DD: {last_row['QQQ_DD']*100:.1f}%\n3. FGI: {fg_score:.0f}\n섹터분류, 리스크 요소, 투자 스탠스로 요약해줘."
+            with st.spinner("AI 분석 중..."): res = genai.GenerativeModel(target.replace('models/','')).generate_content(p); st.markdown(apply_theme(f'<div style="background:#FAFAF7;border-left:4px solid {main_color};padding:20px 24px;font-size:0.88em;">{res.text}</div>'), unsafe_allow_html=True)
         except Exception as e: st.error(f"오류: {e}")
 
     df_view  = df.iloc[-120:]
@@ -701,7 +704,11 @@ elif page == "🍫 12-Pack Radar":
     warn_cnt = sum([qqq_rsi>70, -0.20<=qqq_dd<-0.10, fg_score>70, (last_row['QQQ_20d_Ret']>0 and last_row['QQQE_20d_Ret']<0), last_row['GLD_SPYG_Ratio']>last_row['GLD_SPYG_MA50'], last_row['^TNX']>last_row['TNX_MA50'], last_row['BTC-USD']<last_row['BTC_MA50'], last_row['IWM_SPYG_Ratio']<last_row['IWM_SPYG_MA50'], top_sec in ['UTIL', 'STAPLE', 'HEALTH']])
     safe_cnt = 12 - risk_cnt - warn_cnt
 
-    st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid {main_color};padding:14px 20px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;"><div style="font-family:DM Mono;font-size:1.2em;font-weight:700;">Macro Signal Status</div><div>Risk {risk_cnt} | Warn {warn_cnt} | Safe {safe_cnt}</div></div></div>'), unsafe_allow_html=True)
+    if risk_cnt >= 3: radar_status, radar_msg, radar_color = "극단적 위험 구간 (Risk-Off)", "시스템 리스크 경고. 레버리지 해제 요망.", "#DC2626"
+    elif warn_cnt >= 4 or risk_cnt >= 1: radar_status, radar_msg, radar_color = "변동성 주의 (Warning)", "균열 조짐 발생. 신규 매수 보류 및 관망 요망.", "#D97706"
+    else: radar_status, radar_msg, radar_color = "안정적 순항 (Safe)", "매크로 지표 안정적. 추세 추종 전략 전개 요망.", main_color
+
+    st.markdown(apply_theme(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.12);border-left:3px solid {radar_color};padding:14px 20px;margin-bottom:12px;"><div style="display:flex;justify-content:space-between;"><div style="font-family:DM Mono;font-size:1.2em;font-weight:700;">Macro Signal Status</div><div>Risk {risk_cnt} | Warn {warn_cnt} | Safe {safe_cnt}</div></div></div>'), unsafe_allow_html=True)
     
     def _badge(label, color, icon): return f'<span style="background:rgba(0,0,0,0.05);color:{color};padding:2px 7px;font-size:0.68em;font-weight:500;">{icon} {label}</span>'
     r1 = st.columns(4)
@@ -710,7 +717,7 @@ elif page == "🍫 12-Pack Radar":
     with r1[2]: st.container(border=True).markdown(_badge("FGI", main_color if fg_score<30 else "#DC2626", "▲"), unsafe_allow_html=True)
     with r1[3]: st.container(border=True).markdown(_badge("SEC", main_color, "▲"), unsafe_allow_html=True)
 
-    if st.button("🤖 AI 종합 투자의견 생성"): run_ai_radar()
+    if st.button("🤖 AI 종합 투자의견 생성", use_container_width=True): run_ai_radar()
 
 # ==========================================
 # 페이지 4: 📈 Backtest Lab
