@@ -743,9 +743,6 @@ elif page == "🎛️ Parameter Lab":
     
     st.warning("⚠️ 파라미터 변경 시 메인 대시보드의 레짐 판정 로직이 즉시 변경됩니다. (현재 VIX 한계치 연동 완료)")
 
-    # Interactive JSON Widget for Parameter Lab
-    st.markdown("### 전략 시각화 (Interactive Simulator)")
-    st.markdown("아래 시뮬레이터에서 장기/단기 이동평균선과 VIX 임계치가 레짐(시장 상태)을 어떻게 구분하는지 확인해 보세요.")
-
-```json?chameleon
-{"component":"LlmGeneratedComponent","props":{"height":"650px","prompt":"Create an interactive dashboard explaining the AMLS strategy parameters.\n\nContext & Data:\n- VIX Limit: Initial value is {param_vix_limit} (editable 20 to 60).\n- Long MA: Initial value is {param_ma_long} (editable 100 to 300).\n- Short MA: Initial value is {param_ma_short} (editable 20 to 100).\n\nLayout: Standard Layout.\n\nControls (Inputs):\n- Slider for 'VIX Panic Threshold' (20 to 60).\n- Slider for 'Long MA Window' (100 to 300).\n- Slider for 'Short MA Window' (20 to 100).\n\nBehavior & Visuals:\n- Generate a line chart showing 3 lines: a simulated stock price (fluctuating with some clear peaks and drops), a Long MA line, and a Short MA line.\n- Generate a second smaller line chart below it showing simulated VIX values (fluctuating between 10 and 50).\n- The MA lines should visually respond (smooth out or become jagged) as the MA Window sliders are adjusted.\n- Background shading of the top chart represents the Market Regime based on the conditions:\n  - R4 (Panic): If VIX > VIX Panic Threshold (Color area purple/dark).\n  - R1 (Bull): If Stock > Long MA AND Short MA > Long MA AND VIX < Threshold (Color area green/light).\n  - R2/R3 (Bear/Corr): Otherwise (Color area yellow/red).\n- Update the background shading dynamically as the user moves the sliders.\n- Text must be in Korean.","id":"im_58b72493fed28b6b"}}
+# ==========================================
+# 추가된 페이지 3: 📝 Trade Journal
+# ==========================================
