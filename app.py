@@ -2138,23 +2138,16 @@ elif page == "💼 Portfolio":
 # ==========================================
 
 elif page == "🍫 12-Pack Radar":
-
-    elif page == "🍫 12-Pack Radar":
     df_view  = df.iloc[-120:]
     qqq_rsi  = last_row['QQQ_RSI']
     qqq_dd   = last_row['QQQ_DD']
     
-    # 💡 CNN 방식을 모방한 자체 Fear & Greed 엔진 (절대 고장나지 않음)
-    # 1. 변동성 (VIX): 12(탐욕) ~ 35(공포) 기준 역산
+    # 💡 CNN 방식을 모방한 자체 Fear & Greed 엔진
     _vix_score = max(0, min(100, 100 - (last_row['^VIX'] - 12) / 23 * 100))
-    # 2. 시장 모멘텀 (RSI)
     _rsi_score = max(0, min(100, qqq_rsi))
-    # 3. 장기 추세 강도 (QQQ vs 200MA)
     _mom_score = max(0, min(100, 50 + (last_row['QQQ'] / last_row['QQQ_MA200'] - 1) * 250))
-    # 4. 스마트머니 신용 스프레드 (하이일드 채권 수요)
     _crd_score = max(0, min(100, 50 + (last_row['HYG_IEF_Ratio'] / last_row['HYG_IEF_MA50'] - 1) * 500))
     
-    # 위 4개 핵심 지표를 평균 내어 최종 FGI(0~100) 산출
     fg_score = (_vix_score + _rsi_score + _mom_score + _crd_score) / 4
 
 
