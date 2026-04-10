@@ -551,11 +551,6 @@ with st.sidebar.expander("⚙️  Layout Controls  (PC)", expanded=False):
         for _k, _dv in [("lc_lr_split", 38), ("lc_goal_inp", 22), ("lc_editor_h", 355), ("lc_pie_h", 200), ("lc_bar_h", 185), ("lc_pie_split", 50), ("lc_delta_wt", 52), ("lc_show_reg", True), ("lc_show_lp", True), ("lc_show_qo", True)]: setattr(st.session_state, _k, _dv)
         st.session_state['_needs_ls_save'] = True; st.rerun()
 
-st.sidebar.markdown(apply_theme(f"""<div style="padding:10px 20px 6px;border-top:1px solid rgba(0,0,0,0.08);"><div style="font-family:'DM Mono';font-size:0.52em;color:{tc_label};letter-spacing:0.22em;text-transform:uppercase;margin-bottom:8px;">Display Mode</div><div style="display:flex;gap:4px;">{"".join([f'<div style="flex:1;padding:7px 0;text-align:center;background:{"rgba("+str(r_c)+","+str(g_c)+","+str(b_c)+",0.10)" if st.session_state.display_mode==nm else "rgba(0,0,0,0.03)"};border:1px solid {"rgba("+str(r_c)+","+str(g_c)+","+str(b_c)+",0.35)" if st.session_state.display_mode==nm else "rgba(0,0,0,0.10)"};font-family:DM Mono,monospace;font-size:0.68em;font-weight:{"700" if st.session_state.display_mode==nm else "400"};color:{main_color if st.session_state.display_mode==nm else tc_label};">{ic} {nm}</div>' for ic, nm in [("🖥","PC"),("📱","Tablet"),("📲","Mobile")]])}</div></div>"""), unsafe_allow_html=True)
-_dm_c1, _dm_c2, _dm_c3 = st.sidebar.columns(3)
-for _dmc, _dmnm in [(_dm_c1,"PC"), (_dm_c2,"Tablet"), (_dm_c3,"Mobile")]:
-    if _dmc.button(_dmnm, key=f"dm_{_dmnm}", use_container_width=True): st.session_state.display_mode = _dmnm; st.session_state['_needs_ls_save'] = True; st.rerun()
-
 _qqq_chg  = (last_row['QQQ'] / last_row['QQQ_MA200'] - 1) * 100
 _vix_now  = last_row['^VIX']
 _smh_chg  = last_row['SMH_1M_Ret'] * 100
