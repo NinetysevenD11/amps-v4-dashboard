@@ -249,61 +249,48 @@ TICKERS        = CORE_TICKERS + SECTOR_TICKERS
 ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
 
 PORTFOLIO_FILE = 'portfolio_autosave.json'
+PORTFOLIO_ISA_FILE = 'portfolio_isa_autosave.json' # ISA 파일 추가
 
-
-
-def sanitize_portfolio():
-
+def sanitize_portfolio(pf):
     for a in ASSET_LIST:
-
-        val = st.session_state.portfolio.get(a)
-
-        if isinstance(val, (int, float)) or val is None: st.session_state.portfolio[a] = {'shares': float(val or 0.0), 'avg_price': 1.0 if a == 'CASH' else 0.0, 'fx': 1350.0}
-
+        val = pf.get(a)
+        if isinstance(val, (int, float)) or val is None: pf[a] = {'shares': float(val or 0.0), 'avg_price': 1.0 if a == 'CASH' else 0.0, 'fx': 1350.0}
         elif isinstance(val, dict):
-
             if 'shares' not in val: val['shares'] = 0.0
-
             if 'avg_price' not in val: val['avg_price'] = 1.0 if a == 'CASH' else 0.0
-
             if 'fx' not in val: val['fx'] = 1350.0
-
-        else: st.session_state.portfolio[a] = {'shares': 0.0, 'avg_price': 0.0, 'fx': 1350.0}
-
-
+        else: pf[a] = {'shares': 0.0, 'avg_price': 0.0, 'fx': 1350.0}
 
 if 'goal_usd' not in st.session_state: st.session_state.goal_usd = 100000.0
 
+# 일반 계좌 로드
 if 'portfolio' not in st.session_state:
-
     st.session_state.portfolio = {asset: {'shares':0.0, 'avg_price':0.0, 'fx':1350.0} for asset in ASSET_LIST}
-
     if os.path.exists(PORTFOLIO_FILE):
-
         try:
-
             with open(PORTFOLIO_FILE, 'r') as f:
-
                 loaded = json.load(f)
-
                 for k, v in loaded.items(): st.session_state.portfolio[k] = v
-
         except: pass
 
+# ISA 계좌 로드
+if 'portfolio_isa' not in st.session_state:
+    st.session_state.portfolio_isa = {asset: {'shares':0.0, 'avg_price':0.0, 'fx':1350.0} for asset in ASSET_LIST}
+    if os.path.exists(PORTFOLIO_ISA_FILE):
+        try:
+            with open(PORTFOLIO_ISA_FILE, 'r') as f:
+                loaded = json.load(f)
+                for k, v in loaded.items(): st.session_state.portfolio_isa[k] = v
+        except: pass
 
-
-sanitize_portfolio()
-
-
+sanitize_portfolio(st.session_state.portfolio)
+sanitize_portfolio(st.session_state.portfolio_isa)
 
 def save_portfolio_to_disk():
-
     try:
-
         with open(PORTFOLIO_FILE, 'w') as f: json.dump(st.session_state.portfolio, f)
-
+        with open(PORTFOLIO_ISA_FILE, 'w') as f: json.dump(st.session_state.portfolio_isa, f)
     except: pass
-
     st.session_state['_needs_ls_save'] = True
 
 
@@ -1337,36 +1324,29 @@ if page == "📊 Dashboard":
 
 
 # ==========================================
-
 # 라우팅 2. Portfolio
-
 # ==========================================
-
 elif page == "💼 Portfolio":
+    # 🟢 계좌 선택 스위치 추가
+    st.markdown('<div style="margin-bottom:12px;">', unsafe_allow_html=True)
+    acc_choice = st.radio("📂 관리할 계좌 선택", ["🟦 일반 계좌 (General)", "🟩 ISA 계좌 (Tax-free)"], horizontal=True, label_visibility="collapsed")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 💡 선택한 계좌에 따라 active_pf 변수에 해당 데이터를 연결합니다.
+    active_pf = st.session_state.portfolio if "일반" in acc_choice else st.session_state.portfolio_isa
 
     current_prices = {}
-
     for t in ASSET_LIST:
-
         if t == 'CASH': current_prices[t] = 1.0
-
         elif t in rt_prices: current_prices[t] = rt_prices[t]
-
         elif t in df.columns: current_prices[t] = df[t].iloc[-1]
-
         else: current_prices[t] = 0.0
 
-
-
     cur_fx        = rt_prices.get('USDKRW=X', 1350.0)
-
-    curr_vals     = {a: st.session_state.portfolio[a]['shares'] * current_prices[a] for a in ASSET_LIST}
-
+    curr_vals     = {a: active_pf[a]['shares'] * current_prices[a] for a in ASSET_LIST}
     total_val_usd = sum(curr_vals.values())
-
     total_val_krw = total_val_usd * cur_fx
-
-    invested_cost = sum(st.session_state.portfolio[a]['shares'] * st.session_state.portfolio[a]['avg_price'] for a in ASSET_LIST if a != 'CASH')
+    invested_cost = sum(active_pf[a]['shares'] * active_pf[a]['avg_price'] for a in ASSET_LIST if a != 'CASH')
 
     pnl_usd   = total_val_usd - invested_cost
 
@@ -1497,85 +1477,44 @@ elif page == "💼 Portfolio":
 
 
     def _pf_editor(height=355):
-
         edata = []
-
         for a in ASSET_LIST:
-
-            shares = float(st.session_state.portfolio[a].get('shares', 0.0))
-
-            avg_p = float(st.session_state.portfolio[a].get('avg_price', 1.0 if a == 'CASH' else 0.0))
-
-            cur_p = cp[a] # 이미 위에서 계산된 현재가(cp 딕셔너리) 사용
-
+            # 💡 st.session_state.portfolio 대신 active_pf 로 교체
+            shares = float(active_pf[a].get('shares', 0.0))
+            avg_p = float(active_pf[a].get('avg_price', 1.0 if a == 'CASH' else 0.0))
+            cur_p = cp[a] 
             
-
-            # 수익률 계산 (현금은 제외, 평단가가 0 이상일 때만 계산)
-
             ret_pct = ((cur_p / avg_p) - 1) * 100 if a != 'CASH' and avg_p > 0 else 0.0
-
             
-
             edata.append({
-
                 "Asset": a, 
-
                 "Shares": shares, 
-
                 "Avg Price($)": avg_p,
-
                 "Current Price($)": cur_p,
-
                 "Return(%)": ret_pct
-
             })
-
             
-
         df_edited = st.data_editor(
-
             pd.DataFrame(edata), 
-
-            disabled=["Asset", "Current Price($)", "Return(%)"], # 현재가와 수익률은 사용자가 수정 못하게 잠금
-
+            disabled=["Asset", "Current Price($)", "Return(%)"], 
             hide_index=True, 
-
             use_container_width=True, 
-
             height=height, 
-
             column_config={
-
                 "Shares": st.column_config.NumberColumn("Shares", format="%.4f"), 
-
                 "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"),
-
                 "Current Price($)": st.column_config.NumberColumn("Current($)", format="%.2f"),
-
-                "Return(%)": st.column_config.NumberColumn("Ret(%)", format="%+.2f%%") # + 부호가 붙도록 포맷팅
-
+                "Return(%)": st.column_config.NumberColumn("Ret(%)", format="%+.2f%%") 
             }
-
         )
-
         
-
-        # 사용자가 입력 가능한 부분(Shares, Avg Price)만 추출해서 변경 여부 확인
-
-        # (현재가와 수익률은 실시간 변동되므로 equals 비교에서 제외해야 무한 새로고침을 방지할 수 있습니다.)
-
         df_input_only = df_edited[["Asset", "Shares", "Avg Price($)"]]
-
         df_orig_input = pd.DataFrame(edata)[["Asset", "Shares", "Avg Price($)"]]
-
         
-
         if not df_input_only.equals(df_orig_input):
-
             for _, row in df_edited.iterrows(): 
-
-                st.session_state.portfolio[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"])}
-
+                # 💡 선택된 계좌(active_pf)에 저장되도록 변경
+                active_pf[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"])}
             save_portfolio_to_disk(); st.session_state.rebal_locked=False; st.rerun()
 
 
