@@ -535,11 +535,22 @@ with st.sidebar.expander("🔗  Bookmarks", expanded=False):
     st.markdown("""<div style="display:flex;flex-direction:column;gap:0;"><a href="https://www.youtube.com/@JB_Insight" target="_blank" class="sidebar-link">📊 JB 인사이트</a><a href="https://www.youtube.com/@odokgod" target="_blank" class="sidebar-link">📻 오독</a><a href="https://www.youtube.com/@TQQQCRAZY" target="_blank" class="sidebar-link">🔥 TQQQ 미친놈</a><a href="https://www.youtube.com/@developmong" target="_blank" class="sidebar-link">🐒 디벨롭몽</a><a href="https://kr.investing.com/" target="_blank" class="sidebar-link">🌍 인베스팅닷컴</a><a href="https://kr.tradingview.com/" target="_blank" class="sidebar-link">📉 트레이딩뷰</a></div>""", unsafe_allow_html=True)
 
 with st.sidebar.expander("💾  Portfolio Data", expanded=False):
-    st.download_button("⬇  Backup (JSON)", data=json.dumps(st.session_state.portfolio), file_name="portfolio.json", mime="application/json", use_container_width=True, key="sb_backup")
+    _all_backup = json.dumps({"portfolio": st.session_state.portfolio, "portfolio_isa": st.session_state.portfolio_isa, "portfolio_toss": st.session_state.portfolio_toss, "goal_usd": st.session_state.goal_usd})
+    st.download_button("⬇  전체 백업 (3계좌)", data=_all_backup, file_name="amls_backup.json", mime="application/json", use_container_width=True, key="sb_backup")
     st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
-    _sidebar_upload = st.file_uploader("⬆  Restore (JSON)", type="json", key="sb_uploader", label_visibility="visible")
+    _sidebar_upload = st.file_uploader("⬆  복원 (JSON)", type="json", key="sb_uploader", label_visibility="visible")
     if _sidebar_upload is not None:
-        try: st.session_state.portfolio.update(json.load(_sidebar_upload)); sanitize_portfolio(st.session_state.portfolio); save_portfolio_to_disk(); st.session_state.rebal_locked=False; st.success("✅ 복구 완료"); st.rerun()
+        try:
+            _loaded = json.load(_sidebar_upload)
+            if "portfolio" in _loaded:
+                st.session_state.portfolio.update(_loaded["portfolio"]); sanitize_portfolio(st.session_state.portfolio)
+            if "portfolio_isa" in _loaded:
+                st.session_state.portfolio_isa.update(_loaded["portfolio_isa"]); sanitize_portfolio(st.session_state.portfolio_isa)
+            if "portfolio_toss" in _loaded:
+                st.session_state.portfolio_toss.clear(); st.session_state.portfolio_toss.update(_loaded["portfolio_toss"])
+            if "goal_usd" in _loaded:
+                st.session_state.goal_usd = float(_loaded["goal_usd"])
+            save_portfolio_to_disk(); st.session_state.rebal_locked=False; st.success("✅ 3계좌 복구 완료"); st.rerun()
         except: st.error("❌ 파일 형식 오류")
 
 with st.sidebar.expander("⚙️  Layout Controls  (PC)", expanded=False):
