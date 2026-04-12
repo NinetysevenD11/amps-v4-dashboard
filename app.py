@@ -248,49 +248,16 @@ TICKERS        = CORE_TICKERS + SECTOR_TICKERS
 
 ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
 
-PORTFOLIO_FILE = 'portfolio_autosave.json'
-PORTFOLIO_ISA_FILE = 'portfolio_isa_autosave.json' # ISA 파일 추가
-
-def sanitize_portfolio(pf):
-    for a in ASSET_LIST:
-        val = pf.get(a)
-        if isinstance(val, (int, float)) or val is None: pf[a] = {'shares': float(val or 0.0), 'avg_price': 1.0 if a == 'CASH' else 0.0, 'fx': 1350.0}
-        elif isinstance(val, dict):
-            if 'shares' not in val: val['shares'] = 0.0
-            if 'avg_price' not in val: val['avg_price'] = 1.0 if a == 'CASH' else 0.0
-            if 'fx' not in val: val['fx'] = 1350.0
-        else: pf[a] = {'shares': 0.0, 'avg_price': 0.0, 'fx': 1350.0}
-
-if 'goal_usd' not in st.session_state: st.session_state.goal_usd = 100000.0
-
-# 일반 계좌 로드
-if 'portfolio' not in st.session_state:
-    st.session_state.portfolio = {asset: {'shares':0.0, 'avg_price':0.0, 'fx':1350.0} for asset in ASSET_LIST}
-    if os.path.exists(PORTFOLIO_FILE):
-        try:
-            with open(PORTFOLIO_FILE, 'r') as f:
-                loaded = json.load(f)
-                for k, v in loaded.items(): st.session_state.portfolio[k] = v
-        except: pass
-
-# ISA 계좌 로드
-if 'portfolio_isa' not in st.session_state:
-    st.session_state.portfolio_isa = {asset: {'shares':0.0, 'avg_price':0.0, 'fx':1350.0} for asset in ASSET_LIST}
-    if os.path.exists(PORTFOLIO_ISA_FILE):
-        try:
-            with open(PORTFOLIO_ISA_FILE, 'r') as f:
-                loaded = json.load(f)
-                for k, v in loaded.items(): st.session_state.portfolio_isa[k] = v
-        except: pass
-
-sanitize_portfolio(st.session_state.portfolio)
-sanitize_portfolio(st.session_state.portfolio_isa)
-
-def save_portfolio_to_disk():
-    try:
-        with open(PORTFOLIO_FILE, 'w') as f: json.dump(st.session_state.portfolio, f)
-        with open(PORTFOLIO_ISA_FILE, 'w') as f: json.dump(st.session_state.portfolio_isa, f)
-    except: pass
+elif page == "💼 Portfolio":
+    st.markdown('<div style="margin-bottom:12px;">', unsafe_allow_html=True)
+    # 🟢 토스 계좌 옵션 추가
+    acc_choice = st.radio("📂 관리할 계좌 선택", ["🟦 일반 계좌", "🟩 ISA 계좌", "🧪 TOSS 장기투자"], horizontal=True, label_visibility="collapsed")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # 💡 선택에 따라 데이터 스위칭
+    if "일반" in acc_choice: active_pf = st.session_state.portfolio
+    elif "ISA" in acc_choice: active_pf = st.session_state.portfolio_isa
+    else: active_pf = st.session_state.portfolio_toss # 토스 계좌 연결
     st.session_state['_needs_ls_save'] = True
 
 
@@ -1329,11 +1296,16 @@ if page == "📊 Dashboard":
 elif page == "💼 Portfolio":
     # 🟢 계좌 선택 스위치 추가
     st.markdown('<div style="margin-bottom:12px;">', unsafe_allow_html=True)
-    acc_choice = st.radio("📂 관리할 계좌 선택", ["🟦 일반 계좌 (General)", "🟩 ISA 계좌 (Tax-free)"], horizontal=True, label_visibility="collapsed")
+    acc_choice = st.radio("📂 관리할 계좌 선택", ["🟦 일반 계좌", "🟩 ISA 계좌", "🧪 TOSS 장기투자"], horizontal=True, label_visibility="collapsed")
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # 💡 선택한 계좌에 따라 active_pf 변수에 해당 데이터를 연결합니다.
-    active_pf = st.session_state.portfolio if "일반" in acc_choice else st.session_state.portfolio_isa
+    # 💡 버튼 선택에 따라 active_pf 변수에 해당 계좌 데이터를 연결합니다.
+    if "일반" in acc_choice: 
+        active_pf = st.session_state.portfolio
+    elif "ISA" in acc_choice: 
+        active_pf = st.session_state.portfolio_isa
+    else: 
+        active_pf = st.session_state.portfolio_toss
 
     current_prices = {}
     for t in ASSET_LIST:
@@ -1343,6 +1315,8 @@ elif page == "💼 Portfolio":
         else: current_prices[t] = 0.0
 
     cur_fx        = rt_prices.get('USDKRW=X', 1350.0)
+    
+    # 💡 st.session_state.portfolio 대신 선택된 계좌인 active_pf를 사용하여 계산합니다.
     curr_vals     = {a: active_pf[a]['shares'] * current_prices[a] for a in ASSET_LIST}
     total_val_usd = sum(curr_vals.values())
     total_val_krw = total_val_usd * cur_fx
@@ -1871,66 +1845,63 @@ elif page == "💼 Portfolio":
 
 
     if display_mode == "PC":
-
+        # 1. 공통 상단 (목표 설정 및 트래커)
         _gi_col, _gb_col = st.columns([st.session_state.lc_goal_inp, 100 - st.session_state.lc_goal_inp])
-
         with _gi_col:
-
             new_goal = st.number_input("목표금액", min_value=1000.0, max_value=100_000_000.0, value=st.session_state.goal_usd, step=1000.0, format="%.0f", key="goal_input", label_visibility="collapsed")
-
             if new_goal != st.session_state.goal_usd: st.session_state.goal_usd = new_goal; st.rerun()
-
             st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_label};text-align:center;margin-top:-4px;">목표 금액 (USD)</div>', unsafe_allow_html=True)
-
         with _gb_col: st.markdown(_goal_tracker_html(), unsafe_allow_html=True)
-
         st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
-        _col_l, _col_r = st.columns([st.session_state.lc_lr_split, 100 - st.session_state.lc_lr_split])
+        # 2. 계좌별 레이아웃 분기
+        if "TOSS" in acc_choice:
+            # ✨ [TOSS 전용] 심플 장기투자 레이아웃
+            t_col_l, t_col_r = st.columns([1, 1])
+            with t_col_l:
+                with st.container(border=True):
+                    st.markdown(_sl("TOSS Portfolio Input"), unsafe_allow_html=True)
+                    _pf_editor(500) # 장기투자는 입력창을 시원하게 배치
+            with t_col_r:
+                # 현재 자산 비중
+                _pie_charts()
+                
+                # 장기투자 인사이트 (메시지)
+                with st.container(border=True):
+                    st.markdown(_sl("Long-term Growth Insight"), unsafe_allow_html=True)
+                    st.success("🌱 이 계좌는 AMLS 전략과 무관하게 '무지성 적립'을 수행하는 장기 자산입니다.")
+                    st.info("리밸런싱 지침이 표시되지 않으며, 오직 수량을 모아가는 것에 집중하세요.")
+                    st.markdown("---")
+                    st.markdown("#### 💡 복리의 마법 시뮬레이션")
+                    st.caption("아래 시뮬레이터로 미래의 자산을 그려보세요.")
 
-        with _col_l:
-
-            with st.container(border=True):
-
-                st.markdown(_sl("Position Input"), unsafe_allow_html=True)
-
-                _pf_editor(st.session_state.lc_editor_h)
-
-                if st.session_state.lc_show_lp:
-
-                    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-
-                    st.markdown(_sl("Live Prices"), unsafe_allow_html=True); st.markdown(_lp_build(), unsafe_allow_html=True)
-
-                if st.session_state.lc_show_qo:
-
-                    st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
-
-                    st.markdown(_sl("Quick Orders"), unsafe_allow_html=True)
-
-                    _sells, _buys = _sells_buys(); _qo1, _qo2 = st.columns(2)
-
-                    with _qo1: _qo_build(_qo1, "🔴  SELL", _sells, "#DC2626", "rgba(220,38,38,0.03)")
-
-                    with _qo2: _qo_build(_qo2, "🟢  BUY", _buys, "#059669", "rgba(5,150,105,0.03)")
-
-        with _col_r:
-
-            if st.session_state.lc_show_reg: st.markdown(_regime_card_html(horizontal=True), unsafe_allow_html=True); st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-            _pie_charts(); st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-            _rc1, _rc2 = st.columns([st.session_state.lc_delta_wt, 100 - st.session_state.lc_delta_wt])
-
-            with _rc1: _delta_bar()
-
-            with _rc2: _target_weights_block()
-
-        st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-
-        st.markdown(apply_theme(f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="width:2px;height:12px;background:{main_color};flex-shrink:0;"></div><span style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:600;color:{tc_heading};letter-spacing:0.2em;text-transform:uppercase;">Rebalancing Matrix</span><div style="flex:1;height:1px;background:rgba(0,0,0,0.09);"></div><span style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};">R{curr_regime} · {regime_info[curr_regime][1]}</span></div>'), unsafe_allow_html=True)
-
-        _rebalancing_matrix()
+        else:
+            # 📈 [일반/ISA 전용] 기존 AMLS 전략 레이아웃
+            _col_l, _col_r = st.columns([st.session_state.lc_lr_split, 100 - st.session_state.lc_lr_split])
+            with _col_l:
+                with st.container(border=True):
+                    st.markdown(_sl("Position Input"), unsafe_allow_html=True)
+                    _pf_editor(st.session_state.lc_editor_h)
+                    if st.session_state.lc_show_lp:
+                        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+                        st.markdown(_sl("Live Prices"), unsafe_allow_html=True); st.markdown(_lp_build(), unsafe_allow_html=True)
+                    if st.session_state.lc_show_qo:
+                        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+                        st.markdown(_sl("Quick Orders"), unsafe_allow_html=True)
+                        _sells, _buys = _sells_buys(); _qo1, _qo2 = st.columns(2)
+                        with _qo1: _qo_build(_qo1, "🔴  SELL", _sells, "#DC2626", "rgba(220,38,38,0.03)")
+                        with _qo2: _qo_build(_qo2, "🟢  BUY", _buys, "#059669", "rgba(5,150,105,0.03)")
+            with _col_r:
+                if st.session_state.lc_show_reg: st.markdown(_regime_card_html(horizontal=True), unsafe_allow_html=True); st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                _pie_charts(); st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                _rc1, _rc2 = st.columns([st.session_state.lc_delta_wt, 100 - st.session_state.lc_delta_wt])
+                with _rc1: _delta_bar()
+                with _rc2: _target_weights_block()
+            
+            # 리밸런싱 매트릭스 (일반/ISA 전용)
+            st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+            st.markdown(apply_theme(f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="width:2px;height:12px;background:{main_color};flex-shrink:0;"></div><span style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:600;color:{tc_heading};letter-spacing:0.2em;text-transform:uppercase;">Rebalancing Matrix</span><div style="flex:1;height:1px;background:rgba(0,0,0,0.09);"></div><span style="font-family:DM Mono,monospace;font-size:0.56em;color:{tc_label};">R{curr_regime} · {regime_info[curr_regime][1]}</span></div>'), unsafe_allow_html=True)
+            _rebalancing_matrix()
 
 
 
