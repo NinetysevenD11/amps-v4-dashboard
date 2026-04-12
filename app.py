@@ -248,16 +248,59 @@ TICKERS        = CORE_TICKERS + SECTOR_TICKERS
 
 ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
 
-elif page == "💼 Portfolio":
-    st.markdown('<div style="margin-bottom:12px;">', unsafe_allow_html=True)
-    # 🟢 토스 계좌 옵션 추가
-    acc_choice = st.radio("📂 관리할 계좌 선택", ["🟦 일반 계좌", "🟩 ISA 계좌", "🧪 TOSS 장기투자"], horizontal=True, label_visibility="collapsed")
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # 💡 선택에 따라 데이터 스위칭
-    if "일반" in acc_choice: active_pf = st.session_state.portfolio
-    elif "ISA" in acc_choice: active_pf = st.session_state.portfolio_isa
-    else: active_pf = st.session_state.portfolio_toss # 토스 계좌 연결
+PORTFOLIO_FILE = 'portfolio_autosave.json'
+PORTFOLIO_ISA_FILE = 'portfolio_isa_autosave.json'
+PORTFOLIO_TOSS_FILE = 'portfolio_toss_autosave.json'
+
+def sanitize_portfolio(pf):
+    for a in ASSET_LIST:
+        val = pf.get(a)
+        if isinstance(val, (int, float)) or val is None: pf[a] = {'shares': float(val or 0.0), 'avg_price': 1.0 if a == 'CASH' else 0.0, 'fx': 1350.0}
+        elif isinstance(val, dict):
+            if 'shares' not in val: val['shares'] = 0.0
+            if 'avg_price' not in val: val['avg_price'] = 1.0 if a == 'CASH' else 0.0
+            if 'fx' not in val: val['fx'] = 1350.0
+        else: pf[a] = {'shares': 0.0, 'avg_price': 0.0, 'fx': 1350.0}
+
+if 'goal_usd' not in st.session_state: st.session_state.goal_usd = 100000.0
+
+if 'portfolio' not in st.session_state:
+    st.session_state.portfolio = {asset: {'shares':0.0, 'avg_price':0.0, 'fx':1350.0} for asset in ASSET_LIST}
+    if os.path.exists(PORTFOLIO_FILE):
+        try:
+            with open(PORTFOLIO_FILE, 'r') as f:
+                loaded = json.load(f)
+                for k, v in loaded.items(): st.session_state.portfolio[k] = v
+        except: pass
+
+if 'portfolio_isa' not in st.session_state:
+    st.session_state.portfolio_isa = {asset: {'shares':0.0, 'avg_price':0.0, 'fx':1350.0} for asset in ASSET_LIST}
+    if os.path.exists(PORTFOLIO_ISA_FILE):
+        try:
+            with open(PORTFOLIO_ISA_FILE, 'r') as f:
+                loaded = json.load(f)
+                for k, v in loaded.items(): st.session_state.portfolio_isa[k] = v
+        except: pass
+
+if 'portfolio_toss' not in st.session_state:
+    st.session_state.portfolio_toss = {asset: {'shares':0.0, 'avg_price':0.0, 'fx':1350.0} for asset in ASSET_LIST}
+    if os.path.exists(PORTFOLIO_TOSS_FILE):
+        try:
+            with open(PORTFOLIO_TOSS_FILE, 'r') as f:
+                loaded = json.load(f)
+                for k, v in loaded.items(): st.session_state.portfolio_toss[k] = v
+        except: pass
+
+sanitize_portfolio(st.session_state.portfolio)
+sanitize_portfolio(st.session_state.portfolio_isa)
+sanitize_portfolio(st.session_state.portfolio_toss)
+
+def save_portfolio_to_disk():
+    try:
+        with open(PORTFOLIO_FILE, 'w') as f: json.dump(st.session_state.portfolio, f)
+        with open(PORTFOLIO_ISA_FILE, 'w') as f: json.dump(st.session_state.portfolio_isa, f)
+        with open(PORTFOLIO_TOSS_FILE, 'w') as f: json.dump(st.session_state.portfolio_toss, f)
+    except: pass
     st.session_state['_needs_ls_save'] = True
 
 
