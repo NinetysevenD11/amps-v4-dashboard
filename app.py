@@ -1537,7 +1537,7 @@ def _pf_editor(height=355):
             
             save_portfolio_to_disk(); st.session_state.rebal_locked=False; st.rerun()
 
-    def _pie_charts():
+def _pie_charts():
         _pie_colors, _pie_cfg = [line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0','#059669','#047857','#065F46','#D1FAE5'], dict(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="DM Mono", color=t_color), showlegend=True, legend=dict(orientation='v', x=1.0, y=0.5, font=dict(size=8, family='DM Mono'), bgcolor='rgba(0,0,0,0)'), margin=dict(l=0, r=70, t=28, b=0), height=200)
         _rb1, _rb2 = st.columns(2)
         _lcur, _vcur = [a for a in target_assets if curr_vals.get(a, 0) > 0], [curr_vals.get(a, 0) for a in target_assets if curr_vals.get(a, 0) > 0]
