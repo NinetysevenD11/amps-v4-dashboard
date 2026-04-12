@@ -1499,7 +1499,6 @@ def _pf_editor(height=355):
                 "Return(%)": ret_pct
             })
             
-        # 💡 TOSS 계좌일 경우 종목(Asset)과 현재가 잠금 해제 및 행 추가/삭제 허용
         disabled_cols = ["Return(%)"] if is_toss else ["Asset", "Current Price($)", "Return(%)"]
         row_mode = "dynamic" if is_toss else "fixed"
 
@@ -1538,9 +1537,7 @@ def _pf_editor(height=355):
             
             save_portfolio_to_disk(); st.session_state.rebal_locked=False; st.rerun()
 
-
-
-def _pie_charts():
+    def _pie_charts():
         _pie_colors, _pie_cfg = [line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0','#059669','#047857','#065F46','#D1FAE5'], dict(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="DM Mono", color=t_color), showlegend=True, legend=dict(orientation='v', x=1.0, y=0.5, font=dict(size=8, family='DM Mono'), bgcolor='rgba(0,0,0,0)'), margin=dict(l=0, r=70, t=28, b=0), height=200)
         _rb1, _rb2 = st.columns(2)
         _lcur, _vcur = [a for a in target_assets if curr_vals.get(a, 0) > 0], [curr_vals.get(a, 0) for a in target_assets if curr_vals.get(a, 0) > 0]
@@ -1560,6 +1557,14 @@ def _pie_charts():
                 with st.container(border=True): st.plotly_chart(_ft, use_container_width=True)
             else:
                 st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;"><span style="font-family:DM Mono,monospace;font-size:0.7em;color:#CCCCCC;">자유 적립식 계좌</span><span style="font-family:DM Mono,monospace;font-size:0.5em;color:#DDDDDD;margin-top:4px;">(목표 비중 없음)</span></div>', unsafe_allow_html=True)
+
+    def _delta_bar():
+        _dlabels, _dvals = [a for a in target_assets if abs(live_diff_vals.get(a, 0)) >= 1.0], [live_diff_vals.get(a, 0) for a in target_assets if abs(live_diff_vals.get(a, 0)) >= 1.0]
+        if _dlabels:
+            _fd = go.Figure(go.Bar(x=_dlabels, y=_dvals, marker_color=[C_GREEN if v > 0 else C_RED for v in _dvals], text=[f"${v:+,.0f}" for v in _dvals], textposition='outside', textfont=dict(size=8, family='DM Mono'), marker_line_width=0))
+            _fd.update_layout(title=dict(text="Δ Rebalancing ($)", font=dict(family='DM Mono', size=10, color=t_color)), height=185, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color=t_color, family="DM Mono", size=8), showlegend=False, margin=dict(t=24, b=4, l=0, r=0)); _fd.update_xaxes(**_ax_r, tickfont=dict(size=8)); _fd.update_yaxes(**_ax_r)
+            with st.container(border=True): st.plotly_chart(_fd, use_container_width=True)
+        else: st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);height:185px;display:flex;align-items:center;justify-content:center;"><span style="font-family:DM Mono,monospace;font-size:0.68em;color:#CCCCCC;">Δ 없음</span></div>', unsafe_allow_html=True)
 
 
 
