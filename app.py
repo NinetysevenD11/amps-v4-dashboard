@@ -1493,12 +1493,13 @@ elif page == "💼 Portfolio":
 
 
 
-def _pf_editor(height=355):
+    def _pf_editor(height=355):
         edata = []
-        for a in target_assets:
+        for a in ASSET_LIST:
+            # 💡 st.session_state.portfolio 대신 active_pf 로 교체
             shares = float(active_pf[a].get('shares', 0.0))
             avg_p = float(active_pf[a].get('avg_price', 1.0 if a == 'CASH' else 0.0))
-            cur_p = current_prices.get(a, 0.0) 
+            cur_p = cp[a] 
             
             ret_pct = ((cur_p / avg_p) - 1) * 100 if a != 'CASH' and avg_p > 0 else 0.0
             
@@ -1510,18 +1511,13 @@ def _pf_editor(height=355):
                 "Return(%)": ret_pct
             })
             
-        disabled_cols = ["Return(%)"] if is_toss else ["Asset", "Current Price($)", "Return(%)"]
-        row_mode = "dynamic" if is_toss else "fixed"
-
         df_edited = st.data_editor(
-            pd.DataFrame(edata) if edata else pd.DataFrame(columns=["Asset", "Shares", "Avg Price($)", "Current Price($)", "Return(%)"]), 
-            disabled=disabled_cols, 
+            pd.DataFrame(edata), 
+            disabled=["Asset", "Current Price($)", "Return(%)"], 
             hide_index=True, 
-            num_rows=row_mode, 
             use_container_width=True, 
             height=height, 
             column_config={
-                "Asset": st.column_config.TextColumn("Asset (종목)"),
                 "Shares": st.column_config.NumberColumn("Shares", format="%.4f"), 
                 "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"),
                 "Current Price($)": st.column_config.NumberColumn("Current($)", format="%.2f"),
@@ -1529,202 +1525,301 @@ def _pf_editor(height=355):
             }
         )
         
-        if not pd.DataFrame(edata).equals(df_edited):
-            if is_toss:
-                new_pf = {}
-                for _, row in df_edited.iterrows():
-                    asset_name = str(row["Asset"]).strip()
-                    if asset_name and asset_name.lower() != "nan":
-                        new_pf[asset_name] = {
-                            'shares': float(row["Shares"] if pd.notna(row["Shares"]) else 0.0), 
-                            'avg_price': float(row["Avg Price($)"] if pd.notna(row["Avg Price($)"]) else 0.0),
-                            'cur_price': float(row["Current Price($)"] if pd.notna(row["Current Price($)"]) else 0.0)
-                        }
-                active_pf.clear()
-                active_pf.update(new_pf)
-            else:
-                for _, row in df_edited.iterrows(): 
-                    active_pf[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"])}
-            
+        df_input_only = df_edited[["Asset", "Shares", "Avg Price($)"]]
+        df_orig_input = pd.DataFrame(edata)[["Asset", "Shares", "Avg Price($)"]]
+        
+        if not df_input_only.equals(df_orig_input):
+            for _, row in df_edited.iterrows(): 
+                # 💡 선택된 계좌(active_pf)에 저장되도록 변경
+                active_pf[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"])}
             save_portfolio_to_disk(); st.session_state.rebal_locked=False; st.rerun()
 
-def _pie_charts():
+
+
+    def _pie_charts():
+
         _pie_colors, _pie_cfg = [line_c,'#B0B0BE','#34D399','#6EE7B7','#A7F3D0','#059669','#047857','#065F46','#D1FAE5'], dict(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family="DM Mono", color=t_color), showlegend=True, legend=dict(orientation='v', x=1.0, y=0.5, font=dict(size=8, family='DM Mono'), bgcolor='rgba(0,0,0,0)'), margin=dict(l=0, r=70, t=28, b=0), height=200)
+
         _rb1, _rb2 = st.columns(2)
-        _lcur, _vcur = [a for a in target_assets if curr_vals.get(a, 0) > 0], [curr_vals.get(a, 0) for a in target_assets if curr_vals.get(a, 0) > 0]
-        
+
+        _lcur, _vcur = [a for a in ASSET_LIST if curr_vals[a] > 0], [curr_vals[a] for a in ASSET_LIST if curr_vals[a] > 0]
+
         with _rb1:
+
             if sum(_vcur) > 0:
+
                 _fc = go.Figure(go.Pie(labels=_lcur, values=_vcur, hole=.55, textinfo='percent', textfont=dict(size=9), marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))))
+
                 _fc.update_layout(title=dict(text="Current", font=dict(family="DM Mono", size=11, color=t_color), x=0), **_pie_cfg)
+
                 with st.container(border=True): st.plotly_chart(_fc, use_container_width=True)
+
             else: st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);height:200px;display:flex;align-items:center;justify-content:center;"><span style="font-family:DM Mono,monospace;font-size:0.7em;color:#CCCCCC;">포지션 없음</span></div>', unsafe_allow_html=True)
-        
-        _ltgt, _vtgt = [a for a in target_assets if target_weights.get(a, 0) > 0], [target_weights.get(a, 0) for a in target_assets if target_weights.get(a, 0) > 0]
+
+        _ltgt, _vtgt = [a for a in ASSET_LIST if target_weights.get(a, 0) > 0], [target_weights[a] for a in ASSET_LIST if target_weights.get(a, 0) > 0]
+
         with _rb2:
-            if _vtgt:
-                _ft = go.Figure(go.Pie(labels=_ltgt, values=_vtgt, hole=.55, textinfo='percent', textfont=dict(size=9), marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))))
-                _ft.update_layout(title=dict(text=f"Target  R{curr_regime}", font=dict(family="DM Mono", size=11, color=t_color), x=0), **_pie_cfg)
-                with st.container(border=True): st.plotly_chart(_ft, use_container_width=True)
-            else:
-                st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;"><span style="font-family:DM Mono,monospace;font-size:0.7em;color:#CCCCCC;">자유 적립식 계좌</span><span style="font-family:DM Mono,monospace;font-size:0.5em;color:#DDDDDD;margin-top:4px;">(목표 비중 없음)</span></div>', unsafe_allow_html=True)
+
+            _ft = go.Figure(go.Pie(labels=_ltgt, values=_vtgt, hole=.55, textinfo='percent', textfont=dict(size=9), marker=dict(colors=_pie_colors, line=dict(color='#FAFAF7', width=1.5))))
+
+            _ft.update_layout(title=dict(text=f"Target  R{curr_regime}", font=dict(family="DM Mono", size=11, color=t_color), x=0), **_pie_cfg)
+
+            with st.container(border=True): st.plotly_chart(_ft, use_container_width=True)
+
+
 
     def _delta_bar():
-        _dlabels, _dvals = [a for a in target_assets if abs(live_diff_vals.get(a, 0)) >= 1.0], [live_diff_vals.get(a, 0) for a in target_assets if abs(live_diff_vals.get(a, 0)) >= 1.0]
+
+        _dlabels, _dvals = [a for a in ASSET_LIST if abs(live_diff_vals[a]) >= 1.0], [live_diff_vals[a] for a in ASSET_LIST if abs(live_diff_vals[a]) >= 1.0]
+
         if _dlabels:
+
             _fd = go.Figure(go.Bar(x=_dlabels, y=_dvals, marker_color=[C_GREEN if v > 0 else C_RED for v in _dvals], text=[f"${v:+,.0f}" for v in _dvals], textposition='outside', textfont=dict(size=8, family='DM Mono'), marker_line_width=0))
+
             _fd.update_layout(title=dict(text="Δ Rebalancing ($)", font=dict(family='DM Mono', size=10, color=t_color)), height=185, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color=t_color, family="DM Mono", size=8), showlegend=False, margin=dict(t=24, b=4, l=0, r=0)); _fd.update_xaxes(**_ax_r, tickfont=dict(size=8)); _fd.update_yaxes(**_ax_r)
+
             with st.container(border=True): st.plotly_chart(_fd, use_container_width=True)
+
         else: st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);height:185px;display:flex;align-items:center;justify-content:center;"><span style="font-family:DM Mono,monospace;font-size:0.68em;color:#CCCCCC;">Δ 없음</span></div>', unsafe_allow_html=True)
 
+
+
     def _target_weights_block():
+
         _wt_items = sorted([(k, v) for k, v in target_weights.items() if v > 0], key=lambda x: x[1], reverse=True)
+
         _max_wt = max(v for _, v in _wt_items) if _wt_items else 1
+
         _wt_rows = ""
+
         for _wk, _wv in _wt_items:
+
             _wpct, _bw, _cp2 = _wv * 100, int(_wv / _max_wt * 100), (curr_vals.get(_wk, 0) / total_val_usd * 100) if total_val_usd > 0 else 0
+
             _dp = _wpct - _cp2
+
             _dc = "#059669" if _dp > 0.5 else ("#DC2626" if _dp < -0.5 else "#9494A0")
+
             _ds = f"{_dp:+.1f}%" if abs(_dp) > 0.5 else "—"
+
             _wt_rows += f'<div style="padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.04);"><div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;"><span style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:700;color:{tc_body};">{_wk}</span><div style="display:flex;gap:3px;align-items:baseline;"><span style="font-family:DM Mono,monospace;font-size:0.84em;font-weight:600;color:{main_color};">{_wpct:.0f}%</span><span style="font-family:DM Mono,monospace;font-size:0.58em;color:{_dc};">{_ds}</span></div></div><div style="height:4px;background:rgba(0,0,0,0.07);"><div style="height:4px;width:{_bw}%;background:{main_color};"></div></div></div>'
+
         with st.container(border=True): st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.55em;font-weight:600;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid rgba(0,0,0,0.08);">Target Weights · R{curr_regime}</div><div>{_wt_rows}</div>', unsafe_allow_html=True)
 
+
+
     def generate_rebal_plan():
+
         _s_px = dict(current_prices)
+
         _s_vals = dict(curr_vals)
+
         _s_total = total_val_usd
+
         _s_tgtw = dict(target_weights)
-        _s_diff = {a: (_s_total * _s_tgtw.get(a, 0.0)) - _s_vals.get(a, 0.0) for a in ASSET_LIST}
+
+        _s_diff = {a: (_s_total * _s_tgtw.get(a, 0.0)) - _s_vals[a] for a in ASSET_LIST}
+
+
 
         _sell_list, _buy_list, _hold_list = [], [], []
+
         for asset in ASSET_LIST:
+
             if asset == 'CASH': 
+
                 _hold_list.append(asset)
+
                 continue
 
-            _cp = _s_px.get(asset, 1.0) if _s_px.get(asset, 0.0) > 0 else 1.0
-            _diff = _s_diff.get(asset, 0.0)
+
+
+            _cp = _s_px[asset] if _s_px[asset] > 0 else 1.0
+
+            _diff = _s_diff[asset]
+
             _threshold = _cp * 0.05 
+
             
+
             _sh = int(abs(_diff) / _cp)
+
             if _diff < -_threshold and _sh >= 1: 
+
                 _sell_list.append((asset, -(_sh * _cp), _sh, _cp))
+
             elif _diff > _threshold and _sh >= 1: 
+
                 _buy_list.append((asset, (_sh * _cp), _sh, _cp))
-            elif _s_vals.get(asset, 0.0) > 0 or _s_tgtw.get(asset, 0) > 0: 
+
+            elif _s_vals[asset] > 0 or _s_tgtw.get(asset, 0) > 0: 
+
                 _hold_list.append(asset)
+
                 
+
         _sell_list.sort(key=lambda x: x[1])
+
         _buy_list.sort(key=lambda x: -x[1])
+
         
+
         st.session_state.rebal_plan = {
+
             "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+
             "total": _s_total, "regime": curr_regime,
+
             "sells": _sell_list, "buys": _buy_list, "holds": _hold_list,
+
             "prices": _s_px, "vals": _s_vals, "tgtw": _s_tgtw
+
         }
+
         st.session_state.rebal_locked = True
 
+
+
     def _rebalancing_matrix(is_mobile=False):
+
         if total_val_usd <= 0:
+
             st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);padding:28px;text-align:center;"><span style="font-family:DM Mono,monospace;font-size:0.8em;color:#CCCCCC;">포지션을 입력하면 리밸런싱 매트릭스가 표시됩니다.</span></div>', unsafe_allow_html=True)
+
             return
+
+
 
         if not st.session_state.rebal_locked or not st.session_state.rebal_plan:
+
             st.markdown(apply_theme(f'<div style="background:rgba(217,119,6,0.08);border:1px solid rgba(217,119,6,0.3);padding:16px;text-align:center;margin-bottom:14px;"><div style="font-size:0.85em;color:#D97706;margin-bottom:10px;">리밸런싱 도중 포지션 변경 시 지침이 바뀌는 것을 방지하려면<br>현재 상태를 <b>고정(Snapshot)</b>해야 합니다.</div></div>'), unsafe_allow_html=True)
+
             if st.button("📸 리밸런싱 액션 플랜 생성 (지침 고정)", use_container_width=True):
+
                 generate_rebal_plan()
+
                 st.rerun()
+
             return
 
+
+
         plan = st.session_state.rebal_plan
+
         
+
         _c1, _c2 = st.columns([3, 1]) if not is_mobile else st.columns([2,1])
+
         with _c1:
+
             st.markdown(apply_theme(f'<div style="background:rgba({r_c},{g_c},{b_c},0.07);border:1px solid rgba({r_c},{g_c},{b_c},0.22);padding:8px 14px;display:flex;align-items:center;gap:8px;"><span style="font-family:DM Mono,monospace;font-size:0.62em;color:{main_color};">✔ 고정된 플랜 — {plan["ts"]}</span></div>'), unsafe_allow_html=True)
+
         with _c2:
+
             if st.button("🔄 초기화", use_container_width=True, key=f"reset_plan_{is_mobile}"):
+
                 st.session_state.rebal_locked = False
+
                 st.session_state.rebal_plan = None
+
                 st.rerun()
+
+
 
         st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
+
+
         _s_total, _s_tgtw, _s_vals = plan["total"], plan["tgtw"], plan["vals"]
+
         _sell_list, _buy_list = plan["sells"], plan["buys"]
 
+
+
         _total_sell_proceeds = sum(abs(d) for a, d, sh, cp in _sell_list)
+
         _existing_cash = _s_vals.get('CASH', 0.0)
+
         _available_cash = _total_sell_proceeds + _existing_cash
+
         _total_buy_needed = sum(d for a, d, sh, cp in _buy_list)
 
+
+
         if not is_mobile:
+
             _ep1, _ep2, _ep3 = st.columns([1, 0.12, 1])
+
             with _ep1:
+
                 _sell_rows = ""
+
                 for asset, diff, sh, cp in _sell_list:
+
                     _sh_str = f"{int(sh):,.0f}주" 
+
                     _sell_rows += f'<tr style="background:rgba(220,38,38,0.025);"><td style="font-weight:700;color:#059669;font-family:DM Mono,monospace;font-size:0.84em;">{asset}</td><td style="color:{tc_muted};">${cp:.2f}</td><td style="color:{tc_label};">{_s_vals[asset]:,.0f}</td><td style="color:{main_color};font-weight:700;">{_s_tgtw.get(asset,0)*100:.0f}%</td><td style="color:{tc_label};">{_s_total * _s_tgtw.get(asset, 0.0):,.0f}</td><td><span style="color:#DC2626;font-weight:600;">-${abs(diff):,.0f}</span></td><td><span style="font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;color:#DC2626;background:rgba(220,38,38,0.08);padding:2px 8px;border-left:2px solid #DC2626;">▼ SELL</span></td><td style="color:{tc_muted};font-size:0.8em;">{_sh_str}</td></tr>'
+
                 st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:700;color:#DC2626;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:6px;padding-bottom:5px;border-bottom:2px solid #DC2626;">STEP 1  ·  매도 실행</div>', unsafe_allow_html=True)
+
                 if _sell_rows:
+
                     with st.container(border=True): st.markdown('<div style="overflow-x:auto;"><table class="mint-table"><thead><tr><th style="text-align:left;">Asset</th><th>기준가</th><th>기준액</th><th>목표%</th><th>목표액</th><th>매도금액</th><th style="text-align:center;">Action</th><th>수량</th></tr></thead><tbody>' + _sell_rows + '</tbody></table></div>', unsafe_allow_html=True)
+
                     st.markdown(apply_theme(f'<div style="background:rgba(220,38,38,0.05);border:1px solid rgba(220,38,38,0.2);padding:8px 14px;margin-top:6px;"><span style="font-family:DM Mono,monospace;font-size:0.62em;color:#DC2626;font-weight:600;">매각 대금  ${_total_sell_proceeds:,.0f}</span>{f"  <span style=\'color:{tc_label};\'>+ 보유현금 ${_existing_cash:,.0f}</span>" if _existing_cash > 1 else ""}  →  <span style="color:{tc_body};font-weight:700;">가용 현금 ${_available_cash:,.0f}</span></div>'), unsafe_allow_html=True)
+
                 else: st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);padding:20px;text-align:center;"><span style="font-family:DM Mono,monospace;font-size:0.72em;color:#CCCCCC;">매도 항목 없음</span></div>', unsafe_allow_html=True)
+
             
+
             with _ep2: st.markdown(f'<div style="display:flex;align-items:center;justify-content:center;height:100%;min-height:120px;font-size:1.6em;color:{tc_label};">→</div>', unsafe_allow_html=True)
+
             
+
             with _ep3:
+
                 _remaining_cash, _buy_rows = _available_cash, ""
+
                 for asset, diff, sh, cp in _buy_list:
+
                     _actual_sh = int(min(sh, _remaining_cash / cp)) 
+
                     _actual_buy = _actual_sh * cp
+
                     if _actual_sh < 1: continue
+
                         
+
                     _shortfall = diff - _actual_buy
+
                     _buy_color = "#059669" if _actual_buy >= diff * 0.95 else "#D97706"
+
                     _sh_str = f"{int(_actual_sh):,.0f}주" 
+
                     
+
                     _buy_rows += f'<tr style="background:rgba(5,150,105,0.025);"><td style="font-weight:700;color:#059669;font-family:DM Mono,monospace;font-size:0.84em;">{asset}</td><td style="color:{tc_muted};">${cp:.2f}</td><td style="color:{tc_label};">{_s_vals[asset]:,.0f}</td><td style="color:{main_color};font-weight:700;">{_s_tgtw.get(asset,0)*100:.0f}%</td><td style="color:{tc_label};">{_s_total * _s_tgtw.get(asset, 0.0):,.0f}</td><td><span style="color:{_buy_color};font-weight:600;">+${_actual_buy:,.0f}</span>{f"<span style=\'font-family:DM Mono,monospace;font-size:0.62em;color:#D97706;margin-left:4px;\'>(부족 ${_shortfall:,.0f})</span>" if _shortfall > 1 else ""}</td><td><span style="font-family:DM Mono,monospace;font-size:0.7em;font-weight:700;color:{_buy_color};background:rgba(5,150,105,0.09);padding:2px 8px;border-left:2px solid {_buy_color};">▲ BUY</span></td><td style="color:{tc_muted};font-size:0.8em;">{_sh_str}</td></tr>'
+
                     _remaining_cash -= _actual_buy
+
                     if _remaining_cash <= 0: break
 
+
+
                 st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.58em;font-weight:700;color:#059669;letter-spacing:0.16em;text-transform:uppercase;margin-bottom:6px;padding-bottom:5px;border-bottom:2px solid #059669;">STEP 2  ·  매수 실행</div>', unsafe_allow_html=True)
+
                 if _buy_rows:
+
                     with st.container(border=True): st.markdown('<div style="overflow-x:auto;"><table class="mint-table"><thead><tr><th style="text-align:left;">Asset</th><th>기준가</th><th>기준액</th><th>목표%</th><th>목표액</th><th>매수금액</th><th style="text-align:center;">Action</th><th>수량</th></tr></thead><tbody>' + _buy_rows + '</tbody></table></div>', unsafe_allow_html=True)
+
                     st.markdown(apply_theme(f'<div style="background:rgba({r_c},{g_c},{b_c},0.06);border:1px solid rgba({r_c},{g_c},{b_c},0.22);padding:8px 14px;margin-top:6px;"><span style="font-family:DM Mono,monospace;font-size:0.62em;color:{main_color};font-weight:600;">총 매수 ${min(_total_buy_needed, _available_cash):,.0f}</span>{f"  <span style=\'color:{tc_label};\'>잔여 현금 ${max(_remaining_cash, 0):,.0f}</span>" if max(_remaining_cash, 0) > 1 else ""}</div>'), unsafe_allow_html=True)
+
                 else: st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);padding:20px;text-align:center;"><span style="font-family:DM Mono,monospace;font-size:0.72em;color:#CCCCCC;">매수 항목 없음</span></div>', unsafe_allow_html=True)
 
-            _hold_items = plan["holds"]
-            if _hold_items: st.markdown(f'<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:8px 14px;background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);"><span style="font-family:DM Mono,monospace;font-size:0.58em;color:{tc_label};letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap;">HOLD</span><div style="display:flex;gap:4px;flex-wrap:wrap;">{" ".join([f"<span style=\'background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);font-family:DM Mono,monospace;font-size:0.68em;color:{tc_label};padding:2px 10px;\'>{a}</span>" for a in _hold_items])}</div></div>', unsafe_allow_html=True)
 
-        else:
-            st.markdown(apply_theme(f'<div style="background:rgba(220,38,38,0.05);border:1px solid rgba(220,38,38,0.2);padding:8px 14px;margin-bottom:10px;"><span style="font-family:DM Mono,monospace;font-size:0.62em;color:#DC2626;font-weight:600;">매각 대금  ${_total_sell_proceeds:,.0f}</span>{f"  <span style=\'color:{tc_label};\'>+ 보유현금 ${_existing_cash:,.0f}</span>" if _existing_cash > 1 else ""}  →  <span style="color:{tc_body};font-weight:700;">가용 현금 ${_available_cash:,.0f}</span></div>'), unsafe_allow_html=True)
-            
-            _remaining_cash = _available_cash
-            for action_type, lst in [("SELL", _sell_list), ("BUY", _buy_list)]:
-                for asset, diff, sh, cp in lst:
-                    if action_type == "BUY":
-                        _actual_sh = int(min(sh, _remaining_cash / cp))
-                        _actual_buy = _actual_sh * cp
-                        if _actual_sh < 1: continue
-                        _diff_to_show = _actual_buy
-                        _sh_to_show = _actual_sh
-                        _remaining_cash -= _actual_buy
-                    else:
-                        _diff_to_show = abs(diff)
-                        _sh_to_show = sh
-                    
-                    _curv = _s_vals[asset]
-                    _tgtw = _s_tgtw.get(asset, 0.0)
-                    _curw = (_curv / _s_total * 100) if _s_total > 0 else 0
-                    
-                    _act_txt, _act_c, _rbg = ("▲ BUY", "#059669", "rgba(5,150,105,0.035)") if action_type=="BUY" else ("▼ SELL", "#DC2626", "rgba(220,38,38,0.035)")
-                    _delta_str = f"+${_diff_to_show:,.0f}" if action_type=="BUY" else f"-${_diff_to_show:,.0f}"
-                    _sh_str = f"{int(_sh_to_show):,.0f}주"
 
-                    st.markdown(apply_theme(f'<div style="background:{_rbg};border:1px solid rgba(0,0,0,0.09);border-left:3px solid {_act_c};padding:10px 14px;margin-bottom:5px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;"><span style="font-family:DM Mono,monospace;font-size:0.88em;font-weight:700;color:#059669;">{asset}</span><span style="font-family:DM Mono,monospace;font-size:0.76em;font-weight:700;color:{_act_c};background:rgba(0,0,0,0.04);padding:3px 10px;border:1px solid {_act_c}40;">{_act_txt}</span></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;"><div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">기준액</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:{tc_body};font-variant-numeric:tabular-nums;">${_curv:,.0f} <span style="font-size:0.7em;color:{tc_label};">({_curw:.0f}%)</span></div></div><div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">목표 %</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:{main_color};font-weight:600;">{_tgtw*100:.0f}%</div></div><div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">Δ 금액</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:{_act_c};font-weight:600;">{_delta_str}</div></div><div><div style="font-family:DM Mono,monospace;font-size:0.52em;color:{tc_label};text-transform:uppercase;">수량</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:{_act_c};font-weight:600;font-variant-numeric:tabular-nums;">{_sh_str}</div></div></div></div>'), unsafe_allow_html=True)
-            
             _hold_items = plan["holds"]
+
             if _hold_items: st.markdown(f'<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:8px 14px;background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);"><span style="font-family:DM Mono,monospace;font-size:0.58em;color:{tc_label};letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap;">HOLD</span><div style="display:flex;gap:4px;flex-wrap:wrap;">{" ".join([f"<span style=\'background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);font-family:DM Mono,monospace;font-size:0.68em;color:{tc_label};padding:2px 10px;\'>{a}</span>" for a in _hold_items])}</div></div>', unsafe_allow_html=True)
 
 
