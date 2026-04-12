@@ -596,31 +596,18 @@ def fetch_realtime_prices():
 
 
 @st.cache_data(ttl=900)
-
 def fetch_macro_news():
-
     headlines_for_ai, news_items = [], []
-
     try:
-
-        # 💡 "미국 금리", "FOMC" 등으로 좁히고, 한국 관련 단어(-한은, -한국은행, -코스피 등)는 검색에서 제외합니다.
-
-        search_query = '"미국증시" OR "나스닥" OR "연준" OR "FOMC" OR "파월" OR "미국 금리" OR "미국 CPI" -한은 -한국은행 -코스피 -코스닥 -금통위'
-
+        # 💡 끝에 when:12h 를 추가하여 최근 12시간 이내 기사만 가져오도록 강제합니다.
+        search_query = '("미국증시" OR "나스닥" OR "연준" OR "FOMC" OR "파월" OR "미국 금리" OR "미국 CPI" -한은 -한국은행 -코스피 -코스닥 -금통위) when:12h'
         q = urllib.parse.quote(search_query)
-
         url  = f"https://news.google.com/rss/search?q={q}&hl=ko&gl=KR&ceid=KR:ko"
-
         root = ET.fromstring(urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})).read())
-
         for item in root.findall('.//item')[:12]:
-
             t, l, d = item.find('title').text, item.find('link').text, item.find('pubDate').text
-
             headlines_for_ai.append(t); news_items.append({"title":t,"link":l,"date":d[:-4]})
-
     except: pass
-
     return headlines_for_ai, news_items
 
 
