@@ -2414,7 +2414,8 @@ elif page == "🍫 12-Pack Radar":
 
                 import google.generativeai as genai
 
-                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                import os
+                genai.configure(api_key=os.environ.get("GEMINI_API_KEY", st.secrets.get("GEMINI_API_KEY", "")))
 
                 _valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
 
@@ -2592,7 +2593,8 @@ elif page == "📰 Macro News":
 
                     with st.spinner("AI 분석 중..."):
 
-                        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                        import os
+                        genai.configure(api_key=os.environ.get("GEMINI_API_KEY", st.secrets.get("GEMINI_API_KEY", "")))
 
                         _valid_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
 
@@ -2661,7 +2663,8 @@ elif page == "🤖 AI Quant Assistant":
         with st.chat_message("assistant"):
             try:
                 import google.generativeai as genai
-                genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                import os
+                genai.configure(api_key=os.environ.get("GEMINI_API_KEY", st.secrets.get("GEMINI_API_KEY", "")))
                 valid = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
                 target = next((m for m in valid if 'gemini-1.5-flash' in m), valid[0]) if valid else None
                 model = genai.GenerativeModel(target.replace('models/',''))
