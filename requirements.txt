@@ -1,7 +1,7 @@
-streamlit>=1.35.0
-yfinance>=0.2.40
-pandas>=2.0.0
-pandas-ta>=0.3.14b
-numpy>=1.26.0
-plotly>=5.20.0
-google-generativeai>=0.5.0
+streamlit
+yfinance
+pandas
+pandas_ta
+numpy
+plotly
+google-generativeai
