@@ -952,17 +952,88 @@ elif page == "💼 Portfolio":
         st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
 
         if is_toss:
-            t_col_l, t_col_r = st.columns([1, 1])
+            # — 토스 스타일 종목 카드 —
+            def _toss_card(ticker, shares, avg_p, cur_p, cur_fx_val):
+                if shares <= 0: return ""
+                pnl_pct_card = ((cur_p / avg_p) - 1) * 100 if avg_p > 0 else 0.0
+                pnl_usd_card = (cur_p - avg_p) * shares if avg_p > 0 else 0.0
+                total_usd = cur_p * shares
+                total_krw = total_usd * cur_fx_val
+                pnl_color = "#059669" if pnl_pct_card >= 0 else "#DC2626"
+                pnl_arrow = "▲" if pnl_pct_card >= 0 else "▼"
+                return f'''<div style="background:#FFFFFF;border:1px solid rgba(0,0,0,0.08);border-radius:16px;padding:20px 22px;margin-bottom:10px;transition:box-shadow 0.2s;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                        <div>
+                            <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:1.05em;font-weight:700;color:#0F172A;">{ticker}</div>
+                            <div style="font-family:'DM Mono',monospace;font-size:0.65em;color:#9494A0;margin-top:2px;">{shares:.4g}주 보유</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-family:'DM Mono',monospace;font-size:1.15em;font-weight:700;color:#0F172A;">${cur_p:,.2f}</div>
+                            <div style="font-family:'DM Mono',monospace;font-size:0.72em;color:{pnl_color};font-weight:600;margin-top:2px;">{pnl_arrow} {pnl_pct_card:+.2f}%</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(0,0,0,0.06);display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                        <div>
+                            <div style="font-family:'DM Mono',monospace;font-size:0.52em;color:#9494A0;letter-spacing:0.1em;text-transform:uppercase;">평균단가</div>
+                            <div style="font-family:'DM Mono',monospace;font-size:0.82em;color:#4A4A57;">${avg_p:,.2f}</div>
+                        </div>
+                        <div>
+                            <div style="font-family:'DM Mono',monospace;font-size:0.52em;color:#9494A0;letter-spacing:0.1em;text-transform:uppercase;">평가금액</div>
+                            <div style="font-family:'DM Mono',monospace;font-size:0.82em;color:#0F172A;">${total_usd:,.0f}</div>
+                            <div style="font-family:'DM Mono',monospace;font-size:0.62em;color:#9494A0;">₩{total_krw:,.0f}</div>
+                        </div>
+                        <div>
+                            <div style="font-family:'DM Mono',monospace;font-size:0.52em;color:#9494A0;letter-spacing:0.1em;text-transform:uppercase;">수익금</div>
+                            <div style="font-family:'DM Mono',monospace;font-size:0.82em;color:{pnl_color};font-weight:600;">{pnl_arrow} ${abs(pnl_usd_card):,.0f}</div>
+                        </div>
+                    </div>
+                </div>'''
+
+            _toss_total_usd = sum(active_pf[t].get('shares',0) * current_prices.get(t,0) for t in target_assets)
+            _toss_total_cost = sum(active_pf[t].get('shares',0) * active_pf[t].get('avg_price',0) for t in target_assets)
+            _toss_pnl = _toss_total_usd - _toss_total_cost
+            _toss_pnl_pct = (_toss_pnl / _toss_total_cost * 100) if _toss_total_cost > 0 else 0.0
+            _toss_pnl_c = "#059669" if _toss_pnl >= 0 else "#DC2626"
+
+            st.markdown(apply_theme(f'''<div style="background:linear-gradient(135deg, #FAFAF7 0%, #F0FDF4 100%);border:1px solid rgba(0,0,0,0.08);border-radius:20px;padding:24px 28px;margin-bottom:16px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <div style="font-family:'DM Mono',monospace;font-size:0.6em;color:#9494A0;letter-spacing:0.2em;text-transform:uppercase;">TOSS 장기투자</div>
+                        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:2em;font-weight:800;color:#0F172A;letter-spacing:-1px;margin-top:4px;">${_toss_total_usd:,.0f}</div>
+                        <div style="font-family:'DM Mono',monospace;font-size:0.78em;color:#9494A0;margin-top:2px;">₩{_toss_total_usd * cur_fx:,.0f}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-family:'DM Mono',monospace;font-size:1.4em;font-weight:700;color:{_toss_pnl_c};">{"▲" if _toss_pnl >= 0 else "▼"} {_toss_pnl_pct:+.2f}%</div>
+                        <div style="font-family:'DM Mono',monospace;font-size:0.78em;color:{_toss_pnl_c};">{"+" if _toss_pnl >= 0 else ""}${_toss_pnl:,.0f}</div>
+                        <div style="font-family:'DM Mono',monospace;font-size:0.58em;color:#9494A0;margin-top:4px;">투자원금 ${_toss_total_cost:,.0f}</div>
+                    </div>
+                </div>
+            </div>'''), unsafe_allow_html=True)
+
+            t_col_l, t_col_r = st.columns([1.2, 1])
             with t_col_l:
-                with st.container(border=True):
-                    st.markdown(_sl("TOSS Portfolio Input"), unsafe_allow_html=True)
-                    _pf_editor(500)
+                st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.6em;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(0,0,0,0.08);">보유 종목  ·  {len([t for t in target_assets if active_pf[t].get("shares",0) > 0])}개</div>', unsafe_allow_html=True)
+                _has_holdings = False
+                for t in sorted(target_assets, key=lambda x: active_pf[x].get('shares',0) * current_prices.get(x,0), reverse=True):
+                    _sh = active_pf[t].get('shares', 0)
+                    if _sh > 0:
+                        _has_holdings = True
+                        _avg = active_pf[t].get('avg_price', 0)
+                        _cur = current_prices.get(t, 0)
+                        st.markdown(_toss_card(t, _sh, _avg, _cur, cur_fx), unsafe_allow_html=True)
+                if not _has_holdings:
+                    st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.08);border-radius:16px;padding:40px;text-align:center;"><div style="font-size:2em;margin-bottom:8px;">🌱</div><div style="font-family:DM Mono,monospace;font-size:0.78em;color:#9494A0;">아래 에디터에서 종목을 추가하세요</div></div>', unsafe_allow_html=True)
             with t_col_r:
                 _pie_charts()
+                st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
                 with st.container(border=True):
                     st.markdown(_sl("Long-term Growth Insight"), unsafe_allow_html=True)
-                    st.success("🌱 이 계좌는 AMLS 전략과 무관하게 '무지성 적립'을 수행하는 장기 자산입니다.")
-                    st.info("리밸런싱 지침이 표시되지 않으며, 오직 수량을 모아가는 것에 집중하세요.")
+                    st.markdown(f'<div style="font-family:DM Sans,sans-serif;font-size:0.84em;color:{tc_muted};line-height:1.7;padding:4px 0;">🌱 이 계좌는 AMLS 전략과 무관하게 <b style="color:{tc_body};">무지성 적립</b>을 수행하는 장기 자산입니다.<br>리밸런싱 지침 없이 수량을 모아가는 것에 집중하세요.</div>', unsafe_allow_html=True)
+
+            st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown(_sl("TOSS Portfolio Editor"), unsafe_allow_html=True)
+                _pf_editor(300)
         else:
             _col_l, _col_r = st.columns([st.session_state.lc_lr_split, 100 - st.session_state.lc_lr_split])
             with _col_l:
