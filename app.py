@@ -697,7 +697,7 @@ elif page == "💼 Portfolio":
     target_assets = list(active_pf.keys()) if is_toss else ASSET_LIST
 
     current_prices = {t: (rt_prices.get(t, last_row.get(t, 1.0)) if t != 'CASH' else 1.0) for t in target_assets}
-    if is_toss:
+if is_toss:
     for t in target_assets:
         if t not in rt_prices and t not in df.columns:
             try:
