@@ -697,16 +697,16 @@ elif page == "💼 Portfolio":
     target_assets = list(active_pf.keys()) if is_toss else ASSET_LIST
 
 current_prices = {t: (rt_prices.get(t, last_row.get(t, 1.0)) if t != 'CASH' else 1.0) for t in target_assets}
-if is_toss:
-    for t in target_assets:
-        if t not in rt_prices and t not in df.columns:
-            try:
-                info = yf.Ticker(t).fast_info
-                p = info.get('last_price') or info.get('lastPrice')
-                if p and p > 0: current_prices[t] = float(p)
-                else: current_prices[t] = active_pf[t].get('cur_price', 0.0)
-            except:
-                current_prices[t] = active_pf[t].get('cur_price', 0.0)
+    if is_toss:
+        for t in target_assets:
+            if t not in rt_prices and t not in df.columns:
+                try:
+                    info = yf.Ticker(t).fast_info
+                    p = info.get('last_price') or info.get('lastPrice')
+                    if p and p > 0: current_prices[t] = float(p)
+                    else: current_prices[t] = active_pf[t].get('cur_price', 0.0)
+                except:
+                    current_prices[t] = active_pf[t].get('cur_price', 0.0)
 
    cur_fx = rt_prices.get('USDKRW=X', 1350.0)
    curr_vals = {a: active_pf[a].get('shares', 0.0) * current_prices[a] for a in target_assets}
