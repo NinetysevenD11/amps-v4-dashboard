@@ -1584,7 +1584,7 @@ def _delta_bar():
 
 
 
-    def _target_weights_block():
+def _target_weights_block():
 
         _wt_items = sorted([(k, v) for k, v in target_weights.items() if v > 0], key=lambda x: x[1], reverse=True)
 
@@ -1608,7 +1608,7 @@ def _delta_bar():
 
 
 
-    def generate_rebal_plan():
+def generate_rebal_plan():
 
         _s_px = dict(current_prices)
 
@@ -1680,7 +1680,7 @@ def _delta_bar():
 
 
 
-    def _rebalancing_matrix(is_mobile=False):
+def _rebalancing_matrix(is_mobile=False):
 
         if total_val_usd <= 0:
 
