@@ -696,7 +696,7 @@ elif page == "💼 Portfolio":
     active_pf = st.session_state.portfolio if "일반" in acc_choice else (st.session_state.portfolio_isa if "ISA" in acc_choice else st.session_state.portfolio_toss)
     target_assets = list(active_pf.keys()) if is_toss else ASSET_LIST
 
-current_prices = {t: (rt_prices.get(t, last_row.get(t, 1.0)) if t != 'CASH' else 1.0) for t in target_assets}
+    current_prices = {t: (rt_prices.get(t, last_row.get(t, 1.0)) if t != 'CASH' else 1.0) for t in target_assets}
     if is_toss:
         for t in target_assets:
             if t not in rt_prices and t not in df.columns:
@@ -708,9 +708,9 @@ current_prices = {t: (rt_prices.get(t, last_row.get(t, 1.0)) if t != 'CASH' else
                 except:
                     current_prices[t] = active_pf[t].get('cur_price', 0.0)
 
-   cur_fx = rt_prices.get('USDKRW=X', 1350.0)
-   curr_vals = {a: active_pf[a].get('shares', 0.0) * current_prices[a] for a in target_assets}
-   total_val_usd = sum(curr_vals.values())
+    cur_fx = rt_prices.get('USDKRW=X', 1350.0)
+    curr_vals = {a: active_pf[a].get('shares', 0.0) * current_prices[a] for a in target_assets}
+    total_val_usd = sum(curr_vals.values())
     total_val_krw = total_val_usd * cur_fx
     invested_cost = sum(active_pf[a].get('shares', 0.0) * active_pf[a].get('avg_price', 0.0) for a in target_assets if a != 'CASH')
     pnl_usd = total_val_usd - invested_cost
