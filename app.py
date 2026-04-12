@@ -689,19 +689,16 @@ if page == "📊 Dashboard":
 # ==========================================
 elif page == "💼 Portfolio":
     if 'acc_tab' not in st.session_state: st.session_state.acc_tab = "일반"
-    _tab_items = [("일반", "💼", "일반 계좌"), ("ISA", "🛡️", "ISA 계좌"), ("TOSS", "🌱", "TOSS 장기투자")]
-    _tab_html = '<div style="display:flex;gap:6px;margin-bottom:16px;padding:4px;background:rgba(0,0,0,0.03);border-radius:12px;">'
-    for _tid, _tico, _tname in _tab_items:
+    _tab_items = [("일반", "💼", "일반 계좌", "AMLS 레짐 연동"), ("ISA", "🛡️", "ISA 계좌", "절세 전략"), ("TOSS", "🌱", "TOSS 장기투자", "자유 적립")]
+    _tab_cols = st.columns(len(_tab_items))
+    for _i, (_tid, _tico, _tname, _tsub) in enumerate(_tab_items):
         _sel = st.session_state.acc_tab == _tid
-        _tab_html += f'<div style="flex:1;text-align:center;padding:10px 16px;border-radius:10px;cursor:pointer;transition:all 0.2s;background:{"#FFFFFF" if _sel else "transparent"};box-shadow:{"0 1px 3px rgba(0,0,0,0.08)" if _sel else "none"};border:1px solid {"rgba(0,0,0,0.06)" if _sel else "transparent"};"><div style="font-size:1.1em;margin-bottom:2px;">{_tico}</div><div style="font-family:DM Mono,monospace;font-size:0.72em;font-weight:{"700" if _sel else "400"};color:{"#0F172A" if _sel else "#9494A0"};letter-spacing:0.02em;">{_tname}</div></div>'
-    _tab_html += '</div>'
-    st.markdown(_tab_html, unsafe_allow_html=True)
-    _tab_cols = st.columns(3)
-    for _i, (_tid, _, _) in enumerate(_tab_items):
         with _tab_cols[_i]:
-            if st.button(_tid, key=f"acc_tab_{_tid}", use_container_width=True):
+            st.markdown(f'<div style="background:{"#FFFFFF" if _sel else "#FAFAF7"};border:{"2px solid "+main_color if _sel else "1px solid rgba(0,0,0,0.08)"};border-radius:14px;padding:14px 16px;text-align:center;{"box-shadow:0 2px 8px rgba(0,0,0,0.06);" if _sel else ""}"><div style="font-size:1.3em;margin-bottom:4px;">{_tico}</div><div style="font-family:DM Mono,monospace;font-size:0.78em;font-weight:{"700" if _sel else "400"};color:{"#0F172A" if _sel else "#9494A0"};">{_tname}</div><div style="font-family:DM Mono,monospace;font-size:0.56em;color:{main_color if _sel else "#BBBBBB"};margin-top:2px;">{_tsub}</div></div>', unsafe_allow_html=True)
+            if st.button(f"선택", key=f"acc_tab_{_tid}", use_container_width=True):
                 st.session_state.acc_tab = _tid; st.rerun()
-    st.markdown('<style>[data-testid="stHorizontalBlock"]:has(button[kind="secondary"]) button {background:transparent !important;border:none !important;color:transparent !important;height:1px !important;min-height:1px !important;padding:0 !important;margin:-20px 0 0 0 !important;opacity:0;}</style>', unsafe_allow_html=True)
+    st.markdown(f'<style>[data-testid="stHorizontalBlock"] [data-testid="stButton"] > button {{background:{bg_color} !important;border:1px solid rgba(0,0,0,0.10) !important;border-radius:8px !important;color:{tc_muted} !important;font-family:DM Mono,monospace !important;font-size:0.68em !important;padding:6px 12px !important;margin-top:6px !important;letter-spacing:0.05em;}}</style>', unsafe_allow_html=True)
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
     acc_choice = "🟦 일반 계좌" if st.session_state.acc_tab == "일반" else ("🟩 ISA 계좌" if st.session_state.acc_tab == "ISA" else "🧪 TOSS 장기투자")
     
     is_toss = "TOSS" in acc_choice
