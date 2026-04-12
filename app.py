@@ -1046,9 +1046,72 @@ elif page == "💼 Portfolio":
             with t_col_r:
                 _pie_charts()
                 st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+                # ── 투자 요약 카드 ──
+                _holdings = [(t, active_pf[t].get('shares',0), active_pf[t].get('avg_price',0), current_prices.get(t,0)) for t in target_assets if active_pf[t].get('shares',0) > 0]
+                _rets = [((cp/ap)-1)*100 for _,s,ap,cp in _holdings if ap > 0 and cp > 0]
+                _best = max(_holdings, key=lambda x: ((x[3]/x[2])-1)*100 if x[2]>0 else -999) if _holdings else None
+                _worst = min(_holdings, key=lambda x: ((x[3]/x[2])-1)*100 if x[2]>0 else 999) if _holdings else None
+                _avg_ret = sum(_rets)/len(_rets) if _rets else 0
+
                 with st.container(border=True):
-                    st.markdown(_sl("Long-term Growth Insight"), unsafe_allow_html=True)
-                    st.markdown(f'<div style="font-family:DM Sans,sans-serif;font-size:0.84em;color:{tc_muted};line-height:1.7;padding:4px 0;">🌱 이 계좌는 AMLS 전략과 무관하게 <b style="color:{tc_body};">무지성 적립</b>을 수행하는 장기 자산입니다.<br>리밸런싱 지침 없이 수량을 모아가는 것에 집중하세요.</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.55em;font-weight:600;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(0,0,0,0.08);">투자 요약</div>', unsafe_allow_html=True)
+                    _sum_items = f'''<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div style="background:#FAFAF7;border-radius:10px;padding:12px 14px;border:1px solid rgba(0,0,0,0.05);">
+                            <div style="font-family:DM Mono,monospace;font-size:0.52em;color:#9494A0;letter-spacing:0.1em;text-transform:uppercase;">보유 종목</div>
+                            <div style="font-family:DM Mono,monospace;font-size:1.3em;font-weight:700;color:#0F172A;">{len(_holdings)}개</div>
+                        </div>
+                        <div style="background:#FAFAF7;border-radius:10px;padding:12px 14px;border:1px solid rgba(0,0,0,0.05);">
+                            <div style="font-family:DM Mono,monospace;font-size:0.52em;color:#9494A0;letter-spacing:0.1em;text-transform:uppercase;">평균 수익률</div>
+                            <div style="font-family:DM Mono,monospace;font-size:1.3em;font-weight:700;color:{"#059669" if _avg_ret>=0 else "#DC2626"};">{_avg_ret:+.1f}%</div>
+                        </div>
+                        <div style="background:#FAFAF7;border-radius:10px;padding:12px 14px;border:1px solid rgba(0,0,0,0.05);">
+                            <div style="font-family:DM Mono,monospace;font-size:0.52em;color:#9494A0;letter-spacing:0.1em;text-transform:uppercase;">🏆 최고 수익</div>
+                            <div style="font-family:DM Mono,monospace;font-size:0.88em;font-weight:700;color:#059669;">{_best[0] if _best else "—"}</div>
+                            <div style="font-family:DM Mono,monospace;font-size:0.68em;color:#059669;">{((_best[3]/_best[2])-1)*100:+.1f}%</div>
+                        </div>
+                        <div style="background:#FAFAF7;border-radius:10px;padding:12px 14px;border:1px solid rgba(0,0,0,0.05);">
+                            <div style="font-family:DM Mono,monospace;font-size:0.52em;color:#9494A0;letter-spacing:0.1em;text-transform:uppercase;">📉 최저 수익</div>
+                            <div style="font-family:DM Mono,monospace;font-size:0.88em;font-weight:700;color:#DC2626;">{_worst[0] if _worst else "—"}</div>
+                            <div style="font-family:DM Mono,monospace;font-size:0.68em;color:#DC2626;">{((_worst[3]/_worst[2])-1)*100:+.1f}%</div>
+                        </div>
+                    </div>'''
+                    st.markdown(_sum_items, unsafe_allow_html=True)
+
+                st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+                # ── 종목별 비중 랭킹 ──
+                with st.container(border=True):
+                    st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.55em;font-weight:600;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(0,0,0,0.08);">비중 랭킹</div>', unsafe_allow_html=True)
+                    if _holdings and _toss_total_usd > 0:
+                        _sorted_h = sorted(_holdings, key=lambda x: x[1]*x[3], reverse=True)
+                        _rank_html = ""
+                        for _ri, (_rt, _rs, _ra, _rc) in enumerate(_sorted_h):
+                            _rval = _rs * _rc
+                            _rpct = (_rval / _toss_total_usd * 100)
+                            _rank_html += f'''<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(0,0,0,0.04);">
+                                <span style="font-family:DM Mono,monospace;font-size:0.62em;color:#9494A0;min-width:18px;">{_ri+1}</span>
+                                <span style="font-family:DM Mono,monospace;font-size:0.82em;font-weight:700;color:#0F172A;min-width:55px;">{_rt}</span>
+                                <div style="flex:1;height:6px;background:rgba(0,0,0,0.05);border-radius:3px;overflow:hidden;">
+                                    <div style="height:6px;width:{min(_rpct, 100):.1f}%;background:linear-gradient(90deg, {main_color}88, {main_color});border-radius:3px;"></div>
+                                </div>
+                                <span style="font-family:DM Mono,monospace;font-size:0.74em;color:{main_color};font-weight:600;min-width:42px;text-align:right;">{_rpct:.1f}%</span>
+                            </div>'''
+                        st.markdown(_rank_html, unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div style="padding:20px;text-align:center;font-family:DM Mono,monospace;font-size:0.72em;color:#CCCCCC;">종목을 추가하세요</div>', unsafe_allow_html=True)
+
+                st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+
+                # ── 장기 투자 가이드 ──
+                with st.container(border=True):
+                    st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.55em;font-weight:600;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(0,0,0,0.08);">장기 투자 원칙</div>', unsafe_allow_html=True)
+                    st.markdown(f'''<div style="font-family:DM Sans,sans-serif;font-size:0.82em;color:{tc_muted};line-height:1.8;">
+                        <div style="padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.04);">🌱 <b style="color:{tc_body};">매월 정해진 날</b>에 정해진 금액을 적립</div>
+                        <div style="padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.04);">🔕 <b style="color:{tc_body};">시장 타이밍</b>을 잡으려 하지 않기</div>
+                        <div style="padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.04);">📊 <b style="color:{tc_body};">분기 1회</b> 비중 점검 (리밸런싱 X)</div>
+                        <div style="padding:6px 0;">💎 <b style="color:{tc_body};">최소 3년</b> 이상 보유 목표</div>
+                    </div>''', unsafe_allow_html=True)
 
             st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
             with st.container(border=True):
