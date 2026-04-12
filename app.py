@@ -1568,7 +1568,7 @@ def _delta_bar():
 
 
 
-    def _delta_bar():
+def _delta_bar():
 
         _dlabels, _dvals = [a for a in ASSET_LIST if abs(live_diff_vals[a]) >= 1.0], [live_diff_vals[a] for a in ASSET_LIST if abs(live_diff_vals[a]) >= 1.0]
 
