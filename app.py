@@ -696,7 +696,7 @@ elif page == "💼 Portfolio":
     active_pf = st.session_state.portfolio if "일반" in acc_choice else (st.session_state.portfolio_isa if "ISA" in acc_choice else st.session_state.portfolio_toss)
     target_assets = list(active_pf.keys()) if is_toss else ASSET_LIST
 
-    current_prices = {t: (rt_prices.get(t, last_row.get(t, 1.0)) if t != 'CASH' else 1.0) for t in target_assets}
+current_prices = {t: (rt_prices.get(t, last_row.get(t, 1.0)) if t != 'CASH' else 1.0) for t in target_assets}
 if is_toss:
     for t in target_assets:
         if t not in rt_prices and t not in df.columns:
