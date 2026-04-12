@@ -1558,7 +1558,7 @@ def _pie_charts():
             else:
                 st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.09);height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;"><span style="font-family:DM Mono,monospace;font-size:0.7em;color:#CCCCCC;">자유 적립식 계좌</span><span style="font-family:DM Mono,monospace;font-size:0.5em;color:#DDDDDD;margin-top:4px;">(목표 비중 없음)</span></div>', unsafe_allow_html=True)
 
-    def _delta_bar():
+def _delta_bar():
         _dlabels, _dvals = [a for a in target_assets if abs(live_diff_vals.get(a, 0)) >= 1.0], [live_diff_vals.get(a, 0) for a in target_assets if abs(live_diff_vals.get(a, 0)) >= 1.0]
         if _dlabels:
             _fd = go.Figure(go.Bar(x=_dlabels, y=_dvals, marker_color=[C_GREEN if v > 0 else C_RED for v in _dvals], text=[f"${v:+,.0f}" for v in _dvals], textposition='outside', textfont=dict(size=8, family='DM Mono'), marker_line_width=0))
