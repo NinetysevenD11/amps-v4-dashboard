@@ -500,8 +500,7 @@ st.markdown(apply_theme(css_block), unsafe_allow_html=True)
 
 st.sidebar.markdown(apply_theme(f"""<div style="padding:22px 20px 16px;background:{bg_color};border-bottom:1px solid rgba(0,0,0,0.09);"><div style="font-family:'DM Mono';font-size:0.52em;color:{tc_label};letter-spacing:0.26em;text-transform:uppercase;margin-bottom:8px;">Quantitative Engine</div><div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:1.65em;font-weight:800;color:{tc_heading};letter-spacing:-1px;line-height:1;margin-bottom:14px;">AMLS <span style="color:#10B981;">V5</span></div><div style="display:flex;align-items:center;justify-content:space-between;"><div class="live-pulse" style="display:inline-flex;align-items:center;gap:5px;font-family:'DM Mono';font-size:0.6em;color:#059669;padding:3px 10px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);letter-spacing:0.06em;">{rt_label}</div><div style="font-family:'DM Mono';font-size:0.58em;color:{tc_label};letter-spacing:0.04em;">R{curr_regime}  ·  {regime_info[curr_regime][1]}</div></div></div>"""), unsafe_allow_html=True)
 st.sidebar.markdown('<div class="sb-section" style="border-top:none;">Navigation</div>', unsafe_allow_html=True)
-page = st.sidebar.radio("MENU", ["📊 Dashboard", "💼 Portfolio", "🤖 AI Quant Assistant", "🎛️ Parameter Lab", "📝 Trade Journal", "🍫 12-Pack Radar", "📈 Backtest Lab", "📰 Macro News"], label_visibility="collapsed")
-display_mode = st.session_state.display_mode
+page = st.sidebar.radio("MENU", ["📊 Dashboard", "💼 Portfolio", "🤖 AI Quant Assistant", "📝 Trade Journal", "🍫 12-Pack Radar", "📈 Backtest Lab", "📰 Macro News"], label_visibility="collapsed")display_mode = st.session_state.display_mode
 
 with st.sidebar.expander("🎨  Appearance", expanded=False):
     _ac1, _ac2 = st.columns(2)
