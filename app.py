@@ -718,14 +718,21 @@ elif page == "💼 Portfolio":
 
     current_prices = {t: (rt_prices.get(t, last_row.get(t, 1.0)) if t != 'CASH' else 1.0) for t in target_assets}
     if is_toss:
-        for t in target_assets:
-            if t not in rt_prices and t not in df.columns:
-                try:
-                    info = yf.Ticker(t).fast_info
-                    p = info.get('last_price') or info.get('lastPrice')
-                    if p and p > 0: current_prices[t] = float(p)
-                    else: current_prices[t] = active_pf[t].get('cur_price', 0.0)
-                except:
+        _toss_missing = [t for t in target_assets if t not in rt_prices and t not in df.columns and t != 'CASH']
+        if _toss_missing:
+            try:
+                _toss_batch = yf.download(_toss_missing, period="2d", interval="1m", progress=False, auto_adjust=True, threads=True)['Close']
+                if isinstance(_toss_batch, pd.Series): _toss_batch = _toss_batch.to_frame(name=_toss_missing[0])
+                if not _toss_batch.empty:
+                    _toss_batch = _toss_batch.ffill()
+                    _toss_last = _toss_batch.iloc[-1]
+                    for t in _toss_missing:
+                        if t in _toss_last.index and pd.notna(_toss_last[t]) and float(_toss_last[t]) > 0:
+                            current_prices[t] = float(_toss_last[t])
+                        else:
+                            current_prices[t] = active_pf[t].get('cur_price', 0.0)
+            except:
+                for t in _toss_missing:
                     current_prices[t] = active_pf[t].get('cur_price', 0.0)
 
     cur_fx = rt_prices.get('USDKRW=X', 1350.0)
