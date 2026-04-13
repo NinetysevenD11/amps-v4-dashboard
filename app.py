@@ -734,8 +734,20 @@ elif page == "💼 Portfolio":
             except:
                 current_prices[t] = 0.0
     if is_isa:
-        for t in target_assets:
-            if t != 'CASH' and (t not in current_prices or current_prices.get(t, 0) <= 0):
+        _isa_tickers = [t for t in target_assets if t != 'CASH']
+        for t in _isa_tickers:
+            try:
+                _hist = yf.Ticker(t).history(period="5d")
+                if not _hist.empty:
+                    current_prices[t] = float(_hist['Close'].dropna().iloc[-1])
+                    continue
+            except: pass
+            try:
+                _info = yf.Ticker(t).fast_info
+                _p = _info.get('last_price') or _info.get('lastPrice') or _info.get('previousClose')
+                if _p and _p > 0: current_prices[t] = float(_p)
+            except:
+                current_prices[t] = 0.0
                 try:
                     _hist = yf.Ticker(t).history(period="5d")
                     if not _hist.empty:
