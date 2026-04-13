@@ -117,6 +117,8 @@ SECTOR_TICKERS = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','
 CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
 TICKERS        = CORE_TICKERS + SECTOR_TICKERS
 ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
+ISA_ASSET_LIST = ['133690.KS','462900.KS','225040.KS','360750.KS','411060.KS','CASH']
+ISA_NAMES      = {'133690.KS':'TIGER 나스닥100','462900.KS':'TIGER 나스닥100 2X','225040.KS':'TIGER S&P500 2X','360750.KS':'TIGER S&P500','411060.KS':'ACE KRX금현물','CASH':'현금(₩)'}
 PORTFOLIO_FILE = 'portfolio_autosave.json'
 PORTFOLIO_ISA_FILE = 'portfolio_isa_autosave.json'
 PORTFOLIO_TOSS_FILE = 'portfolio_toss_autosave.json'
@@ -143,7 +145,7 @@ if 'portfolio' not in st.session_state:
         except: pass
 
 if 'portfolio_isa' not in st.session_state:
-    st.session_state.portfolio_isa = {asset: {'shares':0.0, 'avg_price':0.0, 'fx':1350.0} for asset in ASSET_LIST}
+    st.session_state.portfolio_isa = {asset: {'shares':0.0, 'avg_price':0.0, 'fx':1350.0} for asset in ISA_ASSET_LIST}
     if os.path.exists(PORTFOLIO_ISA_FILE):
         try:
             with open(PORTFOLIO_ISA_FILE, 'r') as f:
@@ -161,7 +163,9 @@ if 'portfolio_toss' not in st.session_state:
         except: pass
 
 sanitize_portfolio(st.session_state.portfolio)
-sanitize_portfolio(st.session_state.portfolio_isa)
+for _isa_a in ISA_ASSET_LIST:
+    if _isa_a not in st.session_state.portfolio_isa:
+        st.session_state.portfolio_isa[_isa_a] = {'shares':0.0, 'avg_price':0.0, 'fx':1350.0}
 
 def save_portfolio_to_disk():
     try:
@@ -715,9 +719,21 @@ elif page == "💼 Portfolio":
     is_toss = "TOSS" in acc_choice
     is_isa = "ISA" in acc_choice
     active_pf = st.session_state.portfolio if "일반" in acc_choice else (st.session_state.portfolio_isa if "ISA" in acc_choice else st.session_state.portfolio_toss)
-    target_assets = list(active_pf.keys()) if is_toss else ASSET_LIST
+    target_assets = list(active_pf.keys()) if is_toss else (ISA_ASSET_LIST if is_isa else ASSET_LIST)
 
     current_prices = {t: (rt_prices.get(t, last_row.get(t, 1.0)) if t != 'CASH' else 1.0) for t in target_assets}
+    current_prices = {t: (rt_prices.get(t, last_row.get(t, 1.0)) if t != 'CASH' else 1.0) for t in target_assets}
+    if is_isa:
+        _isa_missing = [t for t in target_assets if t not in current_prices or current_prices.get(t, 0) <= 0]
+        _isa_missing = [t for t in _isa_missing if t != 'CASH']
+        for t in _isa_missing:
+            try:
+                _hist = yf.Ticker(t).history(period="5d")
+                if not _hist.empty:
+                    current_prices[t] = float(_hist['Close'].dropna().iloc[-1])
+            except:
+                current_prices[t] = 0.0
+    if is_toss:
     if is_toss:
         _toss_missing = [t for t in target_assets if t not in rt_prices and t not in df.columns and t != 'CASH']
         for t in _toss_missing:
@@ -817,20 +833,22 @@ elif page == "💼 Portfolio":
                 cur_display = cur_p
             ret_pct = ((cur_p / avg_p) - 1) * 100 if a != 'CASH' and avg_p > 0 else 0.0
             if is_isa:
-                edata.append({"Asset": a, "Shares": shares, "Avg Price(₩)": avg_display, "Current Price(₩)": cur_display, "Return(%)": ret_pct})
+                _display_name = ISA_NAMES.get(a, a)
+                edata.append({"Asset": a, "종목명": _display_name, "Shares": shares, "Avg Price(₩)": avg_display, "Current Price(₩)": cur_display, "Return(%)": ret_pct})
             elif is_toss:
                 edata.append({"Asset": a, "Shares": shares, "Avg Price($)": avg_p, "Current Price($)": cur_p, "Return(%)": ret_pct})
             else:
                 edata.append({"Asset": a, "Shares": shares, "Avg Price($)": avg_p, "Current Price($)": cur_p, "Return(%)": ret_pct})
 
         if is_isa:
-            disabled_cols = ["Asset", "Current Price(₩)", "Return(%)"]
+            disabled_cols = ["Asset", "종목명", "Current Price(₩)", "Return(%)"]
             col_config = {
-                "Asset": st.column_config.TextColumn("Asset (종목)"),
-                "Shares": st.column_config.NumberColumn("Shares", format="%.4f"),
-                "Avg Price(₩)": st.column_config.NumberColumn("Avg(₩)", format="%.0f"),
-                "Current Price(₩)": st.column_config.NumberColumn("Current(₩)", format="%.0f"),
-                "Return(%)": st.column_config.NumberColumn("Ret(%)", format="%+.2f%%")
+                "Asset": st.column_config.TextColumn("티커", width=100),
+                "종목명": st.column_config.TextColumn("종목명", width=140),
+                "Shares": st.column_config.NumberColumn("수량", format="%.4f"),
+                "Avg Price(₩)": st.column_config.NumberColumn("평단(₩)", format="%.0f"),
+                "Current Price(₩)": st.column_config.NumberColumn("현재가(₩)", format="%.0f"),
+                "Return(%)": st.column_config.NumberColumn("수익률", format="%+.2f%%")
             }
         elif is_toss:
             disabled_cols = ["Return(%)"]
