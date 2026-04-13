@@ -721,6 +721,7 @@ elif page == "💼 Portfolio":
     active_pf = st.session_state.portfolio if "일반" in acc_choice else (st.session_state.portfolio_isa if "ISA" in acc_choice else st.session_state.portfolio_toss)
     target_assets = list(active_pf.keys()) if is_toss else (ISA_ASSET_LIST if is_isa else ASSET_LIST)
 
+    cur_fx = rt_prices.get('USDKRW=X', 1350.0)           
     current_prices = {t: (rt_prices.get(t, last_row.get(t, 1.0)) if t != 'CASH' else 1.0) for t in target_assets}
     current_prices = {t: (rt_prices.get(t, last_row.get(t, 1.0)) if t != 'CASH' else 1.0) for t in target_assets}
     if is_isa:
@@ -736,24 +737,19 @@ elif page == "💼 Portfolio":
     if is_isa:
         _isa_tickers = [t for t in target_assets if t != 'CASH']
         for t in _isa_tickers:
+            _krw_price = 0.0
             try:
                 _hist = yf.Ticker(t).history(period="5d")
                 if not _hist.empty:
-                    current_prices[t] = float(_hist['Close'].dropna().iloc[-1])
-                    continue
+                    _krw_price = float(_hist['Close'].dropna().iloc[-1])
             except: pass
-            try:
-                _info = yf.Ticker(t).fast_info
-                _p = _info.get('last_price') or _info.get('lastPrice') or _info.get('previousClose')
-                if _p and _p > 0: current_prices[t] = float(_p)
-            except:
-                current_prices[t] = 0.0
+            if _krw_price <= 0:
                 try:
-                    _hist = yf.Ticker(t).history(period="5d")
-                    if not _hist.empty:
-                        current_prices[t] = float(_hist['Close'].dropna().iloc[-1])
-                except:
-                    current_prices[t] = 0.0
+                    _info = yf.Ticker(t).fast_info
+                    _p = _info.get('last_price') or _info.get('lastPrice') or _info.get('previousClose')
+                    if _p and _p > 0: _krw_price = float(_p)
+                except: pass
+            current_prices[t] = _krw_price / cur_fx if _krw_price > 0 else 0.0
     if is_toss:
         _toss_missing = [t for t in target_assets if t not in rt_prices and t not in df.columns and t != 'CASH']
         for t in _toss_missing:
@@ -770,7 +766,6 @@ elif page == "💼 Portfolio":
             except:
                 current_prices[t] = active_pf[t].get('cur_price', 0.0)
 
-    cur_fx = rt_prices.get('USDKRW=X', 1350.0)
     curr_vals = {a: active_pf[a].get('shares', 0.0) * current_prices[a] for a in target_assets}
     total_val_usd = sum(curr_vals.values())
     total_val_krw = total_val_usd * cur_fx
