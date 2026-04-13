@@ -648,8 +648,6 @@ if page == "📊 Dashboard":
             with st.container(border=True): st.plotly_chart(fig, use_container_width=True)
             st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
 
-    with st.spinner("글로벌 마켓 데이터 로딩..."): _gm_data, _gm_tickers, _asset_tickers, _leader_tickers = fetch_global_markets()
-
     def _sec_label(txt): st.markdown(f'<div style="display:flex;align-items:center;gap:12px;margin:24px 0 14px;"><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.1em;font-weight:700;color:{tc_heading};letter-spacing:-0.3px;white-space:nowrap;">{txt}</div><div style="flex:1;height:1px;background:rgba(0,0,0,0.12);"></div></div>', unsafe_allow_html=True)
 
     _sec_label("① Nasdaq 100  ·  Heatmap")
