@@ -1138,7 +1138,7 @@ elif page == "💼 Portfolio":
                     st.markdown(f'<div style="font-family:DM Mono,monospace;font-size:0.55em;font-weight:600;color:{tc_label};letter-spacing:0.18em;text-transform:uppercase;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(0,0,0,0.08);">장기 투자 원칙</div>', unsafe_allow_html=True)
                     st.markdown(f'''<div style="font-family:DM Sans,sans-serif;font-size:0.82em;color:{tc_muted};line-height:1.8;">
                         <div style="padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.04);">🌱 <b style="color:{tc_body};">분할매수(최소 5분할)</b>로 적립식 투자 진행</div>
-                        <div style="padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.04);">🔕 <b style="color:{tc_body};">기대 수익률 달성시</b>미련 없이 수익 실현하기</div>
+                        <div style="padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.04);">🔕 <b style="color:{tc_body};">기대 수익률 달성 시</b> 미련 없이 수익 실현하기</div>
                         <div style="padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.04);">📊 <b style="color:{tc_body};">분기 1회</b> 비중 점검 (리밸런싱 X)</div>
                         <div style="padding:6px 0;">💎 <b style="color:{tc_body};">최소 3년</b> 이상 보유 목표</div>
                     </div>''', unsafe_allow_html=True)
