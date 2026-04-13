@@ -733,7 +733,15 @@ elif page == "💼 Portfolio":
                     current_prices[t] = float(_hist['Close'].dropna().iloc[-1])
             except:
                 current_prices[t] = 0.0
-    if is_toss:
+    if is_isa:
+        for t in target_assets:
+            if t != 'CASH' and (t not in current_prices or current_prices.get(t, 0) <= 0):
+                try:
+                    _hist = yf.Ticker(t).history(period="5d")
+                    if not _hist.empty:
+                        current_prices[t] = float(_hist['Close'].dropna().iloc[-1])
+                except:
+                    current_prices[t] = 0.0
     if is_toss:
         _toss_missing = [t for t in target_assets if t not in rt_prices and t not in df.columns and t != 'CASH']
         for t in _toss_missing:
