@@ -650,39 +650,6 @@ if page == "📊 Dashboard":
 
     def _sec_label(txt): st.markdown(f'<div style="display:flex;align-items:center;gap:12px;margin:24px 0 14px;"><div style="font-family:Plus Jakarta Sans,sans-serif;font-size:1.1em;font-weight:700;color:{tc_heading};letter-spacing:-0.3px;white-space:nowrap;">{txt}</div><div style="flex:1;height:1px;background:rgba(0,0,0,0.12);"></div></div>', unsafe_allow_html=True)
 
-    _sec_label("① Nasdaq 100  ·  Heatmap")
-    _qqq_stocks = {'AAPL':('Technology','Apple'),'MSFT':('Technology','Microsoft'),'NVDA':('Technology','Nvidia'),'AVGO':('Technology','Broadcom'),'AMD':('Technology','AMD'),'INTC':('Technology','Intel'),'QCOM':('Technology','Qualcomm'),'TXN':('Technology','Texas Instr'),'ORCL':('Technology','Oracle'),'ADBE':('Technology','Adobe'),'CRM':('Technology','Salesforce'),'NOW':('Technology','ServiceNow'),'INTU':('Technology','Intuit'),'GOOGL':('Communication','Alphabet'),'META':('Communication','Meta'),'NFLX':('Communication','Netflix'),'AMZN':('Consumer','Amazon'),'TSLA':('Consumer','Tesla'),'BKNG':('Consumer','Booking'),'MCD':('Consumer',"McDonald's"),'COST':('Consumer','Costco'),'SBUX':('Consumer','Starbucks'),'PYPL':('Financials','PayPal'),'ISRG':('Healthcare','Intuitive Surg'),'GILD':('Healthcare','Gilead'),'AMGN':('Healthcare','Amgen'),'REGN':('Healthcare','Regeneron'),'HON':('Industrials','Honeywell'),'PEP':('Staples','PepsiCo')}
-    _tm_labels, _tm_parents, _tm_values, _tm_colors, _tm_text = ["Nasdaq 100"], [""], [0], [0], [""]
-    _sector_set = {}
-    for _t, (_sec, _name) in _qqq_stocks.items():
-        if _sec not in _sector_set:
-            _sector_set[_sec] = True
-            _tm_labels.append(_sec); _tm_parents.append("Nasdaq 100"); _tm_values.append(0); _tm_colors.append(0); _tm_text.append(_sec)
-    for _t, (_sec, _name) in _qqq_stocks.items():
-        _d = _gm_data.get(_t, {})
-        _tm_labels.append(f"{_t}"); _tm_parents.append(_sec)
-        _tm_values.append(max(abs(_d.get('price', 0.0)) * 0.1, 1)); _tm_colors.append(_d.get('chg', 0.0))
-        _tm_text.append(f"{_name}<br>{_d.get('price',0.0):,.1f}<br>{_d.get('chg',0.0):+.2f}%")
-
-    _tm_fig = go.Figure(go.Treemap(labels=_tm_labels, parents=_tm_parents, values=_tm_values, customdata=_tm_text, hovertemplate='%{customdata}<extra></extra>', texttemplate='<b>%{label}</b><br>%{customdata}', textfont=dict(size=11, family='DM Mono'), marker=dict(colors=_tm_colors, colorscale=[[0.0, '#DC2626'],[0.3, '#FCA5A5'],[0.5, '#F7F6F2'],[0.7, '#6EE7B7'],[1.0, '#059669']], cmid=0, cmin=-3, cmax=3, showscale=True, colorbar=dict(thickness=12, len=0.6, title=dict(text='%', font=dict(size=10, family='DM Mono')), tickfont=dict(size=9, family='DM Mono'), tickformat='+.1f')), branchvalues='remainder', tiling=dict(packing='squarify')))
-    _tm_fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(family='DM Mono', color=t_color), margin=dict(l=0, r=0, t=10, b=0))
-    with st.container(border=True): st.plotly_chart(_tm_fig, use_container_width=True)
-
-    _sec_label("② Rates  /  Commodities  /  Crypto")
-    _asset_cols = st.columns(7)
-    _ico_dict = {"^TNX":"📈","GLD":"🥇","SLV":"⚪","USO":"🛢","BTC-USD":"₿","ETH-USD":"Ξ","UUP":"💵"}
-    for _i, (_t, _name) in enumerate(_asset_tickers.items()):
-        _d = _gm_data.get(_t, {}); _chg, _px = _d.get('chg', 0.0), _d.get('price', 0.0)
-        _clr = "#059669" if _chg >= 0 else "#DC2626"
-        _ico = _ico_dict.get(_t, "")
-        with _asset_cols[_i]: st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);border-top:2px solid {_clr};padding:12px 10px;text-align:center;"><div style="font-size:1.1em;margin-bottom:4px;">{_ico}</div><div style="font-family:DM Mono,monospace;font-size:0.6em;color:#9494A0;letter-spacing:0.1em;text-transform:uppercase;">{_name}</div><div style="font-family:DM Mono,monospace;font-size:0.88em;color:#111118;margin:3px 0;">${_px:,.2f}</div><div style="font-family:DM Mono,monospace;font-size:0.8em;color:{_clr};font-weight:600;">{"▲" if _chg>=0 else "▼"} {_chg:+.2f}%</div></div>', unsafe_allow_html=True)
-
-    _sec_label("③ Market Leaders")
-    _ld_cols = st.columns(5)
-    for _i, (_t, _name) in enumerate(sorted(_leader_tickers.items(), key=lambda x: _gm_data.get(x[0],{}).get('chg',0), reverse=True)):
-        _d = _gm_data.get(_t, {}); _chg, _px = _d.get('chg', 0.0), _d.get('price', 0.0)
-        _clr = "#059669" if _chg >= 0 else "#DC2626"
-        with _ld_cols[_i % 5]: st.markdown(f'<div style="background:#FAFAF7;border:1px solid rgba(0,0,0,0.10);border-top:2px solid {_clr};padding:12px 14px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-family:DM Mono,monospace;font-size:0.62em;color:#9494A0;">{_t}</span><span style="font-family:DM Mono,monospace;font-size:0.62em;color:{"#D97706" if _i==0 else ("#9494A0" if _i>=3 else "#111118")};font-weight:600;">#{_i+1}</span></div><div style="font-family:DM Sans,sans-serif;font-size:0.82em;color:#2C2C35;margin:3px 0;">{_name}</div><div style="font-family:DM Mono,monospace;font-size:1.0em;color:#111118;">${_px:,.2f}</div><div style="font-family:DM Mono,monospace;font-size:0.82em;color:{_clr};font-weight:600;">{"▲" if _chg>=0 else "▼"} {_chg:+.2f}%</div></div>', unsafe_allow_html=True)
 
     _sec_label("④ Sector Scanner")
     _sec_data_full = [{'t': s, 'name': {'XLK':'Technology','XLV':'Health Care','XLF':'Financials','XLY':'Cons. Discret','XLC':'Comm. Svc','XLI':'Industrials','XLP':'Cons. Staples','XLE':'Energy','XLU':'Utilities','XLRE':'Real Estate','XLB':'Materials'}.get(s, s), 'ret1m': last_row.get(f'{s}_1M', 0.0) * 100} for s in SECTOR_TICKERS]
