@@ -720,8 +720,9 @@ elif page == "💼 Portfolio":
     if is_toss:
         _toss_missing = [t for t in target_assets if t not in rt_prices and t not in df.columns and t != 'CASH']
         if _toss_missing:
+            # 1차: 배치 다운로드 (일봉, 가장 안정적)
             try:
-                _toss_batch = yf.download(_toss_missing, period="2d", interval="1m", prepost=True, progress=False, auto_adjust=True, threads=True)['Close']
+                _toss_batch = yf.download(_toss_missing, period="5d", progress=False, auto_adjust=True, threads=True)['Close']
                 if isinstance(_toss_batch, pd.Series): _toss_batch = _toss_batch.to_frame(name=_toss_missing[0])
                 if not _toss_batch.empty:
                     _toss_batch = _toss_batch.ffill()
@@ -729,11 +730,19 @@ elif page == "💼 Portfolio":
                     for t in _toss_missing:
                         if t in _toss_last.index and pd.notna(_toss_last[t]) and float(_toss_last[t]) > 0:
                             current_prices[t] = float(_toss_last[t])
+            except: pass
+            # 2차: 배치에서 못 가져온 종목은 개별 조회
+            for t in _toss_missing:
+                if current_prices.get(t, 0) <= 0:
+                    try:
+                        tk = yf.Ticker(t)
+                        p = tk.fast_info.get('last_price') or tk.fast_info.get('lastPrice')
+                        if p and p > 0: current_prices[t] = float(p)
                         else:
-                            current_prices[t] = active_pf[t].get('cur_price', 0.0)
-            except:
-                for t in _toss_missing:
-                    current_prices[t] = active_pf[t].get('cur_price', 0.0)
+                            hist = tk.history(period="5d")
+                            if not hist.empty: current_prices[t] = float(hist['Close'].iloc[-1])
+                    except:
+                        current_prices[t] = active_pf[t].get('cur_price', 0.0)
 
     cur_fx = rt_prices.get('USDKRW=X', 1350.0)
     curr_vals = {a: active_pf[a].get('shares', 0.0) * current_prices[a] for a in target_assets}
