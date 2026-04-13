@@ -347,25 +347,6 @@ def fetch_macro_news():
     except: pass
     return headlines_for_ai, news_items
 
-@st.cache_data(ttl=300)
-def fetch_global_markets():
-    global_tickers = {'SPYG':'S&P 500','QQQ':'Nasdaq 100','DIA':'Dow Jones','IWM':'Russell 2000','EWJ':'Japan','EWT':'Taiwan','EWY':'Korea','FXI':'China','EWH':'HongKong','VGK':'Europe','EWG':'Germany','EWU':'UK','EWQ':'France','EWC':'Canada','EEM':'Emg Mkt','EWZ':'Brazil','EWA':'Australia'}
-    asset_tickers = {'^TNX':'US 10Y','GLD':'Gold','SLV':'Silver','USO':'Oil','BTC-USD':'Bitcoin','ETH-USD':'Ethereum','UUP':'DXY'}
-    leader_tickers = {'AAPL':'Apple','MSFT':'Microsoft','NVDA':'Nvidia','AMZN':'Amazon','GOOGL':'Alphabet','META':'Meta','TSLA':'Tesla','AVGO':'Broadcom','AMD':'AMD','TSM':'TSMC'}
-    all_t = list(global_tickers.keys()) + list(asset_tickers.keys()) + list(leader_tickers.keys())
-    results = {}
-    try:
-        end = datetime.now()
-        raw = yf.download(all_t, start=(end - timedelta(days=5)).strftime('%Y-%m-%d'), end=end.strftime('%Y-%m-%d'), progress=False, auto_adjust=True)['Close']
-        if isinstance(raw, pd.Series): raw = raw.to_frame(name=all_t[0])
-        for t in all_t:
-            if t in raw.columns:
-                s = raw[t].dropna()
-                if len(s) >= 2: results[t] = {'price': float(s.iloc[-1]), 'chg': float((s.iloc[-1] / s.iloc[-2] - 1) * 100)}
-                elif len(s) == 1: results[t] = {'price': float(s.iloc[-1]), 'chg': 0.0}
-    except: pass
-    return results, global_tickers, asset_tickers, leader_tickers
-
 with st.spinner('시장 데이터 수집 중...'):
     df = load_data()
     if df is not None and not df.empty: st.session_state['_df_cache'] = df
