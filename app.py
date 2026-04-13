@@ -299,8 +299,11 @@ def fetch_realtime_prices():
     now_utc = datetime.now(timezone.utc)
     now_kst = now_utc + timedelta(hours=9)
     fetch_time = now_kst.strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 1차 시도: 대량 다운로드 (1분봉, 공백은 ffill로 채움)
     try:
-        batch_data = yf.download(REALTIME_TICKERS, period="2d", interval="1m", prepost=True, progress=False, auto_adjust=True, threads=True)['Close']
+        batch_data = yf.download(REALTIME_TICKERS, period="5d", interval="1m", prepost=True, progress=False, threads=True)
+        if 'Close' in batch_data: batch_data = batch_data['Close']
         if isinstance(batch_data, pd.Series): batch_data = batch_data.to_frame(name=REALTIME_TICKERS[0])
         if not batch_data.empty:
             batch_data = batch_data.ffill()
@@ -310,14 +313,24 @@ def fetch_realtime_prices():
                     val = float(latest_row[ticker])
                     if val > 0: prices[ticker] = val
     except Exception: pass
+
+    # 2차 시도: 누락된 티커에 대해 정밀 조회 (프리/애프터마켓 직접 타겟팅)
     missing_tickers = [t for t in REALTIME_TICKERS if t not in prices]
     if missing_tickers:
         for ticker in missing_tickers:
             try:
-                info = yf.Ticker(ticker).fast_info
-                price = info.get('last_price') or info.get('lastPrice')
-                if price and price > 0: prices[ticker] = float(price)
+                tk = yf.Ticker(ticker)
+                info = tk.info
+                # 현재가, 애프터마켓, 프리마켓, 정규장 순서로 값이 있는지 확인
+                price = info.get('currentPrice') or info.get('postMarketPrice') or info.get('preMarketPrice') or info.get('regularMarketPrice')
+                if price and price > 0: 
+                    prices[ticker] = float(price)
+                else:
+                    # fast_info로 마지막 체결가 확인
+                    price = tk.fast_info.get('last_price')
+                    if price and price > 0: prices[ticker] = float(price)
             except: pass
+            
     return prices, fetch_time
 
 @st.cache_data(ttl=900)
