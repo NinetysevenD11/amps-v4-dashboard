@@ -721,7 +721,7 @@ elif page == "💼 Portfolio":
         _toss_missing = [t for t in target_assets if t not in rt_prices and t not in df.columns and t != 'CASH']
         if _toss_missing:
             try:
-                _toss_batch = yf.download(_toss_missing, period="2d", interval="1m", progress=False, auto_adjust=True, threads=True)['Close']
+                _toss_batch = yf.download(_toss_missing, period="2d", interval="1m", prepost=True, progress=False, auto_adjust=True, threads=True)['Close']
                 if isinstance(_toss_batch, pd.Series): _toss_batch = _toss_batch.to_frame(name=_toss_missing[0])
                 if not _toss_batch.empty:
                     _toss_batch = _toss_batch.ffill()
