@@ -713,6 +713,7 @@ elif page == "💼 Portfolio":
     acc_choice = "🟦 일반 계좌" if st.session_state.acc_tab == "일반" else ("🟩 ISA 계좌" if st.session_state.acc_tab == "ISA" else "🧪 TOSS 장기투자")
     
     is_toss = "TOSS" in acc_choice
+    is_isa = "ISA" in acc_choice
     active_pf = st.session_state.portfolio if "일반" in acc_choice else (st.session_state.portfolio_isa if "ISA" in acc_choice else st.session_state.portfolio_toss)
     target_assets = list(active_pf.keys()) if is_toss else ASSET_LIST
 
@@ -807,26 +808,59 @@ elif page == "💼 Portfolio":
         for a in target_assets:
             shares = float(active_pf[a].get('shares', 0.0))
             avg_p = float(active_pf[a].get('avg_price', 1.0 if a == 'CASH' else 0.0))
-            cur_p = current_prices.get(a, 0.0) 
+            cur_p = current_prices.get(a, 0.0)
+            if is_isa:
+                avg_display = avg_p * cur_fx
+                cur_display = cur_p * cur_fx
+            else:
+                avg_display = avg_p
+                cur_display = cur_p
             ret_pct = ((cur_p / avg_p) - 1) * 100 if a != 'CASH' and avg_p > 0 else 0.0
-            edata.append({"Asset": a, "Shares": shares, "Avg Price($)": avg_p, "Current Price($)": cur_p, "Return(%)": ret_pct})
-            
-        disabled_cols = ["Return(%)"] if is_toss else ["Asset", "Current Price($)", "Return(%)"]
-        row_mode = "dynamic" if is_toss else "fixed"
+            if is_isa:
+                edata.append({"Asset": a, "Shares": shares, "Avg Price(₩)": avg_display, "Current Price(₩)": cur_display, "Return(%)": ret_pct})
+            elif is_toss:
+                edata.append({"Asset": a, "Shares": shares, "Avg Price($)": avg_p, "Current Price($)": cur_p, "Return(%)": ret_pct})
+            else:
+                edata.append({"Asset": a, "Shares": shares, "Avg Price($)": avg_p, "Current Price($)": cur_p, "Return(%)": ret_pct})
 
-        df_edited = st.data_editor(
-            pd.DataFrame(edata) if edata else pd.DataFrame(columns=["Asset", "Shares", "Avg Price($)", "Current Price($)", "Return(%)"]), 
-            disabled=disabled_cols, hide_index=True, num_rows=row_mode, use_container_width=True, height=height, 
-            column_config={
+        if is_isa:
+            disabled_cols = ["Asset", "Current Price(₩)", "Return(%)"]
+            col_config = {
                 "Asset": st.column_config.TextColumn("Asset (종목)"),
-                "Shares": st.column_config.NumberColumn("Shares", format="%.4f"), 
+                "Shares": st.column_config.NumberColumn("Shares", format="%.4f"),
+                "Avg Price(₩)": st.column_config.NumberColumn("Avg(₩)", format="%.0f"),
+                "Current Price(₩)": st.column_config.NumberColumn("Current(₩)", format="%.0f"),
+                "Return(%)": st.column_config.NumberColumn("Ret(%)", format="%+.2f%%")
+            }
+        elif is_toss:
+            disabled_cols = ["Return(%)"]
+            col_config = {
+                "Asset": st.column_config.TextColumn("Asset (종목)"),
+                "Shares": st.column_config.NumberColumn("Shares", format="%.4f"),
                 "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"),
                 "Current Price($)": st.column_config.NumberColumn("Current($)", format="%.2f"),
-                "Return(%)": st.column_config.NumberColumn("Ret(%)", format="%+.2f%%") 
+                "Return(%)": st.column_config.NumberColumn("Ret(%)", format="%+.2f%%")
             }
+        else:
+            disabled_cols = ["Asset", "Current Price($)", "Return(%)"]
+            col_config = {
+                "Asset": st.column_config.TextColumn("Asset (종목)"),
+                "Shares": st.column_config.NumberColumn("Shares", format="%.4f"),
+                "Avg Price($)": st.column_config.NumberColumn("Avg($)", format="%.2f"),
+                "Current Price($)": st.column_config.NumberColumn("Current($)", format="%.2f"),
+                "Return(%)": st.column_config.NumberColumn("Ret(%)", format="%+.2f%%")
+            }
+
+        row_mode = "dynamic" if is_toss else "fixed"
+        _df_orig = pd.DataFrame(edata) if edata else pd.DataFrame()
+
+        df_edited = st.data_editor(
+            _df_orig,
+            disabled=disabled_cols, hide_index=True, num_rows=row_mode,
+            use_container_width=True, height=height, column_config=col_config
         )
-        
-        if not pd.DataFrame(edata).equals(df_edited):
+
+        if not _df_orig.equals(df_edited):
             if is_toss:
                 new_pf = {}
                 for _, row in df_edited.iterrows():
@@ -835,8 +869,14 @@ elif page == "💼 Portfolio":
                         new_pf[asset_name] = {'shares': float(row["Shares"] if pd.notna(row["Shares"]) else 0.0), 'avg_price': float(row["Avg Price($)"] if pd.notna(row["Avg Price($)"]) else 0.0), 'cur_price': float(row["Current Price($)"] if pd.notna(row["Current Price($)"]) else 0.0)}
                 active_pf.clear()
                 active_pf.update(new_pf)
+            elif is_isa:
+                for _, row in df_edited.iterrows():
+                    _avg_krw = float(row["Avg Price(₩)"])
+                    _avg_usd = _avg_krw / cur_fx if cur_fx > 0 else 0.0
+                    active_pf[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': _avg_usd}
             else:
-                for _, row in df_edited.iterrows(): active_pf[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"])}
+                for _, row in df_edited.iterrows():
+                    active_pf[row["Asset"]] = {'shares': float(row["Shares"]), 'avg_price': float(row["Avg Price($)"])}
             save_portfolio_to_disk(); st.session_state.rebal_locked=False; st.rerun()
 
     def _pie_charts():
