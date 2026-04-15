@@ -41,10 +41,10 @@ if 'messages' not in st.session_state: st.session_state.messages = []
 if 'use_custom_weights' not in st.session_state: st.session_state.use_custom_weights = False
 if 'custom_weights' not in st.session_state:
     st.session_state.custom_weights = {
-        "R1": {'TQQQ':30, 'SOXL':20, 'USD':0, 'QLD':20, 'SSO':15, 'SPYG':5, 'QQQ':0, 'GLD':10, 'CASH':0},
-        "R2": {'TQQQ':15, 'SOXL':0, 'USD':10, 'QLD':30, 'SSO':25, 'SPYG':5, 'QQQ':0, 'GLD':15, 'CASH':0},
-        "R3": {'TQQQ':0, 'SOXL':0, 'USD':0, 'QLD':0, 'SSO':0, 'SPYG':0, 'QQQ':15, 'GLD':50, 'CASH':35},
-        "R4": {'TQQQ':0, 'SOXL':0, 'USD':0, 'QLD':0, 'SSO':0, 'SPYG':0, 'QQQ':10, 'GLD':50, 'CASH':40}
+        "R1": {'TQQQ':30, 'SOXL':20, 'USD':0, 'QLD':20, 'SSO':15, 'SPYG':5, 'QQQ':0, 'SHV':10, 'CASH':0},
+        "R2": {'TQQQ':15, 'SOXL':0, 'USD':10, 'QLD':30, 'SSO':25, 'SPYG':5, 'QQQ':0, 'SHV':15, 'CASH':0},
+        "R3": {'TQQQ':0, 'SOXL':0, 'USD':0, 'QLD':0, 'SSO':0, 'SPYG':0, 'QQQ':15, 'SHV':50, 'CASH':35},
+        "R4": {'TQQQ':0, 'SOXL':0, 'USD':0, 'QLD':0, 'SSO':0, 'SPYG':0, 'QQQ':10, 'SHV':50, 'CASH':40}
     }
 
 def _ls_save_all():
@@ -114,9 +114,9 @@ def apply_theme(text):
     return text.replace("#10B981", main_color).replace("#10b981", main_color).replace("16, 185, 129", f"{r_c}, {g_c}, {b_c}").replace("16,185,129", f"{r_c},{g_c},{b_c}")
 
 SECTOR_TICKERS = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','XLB']
-CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
+CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','SHV','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
 TICKERS        = CORE_TICKERS + SECTOR_TICKERS
-ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','GLD','CASH']
+ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','SHV','CASH']
 ISA_ASSET_LIST = ['133690.KS','462900.KS','225040.KS','360750.KS','411060.KS','CASH']
 ISA_NAMES      = {'133690.KS':'TIGER 나스닥100','462900.KS':'TIGER 나스닥100 2X','225040.KS':'TIGER S&P500 2X','360750.KS':'TIGER S&P500','411060.KS':'ACE KRX금현물','CASH':'현금(₩)'}
 PORTFOLIO_FILE = 'portfolio_autosave.json'
@@ -393,10 +393,10 @@ smh_cond = (smh_close > smh_ma50) and (smh_3m > 0.05 or smh_1m > 0.10) and (smh_
 def get_weights_v45(reg, smh_ok):
     w = {t: 0.0 for t in ASSET_LIST}
     semi = 'SOXL' if smh_ok else 'USD'
-    if reg == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['GLD'], w['SPYG'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
-    elif reg == 2: w['TQQQ'], w['QLD'], w['SSO'], w['USD'], w['GLD'], w['SPYG'] = 0.15, 0.30, 0.25, 0.10, 0.15, 0.05
-    elif reg == 3: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.35, 0.15
-    elif reg == 4: w['GLD'], w['CASH'], w['QQQ'] = 0.50, 0.40, 0.10
+    if reg == 1: w['TQQQ'], w[semi], w['QLD'], w['SSO'], w['SHV'], w['SPYG'] = 0.30, 0.20, 0.20, 0.15, 0.10, 0.05
+    elif reg == 2: w['TQQQ'], w['QLD'], w['SSO'], w['USD'], w['SHV'], w['SPYG'] = 0.15, 0.30, 0.25, 0.10, 0.15, 0.05
+    elif reg == 3: w['SHV'], w['CASH'], w['QQQ'] = 0.50, 0.35, 0.15
+    elif reg == 4: w['SHV'], w['CASH'], w['QQQ'] = 0.50, 0.40, 0.10
     return w
 
 target_weights = get_weights_v45(curr_regime, smh_cond)
