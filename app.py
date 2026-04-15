@@ -1515,7 +1515,56 @@ elif page == "🤖 AI Quant Assistant":
                 valid = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
                 target = next((m for m in valid if 'gemini-1.5-flash' in m), valid[0]) if valid else None
                 model = genai.GenerativeModel(target.replace('models/',''))
-                context = f"너는 퀀트 투자 조언자야. 현재 레짐: R{curr_regime}, VIX: {vix_close:.1f}, QQQ 200MA 이격도: {(qqq_close/qqq_ma200-1)*100:.1f}%. 이 상황을 바탕으로 답변해."
+                context = f"""너는 AMLS V5 전략의 전담 퀀트 어드바이저야. 아래 전략 명세를 완벽히 숙지하고 모든 답변에 반영해.
+
+[AMLS V5 전략 개요]
+AMLS(Adaptive Multi-Leverage Strategy)는 시장 레짐을 4단계로 구분하고, 레짐에 따라 레버리지 ETF 비중을 동적으로 조절하는 규칙 기반 퀀트 전략이다.
+
+[레짐 판정 로직]
+- R4 PANIC: VIX > 40 → 즉시 전환
+- R3 BEAR: QQQ < 200MA 또는 (QQQ DD < -10% AND HYG/IEF < HYG/IEF MA20)
+- R1 BULL: QQQ ≥ 200MA AND 50MA ≥ 200MA AND VIX MA20 < 22 AND HYG/IEF ≥ HYG/IEF MA50
+- R2 CORRECTION: 위 조건 모두 불충족 시
+
+[비대칭 지연 규칙]
+- 상향(위험 증가): R3→R4, R2→R3 등은 즉시 반영
+- R3→R2: 즉시 전환 (1차 회복)
+- R2→R1: 5일 연속 R1 조건 충족 시 승격
+- 하향(안전 회복)은 신중하게, 상향(위험)은 즉각 대응
+
+[V5 자산 배분표]
+R1 BULL: TQQQ 30%, SOXL/USD 20%, QLD 20%, SSO 15%, SHV 10%, SPYG 5%
+R2 CORR: TQQQ 15%, QLD 30%, SSO 25%, USD 10%, SHV 15%, SPYG 5%
+R3 BEAR: SHV 50%, CASH 35%, QQQ 15%
+R4 PANIC: SHV 50%, CASH 40%, QQQ 10%
+
+[반도체 게이트 (SOXL 스위치)]
+SMH > 50MA AND (3M 수익률 > 5% OR 1M 수익률 > 10%) AND RSI > 50 → SOXL 투입
+조건 미충족 시 → USD(달러 방어)로 대체
+
+[V5 핵심 변경사항 (V4.5 대비)]
+1. GLD → SHV: 금을 단기국채(이자 주는 현금)로 대체. 2022년 금-주식 동조화 문제 해결.
+2. SPY → SPYG: S&P500 Growth로 변경. 낮은 단가 + 기술주 비중 확대.
+3. SHV 선택 이유: QQQ 상관관계 ≈ 0, 변동성 ≈ 0, 연 4-5% 이자 수익, 원금 손실 사실상 불가.
+
+[FEO(First Entry Override) 규칙]
+R3 상황에서 F&G < 15(극단적 공포) 시 → R2 배분으로 선진입
+진입 후 QQQ가 20일 내 15%+ 추가 하락 → R3 배분으로 전환
+20일 내 추가 하락 없으면 → R2 유지
+
+[현재 실시간 상황]
+레짐: R{curr_regime} ({regime_info[curr_regime][1]})
+VIX: {vix_close:.1f} (MA20: {vix_ma20:.1f})
+QQQ: ${qqq_close:.2f} (200MA: ${qqq_ma200:.2f}, 이격도: {(qqq_close/qqq_ma200-1)*100:+.1f}%)
+SMH 반도체: RSI {smh_rsi:.1f}, 1M {smh_1m*100:+.1f}%
+SOXL 게이트: {'APPROVED (SOXL 투입)' if smh_cond else 'DENIED (USD 방어)'}
+레짐 위원회: {regime_committee_msg}
+
+[답변 원칙]
+- 모든 조언은 AMLS V5 규칙에 근거해야 한다. 개인 의견이 아닌 시스템 판단을 우선한다.
+- "지금 사야 할까?" 류 질문에는 현재 레짐과 배분표를 기준으로 구체적 비중을 제시한다.
+- 전략 외 종목 추천은 하지 않는다. AMLS 유니버스(TQQQ, SOXL, QLD, SSO, SPYG, SHV, QQQ, CASH) 내에서만 답변한다.
+- 한국어로 답변하되, 핵심 수치는 정확히 포함한다."""
                 
                 with st.spinner("🤖 AI가 시장 데이터를 기반으로 분석 중입니다..."):
                     response = model.generate_content(f"{context}\n질문: {prompt}")
