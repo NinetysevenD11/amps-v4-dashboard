@@ -114,8 +114,8 @@ def apply_theme(text):
     return text.replace("#10B981", main_color).replace("#10b981", main_color).replace("16, 185, 129", f"{r_c}, {g_c}, {b_c}").replace("16,185,129", f"{r_c},{g_c},{b_c}")
 
 SECTOR_TICKERS = ['XLK','XLV','XLF','XLY','XLC','XLI','XLP','XLE','XLU','XLRE','XLB']
-CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','SHV','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
-TICKERS        = CORE_TICKERS + SECTOR_TICKERS
+CORE_TICKERS   = ['QQQ','TQQQ','SOXL','USD','QLD','SSO','SPYG','SMH','GLD','^VIX','HYG','IEF','QQQE','UUP','^TNX','BTC-USD','IWM']
+TICKERS        = CORE_TICKERS + SECTOR_TICKERS + ['SHV']
 ASSET_LIST     = ['TQQQ','SOXL','USD','QLD','SSO','SPYG','QQQ','SHV','CASH']
 ISA_ASSET_LIST = ['133690.KS','462900.KS','225040.KS','360750.KS','411060.KS','CASH']
 ISA_NAMES      = {'133690.KS':'TIGER 나스닥100','462900.KS':'TIGER 나스닥100 2X','225040.KS':'TIGER S&P500 2X','360750.KS':'TIGER S&P500','411060.KS':'ACE KRX금현물','CASH':'현금(₩)'}
