@@ -291,7 +291,7 @@ def load_custom_backtest_data(start_date, end_date):
     bt_df = bt_df.loc[pd.to_datetime(start_date):pd.to_datetime(end_date)]
     return bt_df
 
-REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPYG','SOXL','USD','QLD','SSO','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
+REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPYG','SOXL','USD','QLD','SSO','SHV','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
 
 @st.cache_data(ttl=15)
 def fetch_realtime_prices():
@@ -400,7 +400,7 @@ def get_weights_v45(reg, smh_ok):
     return w
 
 target_weights = get_weights_v45(curr_regime, smh_cond)
-current_prices = {t: (rt_prices.get(t, df[t].iloc[-1]) if t != 'CASH' else 1.0) for t in ASSET_LIST}
+current_prices = {t: (rt_prices.get(t, df[t].iloc[-1] if t in df.columns else 0.0) if t != 'CASH' else 1.0) for t in ASSET_LIST}
 cp = current_prices    
 
 if curr_regime == live_regime: regime_committee_msg = "🟢 조건 부합 (안정)"
