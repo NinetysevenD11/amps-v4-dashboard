@@ -846,10 +846,12 @@ elif page == "💼 Portfolio":
         row_mode = "dynamic" if is_toss else "fixed"
         _df_orig = pd.DataFrame(edata) if edata else pd.DataFrame()
 
+        _editor_key = f"pf_editor_{st.session_state.acc_tab}"
         df_edited = st.data_editor(
             _df_orig,
             disabled=disabled_cols, hide_index=True, num_rows=row_mode,
-            use_container_width=True, height=height, column_config=col_config
+            use_container_width=True, height=height, column_config=col_config,
+            key=_editor_key
         )
 
         if not _df_orig.equals(df_edited):
