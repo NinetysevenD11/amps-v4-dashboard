@@ -293,6 +293,33 @@ def load_custom_backtest_data(start_date, end_date):
 
 REALTIME_TICKERS = ['QQQ','TQQQ','SMH','^VIX','HYG','IEF','UUP','GLD','SPYG','SOXL','USD','QLD','SSO','SHV','USDKRW=X', '^TNX', 'BTC-USD', 'IWM']
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_cnn_fear_greed():
+    """CNN 공식 Fear & Greed Index를 production.dataviz API에서 직접 조회"""
+    try:
+        start_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+        url = f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{start_date}"
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Origin': 'https://www.cnn.com',
+            'Referer': 'https://www.cnn.com/',
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+        now_block = data.get('fear_and_greed', {})
+        return {
+            'score': float(now_block.get('score', 0)),
+            'rating': now_block.get('rating', 'unknown'),
+            'prev_close': float(now_block.get('previous_close', 0)),
+            'week_ago': float(now_block.get('previous_1_week', 0)),
+            'month_ago': float(now_block.get('previous_1_month', 0)),
+            'year_ago': float(now_block.get('previous_1_year', 0)),
+            'ok': True,
+        }
+    except Exception as e:
+        return {'score': None, 'rating': None, 'ok': False, 'error': str(e)}
+
 @st.cache_data(ttl=15)
 def fetch_realtime_prices():
     prices = {}
@@ -1263,11 +1290,24 @@ elif page == "🍫 12-Pack Radar":
     df_view  = df.iloc[-120:]
     qqq_rsi, qqq_dd = last_row['QQQ_RSI'], last_row['QQQ_DD']
     
-    _vix_score = max(0, min(100, 100 - (last_row['^VIX'] - 12) / 23 * 100))
-    _rsi_score = max(0, min(100, qqq_rsi))
-    _mom_score = max(0, min(100, 50 + (last_row['QQQ'] / last_row['QQQ_MA200'] - 1) * 250))
-    _crd_score = max(0, min(100, 50 + (last_row['HYG_IEF_Ratio'] / last_row['HYG_IEF_MA50'] - 1) * 500))
-    fg_score = (_vix_score + _rsi_score + _mom_score + _crd_score) / 4
+    # CNN 공식 Fear & Greed Index (실패 시 자체 계산값으로 폴백)
+    _cnn_fg = fetch_cnn_fear_greed()
+    if _cnn_fg['ok'] and _cnn_fg['score'] is not None:
+        fg_score = _cnn_fg['score']
+        fg_source = "CNN"
+        fg_rating = _cnn_fg['rating']
+        fg_prev = _cnn_fg['prev_close']
+        fg_week = _cnn_fg['week_ago']
+        fg_month = _cnn_fg['month_ago']
+    else:
+        _vix_score = max(0, min(100, 100 - (last_row['^VIX'] - 12) / 23 * 100))
+        _rsi_score = max(0, min(100, qqq_rsi))
+        _mom_score = max(0, min(100, 50 + (last_row['QQQ'] / last_row['QQQ_MA200'] - 1) * 250))
+        _crd_score = max(0, min(100, 50 + (last_row['HYG_IEF_Ratio'] / last_row['HYG_IEF_MA50'] - 1) * 500))
+        fg_score = (_vix_score + _rsi_score + _mom_score + _crd_score) / 4
+        fg_source = "Proxy"
+        fg_rating = "fear" if fg_score < 30 else ("greed" if fg_score > 70 else "neutral")
+        fg_prev = fg_week = fg_month = fg_score
 
     sec_names = {'XLK':'TECH','XLV':'HEALTH','XLF':'FIN','XLY':'CONS','XLC':'COMM','XLI':'IND','XLP':'STAPLE','XLE':'ENGY','XLU':'UTIL','XLRE':'REAL','XLB':'MAT'}
     sec_data  = [{'섹터':sec_names[s],'수익률':last_row[f'{s}_1M']*100} for s in SECTOR_TICKERS]
@@ -1346,7 +1386,9 @@ elif page == "🍫 12-Pack Radar":
             fig2=go.Figure(); fig2.add_trace(go.Scatter(x=df_view.index, y=df_view['QQQ_DD'], fill='tozeroy', fillcolor='rgba(220,38,38,0.07)', line=dict(color='#DC2626', width=1.8))); fig2.update_layout(**radar_layout, showlegend=False); fig2.update_xaxes(**_ax_r); fig2.update_yaxes(tickformat='.0%', **_ax_r); st.plotly_chart(fig2, use_container_width=True)
     with row1[2]:
         with st.container(border=True):
-            st.markdown(apply_theme(r_head(3, "Fear & Greed", b3, "https://edition.cnn.com/markets/fear-and-greed", "공포 탐욕 지수. 극단적 공포가 기회, 탐욕은 위험.")), unsafe_allow_html=True)
+            _fg_title = f"Fear & Greed · {fg_source}" + (f" ({fg_rating})" if fg_source == "CNN" else "")
+            _fg_desc = f"CNN 공식 지수. 전일 {fg_prev:.0f} · 1주전 {fg_week:.0f} · 1개월전 {fg_month:.0f}" if fg_source == "CNN" else "공포 탐욕 지수 (자체 계산 · CNN API 실패)"
+            st.markdown(apply_theme(r_head(3, _fg_title, b3, "https://edition.cnn.com/markets/fear-and-greed", _fg_desc)), unsafe_allow_html=True)
             fig3=go.Figure(go.Indicator(mode="gauge+number", value=fg_score, domain={'x':[0,1],'y':[0,1]}, gauge={'axis':{'range':[0,100],'tickcolor':t_color},'bar':{'color':line_c,'thickness':0.2},'steps':gauge_steps,'borderwidth':0})); fig3.update_layout(height=200, margin=dict(l=15,r=15,t=10,b=10), paper_bgcolor=b_color, font=dict(family="DM Mono", color=t_color)); st.plotly_chart(fig3, use_container_width=True)
     with row1[3]:
         with st.container(border=True):
