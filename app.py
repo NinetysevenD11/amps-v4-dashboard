@@ -1599,6 +1599,7 @@ R3 상황에서 F&G < 15(극단적 공포) 시 → R2 배분으로 선진입
 [현재 실시간 상황]
 레짐: R{curr_regime} ({regime_info[curr_regime][1]})
 VIX: {vix_close:.1f} (MA20: {vix_ma20:.1f})
+Fear & Greed (CNN): {fetch_cnn_fear_greed().get('score') or 'N/A'} ({fetch_cnn_fear_greed().get('rating') or 'unknown'})
 QQQ: ${qqq_close:.2f} (200MA: ${qqq_ma200:.2f}, 이격도: {(qqq_close/qqq_ma200-1)*100:+.1f}%)
 SMH 반도체: RSI {smh_rsi:.1f}, 1M {smh_1m*100:+.1f}%
 SOXL 게이트: {'APPROVED (SOXL 투입)' if smh_cond else 'DENIED (USD 방어)'}
