@@ -1668,7 +1668,16 @@ elif page == "📝 Trade Journal":
             st.rerun()
             
     if st.session_state.trade_log:
-        st.dataframe(pd.DataFrame(st.session_state.trade_log), use_container_width=True, hide_index=True)
+        _tl_df = pd.DataFrame(st.session_state.trade_log)
+        st.dataframe(_tl_df, use_container_width=True, hide_index=True)
+        with st.expander("🗑 개별 기록 삭제"):
+            _del_idx = st.number_input("삭제할 행 번호 (0부터)", min_value=0, max_value=max(len(st.session_state.trade_log)-1, 0), value=0, step=1)
+            if st.button("선택 행 삭제", key="del_tl"):
+                if 0 <= _del_idx < len(st.session_state.trade_log):
+                    st.session_state.trade_log.pop(_del_idx)
+                    save_trade_log_to_disk()
+                    st.success("삭제됨")
+                    st.rerun()
     else:
         st.info("아직 기록된 매매 내역이 없습니다.")
 
