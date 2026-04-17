@@ -573,7 +573,7 @@ with st.sidebar.expander("💾  Portfolio Data", expanded=False):
                 st.session_state.portfolio_isa.update(_loaded["portfolio_isa"]); sanitize_portfolio(st.session_state.portfolio_isa)
             if "portfolio_toss" in _loaded:
                 st.session_state.portfolio_toss.clear(); st.session_state.portfolio_toss.update(_loaded["portfolio_toss"])
-           if "goal_usd" in _loaded:
+            if "goal_usd" in _loaded:
                 st.session_state.goal_usd = float(_loaded["goal_usd"])
             if "trade_log" in _loaded and isinstance(_loaded["trade_log"], list):
                 st.session_state.trade_log = _loaded["trade_log"]
