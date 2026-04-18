@@ -36,15 +36,7 @@ if 'rebal_plan' not in st.session_state: st.session_state.rebal_plan = None
 if 'param_vix_limit' not in st.session_state: st.session_state.param_vix_limit = 40.0
 if 'param_ma_long' not in st.session_state: st.session_state.param_ma_long = 200
 if 'param_ma_short' not in st.session_state: st.session_state.param_ma_short = 50
-if 'trade_log' not in st.session_state:
-    st.session_state.trade_log = []
-    if os.path.exists(TRADE_LOG_FILE):
-        try:
-            with open(TRADE_LOG_FILE, 'r', encoding='utf-8') as f:
-                _loaded_log = json.load(f)
-                if isinstance(_loaded_log, list):
-                    st.session_state.trade_log = _loaded_log
-        except: pass
+if 'trade_log' not in st.session_state: st.session_state.trade_log = []
 if 'messages' not in st.session_state: st.session_state.messages = []
 if 'use_custom_weights' not in st.session_state: st.session_state.use_custom_weights = False
 if 'custom_weights' not in st.session_state:
@@ -131,6 +123,14 @@ PORTFOLIO_FILE = 'portfolio_autosave.json'
 PORTFOLIO_ISA_FILE = 'portfolio_isa_autosave.json'
 PORTFOLIO_TOSS_FILE = 'portfolio_toss_autosave.json'
 TRADE_LOG_FILE = 'trade_log_autosave.json'
+
+if not st.session_state.trade_log and os.path.exists(TRADE_LOG_FILE):
+    try:
+        with open(TRADE_LOG_FILE, 'r', encoding='utf-8') as f:
+            _loaded_log = json.load(f)
+            if isinstance(_loaded_log, list):
+                st.session_state.trade_log = _loaded_log
+    except: pass
 
 def sanitize_portfolio(pf):
     for a in ASSET_LIST:
